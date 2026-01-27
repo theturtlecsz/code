@@ -27,7 +27,7 @@
 
 **Last Updated**: 2026-01-10
 **Total Active Docs**: \~45 essential documents
-**Archive**: docs/archive/ (session notes, completed designs)
+**Archive Packs**: see `archive/` (integrity-verified packs) and `docs/archive/README.md` (restore instructions)
 
 ***
 
@@ -126,24 +126,17 @@
 
 ### Archived Documentation
 
-**Session Notes**: `docs/archive/2025-sessions/`
+Large historical doc trees are packed to keep the repo navigable:
 
-* SESSION\_SUMMARY\_2025-10-16.md
-* EPIC\_SESSION\_SUMMARY\_2025-10-16.md
-* REFACTORING\_\*.md (7 files)
-* PHASE\_1\_\*.md (2 files)
-* And 15+ more session-specific documents
+* `archive/tree-pack-20260127-docs-archive.zip` — historical `docs/archive/**`
+* `archive/tree-pack-20260127-docs-_work.zip` — transient `docs/_work/**`
+* `archive/tree-pack-20260127-spec-ops-004-evidence.zip` — historical `docs/SPEC-OPS-004-integrated-coder-hooks/evidence/**`
 
-**Design Docs**: `docs/archive/design-docs/`
+Browse packs via:
 
-* REFACTORING\_PLAN.md
-* PHASE\_2\_EXTRACTION\_PLAN.md
-* SERVICE\_TRAITS\_DEEP\_ANALYSIS.md
-* And 10+ completed design documents
-
-**Completed Specs**: `docs/archive/completed-specs/`
-
-* Feature specs that reached unlock stage
+```bash
+./scripts/docs-archive-pack.sh list archive/tree-pack-20260127-docs-archive.zip
+```
 
 ***
 

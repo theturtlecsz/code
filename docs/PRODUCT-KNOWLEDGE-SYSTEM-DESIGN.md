@@ -55,37 +55,39 @@ flowchart LR
 
 ### Required Evidence Anchors
 
-* Capsule SoR: `codex-rs/docs/MODEL-POLICY.md:21`
-* Vision SoR: `codex-rs/tui/src/chatwidget/spec_kit/vision_core.rs:40`
-* Projection failures don’t block: `codex-rs/cli/src/speckit_cmd.rs:6307`
-* Stage0 memory backend routing / best-effort local-memory health gating: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:263`
-* Retrieval events schema: `codex-rs/tui/src/memvid_adapter/types.rs:1132`
-* Capsule artifact write API: `codex-rs/tui/src/memvid_adapter/capsule.rs:878`
-* ADR schema for `ProductKnowledgeEvidencePack`: `docs/adr/ADR-003-product-knowledge-layer-local-memory.md:104`
+Note: anchors intentionally avoid `path:line` to reduce anchor rot. Prefer `path (symbol)` and use `rg`/tree-sitter to locate call-sites.
+
+* Capsule SoR: `codex-rs/docs/MODEL-POLICY.md (System of Record → Memvid-First Architecture)`
+* Vision SoR: `codex-rs/tui/src/chatwidget/spec_kit/vision_core.rs (persist_vision_to_overlay)`
+* Projection failures don’t block: `codex-rs/cli/src/speckit_cmd.rs`
+* Stage0 memory backend routing / best-effort local-memory health gating: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (run_stage0_for_spec)`
+* Retrieval events schema: `codex-rs/tui/src/memvid_adapter/types.rs (RetrievalRequestPayload, RetrievalResponsePayload)`
+* Capsule artifact write API: `codex-rs/tui/src/memvid_adapter/capsule.rs (CapsuleHandle::put)`
+* ADR schema for `ProductKnowledgeEvidencePack`: `docs/adr/ADR-003-product-knowledge-layer-local-memory.md (Capsule Snapshot Schema: ProductKnowledgeEvidencePack)`
 
 ## Current State (As‑Is)
 
 ### What exists in code today
 
-* **Stage0 execution entrypoint (TUI)**: `run_stage0_for_spec` (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:208`)
-  * Loads `Stage0Config`, routes by `memory_backend`, and gates local-memory health for the LocalMemory backend (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:263`).
-* **Tier1 context compilation (DCC)**: `Stage0Engine::compile_context` (`codex-rs/stage0/src/lib.rs:422`) → `dcc::compile_context` (`codex-rs/stage0/src/dcc.rs:648`).
+* **Stage0 execution entrypoint (TUI)**: `run_stage0_for_spec` (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (run_stage0_for_spec)`)
+  * Loads `Stage0Config`, routes by `memory_backend`, and gates local-memory health for the LocalMemory backend (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (run_stage0_for_spec)`).
+* **Tier1 context compilation (DCC)**: `Stage0Engine::compile_context` (`codex-rs/stage0/src/lib.rs (Stage0Engine::compile_context)`) → `dcc::compile_context` (`codex-rs/stage0/src/dcc.rs (compile_context)`).
 * **Product Knowledge lane (Tier1)** (when enabled):
-  * Deterministic query builder: `build_product_knowledge_query` (`codex-rs/stage0/src/dcc.rs:1099`)
-  * Domain-scoped search via `LocalMemoryClient`: `ctx.local_mem.search_memories(...)` in DCC step 12 (`codex-rs/stage0/src/dcc.rs:957`)
-  * Deterministic filtering and lane assembly: `assemble_product_knowledge_lane` (`codex-rs/stage0/src/dcc.rs:1254`)
-  * Evidence pack built per ADR: `build_product_knowledge_pack` (`codex-rs/stage0/src/dcc.rs:1349`) and ADR schema (`docs/adr/ADR-003-product-knowledge-layer-local-memory.md:104`)
+  * Deterministic query builder: `build_product_knowledge_query` (`codex-rs/stage0/src/dcc.rs (build_product_knowledge_query)`)
+  * Domain-scoped search via `LocalMemoryClient`: `ctx.local_mem.search_memories(...)` in DCC step 12 (`codex-rs/stage0/src/dcc.rs (compile_context: search_memories)`)
+  * Deterministic filtering and lane assembly: `assemble_product_knowledge_lane` (`codex-rs/stage0/src/dcc.rs (assemble_product_knowledge_lane)`)
+  * Evidence pack built per ADR: `build_product_knowledge_pack` (`codex-rs/stage0/src/dcc.rs (build_product_knowledge_pack)`) and ADR schema (`docs/adr/ADR-003-product-knowledge-layer-local-memory.md (Capsule Snapshot Schema: ProductKnowledgeEvidencePack)`)
 * **Pre-check before Tier2 (Prompt F)**:
-  * Best-effort search of `codex-product` and threshold gating to skip Tier2 (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:412`)
-  * Shared precheck logic: `precheck_product_knowledge` (`codex-rs/stage0/src/dcc.rs:1225`)
+  * Best-effort search of `codex-product` and threshold gating to skip Tier2 (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (run_stage0_for_spec: codex_stage0::precheck_product_knowledge)`)
+  * Shared precheck logic: `precheck_product_knowledge` (`codex-rs/stage0/src/dcc.rs (precheck_product_knowledge)`)
 * **Post-curation after Tier2 (Prompt F)**:
-  * Runs in a background thread, never blocks the pipeline (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:596`)
-  * Curation adapter: `ProductKnowledgeCurationAdapter::curate_tier2_output` (`codex-rs/tui/src/stage0_adapters.rs:1216`)
-  * Stores via local-memory CLI wrapper: `local_memory_cli::remember_blocking` (`codex-rs/tui/src/local_memory_cli.rs:182`)
+  * Runs in a background thread, never blocks the pipeline (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (run_stage0_for_spec: post-curation thread spawn)`)
+  * Curation adapter: `ProductKnowledgeCurationAdapter::curate_tier2_output` (`codex-rs/tui/src/stage0_adapters.rs (ProductKnowledgeCurationAdapter::curate_tier2_output)`)
+  * Stores via local-memory CLI wrapper: `local_memory_cli::remember_blocking` (`codex-rs/tui/src/local_memory_cli.rs (remember_blocking)`)
 * **Capsule snapshot is enforced by pipeline coordinator**:
-  * Enforcement: `persist_or_strip_product_knowledge` (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:1360`) called from `pipeline_coordinator.rs:565`
-  * Helper: `write_product_knowledge_to_capsule` (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:1191`)
-  * Uses `CapsuleHandle::put` (`codex-rs/tui/src/memvid_adapter/capsule.rs:878`) with path `artifact/product_knowledge/evidence_pack.json`
+  * Enforcement: `persist_or_strip_product_knowledge` (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (persist_or_strip_product_knowledge)`) called from `codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs (persist_or_strip_product_knowledge call site)`
+  * Helper: `write_product_knowledge_to_capsule` (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (write_product_knowledge_to_capsule)`)
+  * Uses `CapsuleHandle::put` (`codex-rs/tui/src/memvid_adapter/capsule.rs (CapsuleHandle::put)`) with path `artifact/product_knowledge/evidence_pack.json`
 
 ### Current vs target summary
 
@@ -157,9 +159,9 @@ If `codex-product` knowledge influences Stage0 outputs (lane injection, Tier2 sk
 
 ADR‑003 defines the capsule snapshot schema:
 
-* `ProductKnowledgeEvidencePack` schema: `docs/adr/ADR-003-product-knowledge-layer-local-memory.md:104`
+* `ProductKnowledgeEvidencePack` schema: `docs/adr/ADR-003-product-knowledge-layer-local-memory.md (Capsule Snapshot Schema: ProductKnowledgeEvidencePack)`
 * Recommended capsule path: `mv2://<workspace>/<spec_id>/<run_id>/artifact/product_knowledge/evidence_pack.json`
-* Capsule write primitive: `codex-rs/tui/src/memvid_adapter/capsule.rs:878`
+* Capsule write primitive: `codex-rs/tui/src/memvid_adapter/capsule.rs (CapsuleHandle::put)`
 
 ```mermaid
 flowchart TD
@@ -182,8 +184,8 @@ flowchart TD
 
 ### Retrieval events (recommended complement)
 
-* Payload definitions: `codex-rs/tui/src/memvid_adapter/types.rs:1132`
-* Emit helpers: `codex-rs/tui/src/memvid_adapter/capsule.rs:1793`
+* Payload definitions: `codex-rs/tui/src/memvid_adapter/types.rs (RetrievalRequestPayload, RetrievalResponsePayload)`
+* Emit helpers: `codex-rs/tui/src/memvid_adapter/capsule.rs (CapsuleHandle::emit_retrieval_request/emit_retrieval_response)`
 
 Recommended practice:
 
@@ -206,7 +208,7 @@ Recommended practice:
 ### Filesystem projection failures
 
 * Filesystem is projection only; projection failures must not block SoR writes.
-* Evidence anchor: `codex-rs/cli/src/speckit_cmd.rs:6307`
+* Evidence anchor: `codex-rs/cli/src/speckit_cmd.rs`
 
 ## Config & Enforcement (deterministic, upstream compatible)
 
@@ -215,15 +217,15 @@ Recommended practice:
 * `Stage0Config.context_compiler.product_knowledge.*` (default OFF):
   * `enabled`, `domain`, `max_items`, `max_chars_per_item`, `max_total_chars`, `min_importance`
   * `precheck_enabled`, `precheck_threshold`, `curation_enabled`
-  * See: `codex-rs/stage0/src/config.rs:511`
+  * See: `codex-rs/stage0/src/config.rs (Stage0Config)`
 * Backend routing and health gating:
-  * `Stage0Config.memory_backend` routed in `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:263`
+  * `Stage0Config.memory_backend` routed in `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (run_stage0_for_spec)`
 
 ### Deterministic enforcement rules
 
-* Query generation is heuristics-only (no LLM): `codex-rs/stage0/src/dcc.rs:1099`
-* Filtering is deterministic and client-side: `codex-rs/stage0/src/dcc.rs:1128`
-* local-memory integration remains CLI + REST only (no MCP): `codex-rs/tui/src/stage0_adapters.rs:10`
+* Query generation is heuristics-only (no LLM): `codex-rs/stage0/src/dcc.rs (build_product_knowledge_query)`
+* Filtering is deterministic and client-side: `codex-rs/stage0/src/dcc.rs (assemble_product_knowledge_lane)`
+* local-memory integration remains CLI + REST only (no MCP): `codex-rs/tui/src/stage0_adapters.rs` (module docs)
 
 ## Code Map (Tree-sitter) — key modules/entrypoints + responsibilities
 
@@ -232,37 +234,37 @@ Tree-sitter-informed code analysis was used to confirm that diagrams align with 
 ### Entrypoints (Stage0/spec-kit)
 
 * Pipeline wiring:
-  * `super::stage0_integration::run_stage0_for_spec(...)`: `codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs:825`
-  * `super::stage0_integration::spawn_stage0_async(...)`: `codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs:363`
+  * `super::stage0_integration::run_stage0_for_spec(...)`: `codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` (search: `run_stage0_for_spec(`)
+  * `super::stage0_integration::spawn_stage0_async(...)`: `codex-rs/tui/src/chatwidget/spec_kit/pipeline_coordinator.rs` (search: `spawn_stage0_async(`)
 * Stage0 integration entrypoints:
-  * `spawn_stage0_async`: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:75`
-  * `run_stage0_for_spec`: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:208`
+  * `spawn_stage0_async`: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (spawn_stage0_async)`
+  * `run_stage0_for_spec`: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (run_stage0_for_spec)`
 * Stage0 engine entrypoints:
-  * `Stage0Engine::run_stage0`: `codex-rs/stage0/src/lib.rs:478`
-  * `Stage0Engine::compile_context`: `codex-rs/stage0/src/lib.rs:422`
-  * `dcc::compile_context`: `codex-rs/stage0/src/dcc.rs:648`
+  * `Stage0Engine::run_stage0`: `codex-rs/stage0/src/lib.rs (Stage0Engine::run_stage0)`
+  * `Stage0Engine::compile_context`: `codex-rs/stage0/src/lib.rs (Stage0Engine::compile_context)`
+  * `dcc::compile_context`: `codex-rs/stage0/src/dcc.rs (compile_context)`
 
 ### Where retrieval events are emitted
 
-* Payload schema: `codex-rs/tui/src/memvid_adapter/types.rs:1132`
+* Payload schema: `codex-rs/tui/src/memvid_adapter/types.rs (RetrievalRequestPayload, RetrievalResponsePayload)`
 * Capsule emit helpers:
-  * `CapsuleHandle::emit_retrieval_request`: `codex-rs/tui/src/memvid_adapter/capsule.rs:1793`
-  * `CapsuleHandle::emit_retrieval_response`: `codex-rs/tui/src/memvid_adapter/capsule.rs:1816`
+  * `CapsuleHandle::emit_retrieval_request`: `codex-rs/tui/src/memvid_adapter/capsule.rs (CapsuleHandle::emit_retrieval_request)`
+  * `CapsuleHandle::emit_retrieval_response`: `codex-rs/tui/src/memvid_adapter/capsule.rs (CapsuleHandle::emit_retrieval_response)`
 * Higher-level wrapper:
-  * `AuditEventEmitter::emit_retrieval_request`: `codex-rs/tui/src/chatwidget/spec_kit/event_emitter.rs:188`
-  * `AuditEventEmitter::emit_retrieval_response`: `codex-rs/tui/src/chatwidget/spec_kit/event_emitter.rs:221`
+  * `AuditEventEmitter::emit_retrieval_request`: `codex-rs/tui/src/chatwidget/spec_kit/event_emitter.rs (AuditEventEmitter::emit_retrieval_request)`
+  * `AuditEventEmitter::emit_retrieval_response`: `codex-rs/tui/src/chatwidget/spec_kit/event_emitter.rs (AuditEventEmitter::emit_retrieval_response)`
 
 ### Where capsule artifacts are written
 
-* Primary API: `CapsuleHandle::put`: `codex-rs/tui/src/memvid_adapter/capsule.rs:878`
-* Product knowledge evidence pack helper: `write_product_knowledge_to_capsule`: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:1191`
+* Primary API: `CapsuleHandle::put`: `codex-rs/tui/src/memvid_adapter/capsule.rs (CapsuleHandle::put)`
+* Product knowledge evidence pack helper: `write_product_knowledge_to_capsule`: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (write_product_knowledge_to_capsule)`
 
 ### Where local-memory CLI/REST is invoked (no MCP)
 
-* Health gating + CLI wrappers: `codex-rs/tui/src/local_memory_cli.rs:11`
-* Stage0 adapter: `LocalMemoryCliAdapter::search_memories`: `codex-rs/tui/src/stage0_adapters.rs:67`
-* Pre-check search call: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs:420`
-* Post-curation write call: `codex-rs/tui/src/stage0_adapters.rs:1248`
+* Health gating + CLI wrappers: `codex-rs/tui/src/local_memory_cli.rs` (module docs)
+* Stage0 adapter: `LocalMemoryCliAdapter::search_memories`: `codex-rs/tui/src/stage0_adapters.rs (LocalMemoryCliAdapter::search_memories)`
+* Pre-check search call: `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs (run_stage0_for_spec: codex_stage0::precheck_product_knowledge)`
+* Post-curation write call: `codex-rs/tui/src/stage0_adapters.rs (ProductKnowledgeCurationAdapter::curate_tier2_output: remember_blocking call)`
 
 ### Reproducible AST checks (optional)
 

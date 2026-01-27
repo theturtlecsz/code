@@ -7,7 +7,7 @@ Archive packs consolidate documentation that is no longer actively maintained bu
 ## Format
 
 ```
-archive/docs-pack-YYYYMMDD.tar.zst
+archive/docs-pack-YYYYMMDD.{tar.zst|zip}
 ├── manifest.json          # Metadata and mapping
 └── files/                 # Archived documents (original paths preserved)
     └── docs/
@@ -15,6 +15,8 @@ archive/docs-pack-YYYYMMDD.tar.zst
             └── specs/
                 └── SPEC-KIT-*/
 ```
+
+Both `.tar.zst` and `.zip` packs use the same internal layout (`manifest.json` + `files/`).
 
 ## Manifest Schema
 
@@ -51,6 +53,12 @@ archive/docs-pack-YYYYMMDD.tar.zst
 ```bash
 ./scripts/docs-archive-pack.sh create docs/archive/specs
 # Output: archive/docs-pack-20260121.tar.zst
+```
+
+### Create Tree Pack (zip, all files)
+```bash
+./scripts/docs-archive-pack.sh create --format zip --include all docs/archive
+# Output: archive/tree-pack-YYYYMMDD-docs-archive.zip
 ```
 
 ### List Pack Contents
