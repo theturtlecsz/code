@@ -238,6 +238,7 @@ fn stage0_result_combined_context_md() {
         explain_scores: None,
         constitution_conflicts: None,
         constitution_aligned_ids: vec![],
+        product_knowledge_pack: None,
     };
 
     let combined = result.combined_context_md();
@@ -272,6 +273,7 @@ fn stage0_result_has_context() {
         explain_scores: None,
         constitution_conflicts: None,
         constitution_aligned_ids: vec![],
+        product_knowledge_pack: None,
     };
 
     assert!(result.has_context());
@@ -296,7 +298,141 @@ fn stage0_result_has_context() {
         explain_scores: None,
         constitution_conflicts: None,
         constitution_aligned_ids: vec![],
+        product_knowledge_pack: None,
     };
 
     assert!(!empty_result.has_context());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPEC-KIT-974 AC#4: Risk-based auto-export integration tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+use codex_tui::PipelineConfig;
+
+/// SPEC-KIT-974 AC#4: Integration test for pipeline config deserialization.
+///
+/// Verifies that the nested [capsule.export] TOML structure deserializes correctly
+/// and that risk mode flags are properly parsed.
+#[test]
+fn test_pipeline_config_capsule_export_nested_toml() {
+    // Test nested TOML with all flags
+    let toml_str = r#"
+spec_id = "SPEC-974"
+enabled_stages = ["plan", "implement", "unlock"]
+
+[capsule.export]
+mode = "risk"
+high_risk = true
+audit_handoff_required = false
+"#;
+    let config: PipelineConfig = toml::from_str(toml_str).expect("should parse");
+    assert_eq!(config.capsule.export.mode, "risk");
+    assert!(config.capsule.export.high_risk, "high_risk should be true");
+    assert!(
+        !config.capsule.export.audit_handoff_required,
+        "audit_handoff_required should be false"
+    );
+}
+
+/// SPEC-KIT-974 AC#4: Integration test for default values.
+#[test]
+fn test_pipeline_config_capsule_export_defaults() {
+    // Test that omitted section uses defaults
+    let toml_str = r#"
+spec_id = "SPEC-974"
+enabled_stages = ["plan"]
+"#;
+    let config: PipelineConfig = toml::from_str(toml_str).expect("should parse");
+    assert_eq!(config.capsule.export.mode, "risk", "default mode should be risk");
+    assert!(!config.capsule.export.high_risk, "default high_risk should be false");
+    assert!(
+        !config.capsule.export.audit_handoff_required,
+        "default audit_handoff_required should be false"
+    );
+}
+
+/// SPEC-KIT-974 AC#4: File-backed capsule export with branch isolation.
+///
+/// Verifies that export with BranchId::for_run creates the expected file.
+#[test]
+#[serial_test::serial]
+fn test_auto_export_capsule_with_branch_isolation() {
+    use codex_tui::memvid_adapter::{BranchId, CapsuleConfig, CapsuleHandle, ExportOptions};
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("test_branch_export.mv2");
+    let export_path = temp_dir.path().join("exports/capsule.mv2e");
+
+    // Set passphrase env var for encrypted export
+    // SAFETY: Test-only, serial execution
+    unsafe {
+        std::env::set_var("SPECKIT_MEMVID_PASSPHRASE", "test-passphrase-sk974");
+    }
+
+    // Create capsule with some data
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "branch_export_test".to_string(),
+        ..Default::default()
+    };
+
+    let handle = CapsuleHandle::open(config).expect("should create capsule");
+
+    // Add artifact data on run-specific branch
+    let run_id = "run-branch-test";
+    let spec_id = "SPEC-974";
+    let artifact_content = b"# Branch Test Artifact\nThis is test data.".to_vec();
+
+    // Switch to run branch before adding data
+    handle
+        .switch_branch(BranchId::for_run(run_id))
+        .expect("should switch to run branch");
+
+    handle
+        .put(
+            spec_id,
+            run_id,
+            codex_tui::memvid_adapter::ObjectType::Artifact,
+            "test.md",
+            artifact_content,
+            serde_json::json!({"test": true}),
+        )
+        .expect("should put artifact");
+
+    handle
+        .commit_stage(spec_id, run_id, "plan", None)
+        .expect("should commit checkpoint");
+
+    // Ensure export directory exists
+    std::fs::create_dir_all(export_path.parent().unwrap()).expect("should create export dir");
+
+    // Export with branch isolation (matches AC#4 requirement)
+    let options = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some(spec_id.to_string()),
+        run_id: Some(run_id.to_string()),
+        branch: Some(BranchId::for_run(run_id)),
+        encrypt: true,
+        safe_mode: true,
+        interactive: false,
+    };
+
+    let result = handle.export(&options).expect("should export");
+
+    // Verify file was created
+    assert!(
+        export_path.exists(),
+        "Export file should exist at {:?}",
+        export_path
+    );
+    assert!(
+        result.bytes_written > 0,
+        "Export should write non-zero bytes"
+    );
+
+    // Cleanup env var
+    unsafe {
+        std::env::remove_var("SPECKIT_MEMVID_PASSPHRASE");
+    }
 }
