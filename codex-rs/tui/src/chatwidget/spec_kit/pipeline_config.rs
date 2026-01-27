@@ -38,6 +38,10 @@ pub struct PipelineConfig {
     #[serde(default)]
     pub skip_reasons: HashMap<String, String>,
 
+    /// Capsule configuration (SPEC-KIT-974 AC#4)
+    #[serde(default)]
+    pub capsule: CapsuleConfig,
+
     /// Metadata
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created: Option<String>,
@@ -182,6 +186,56 @@ impl Default for QualityGateConfig {
     }
 }
 
+/// Top-level capsule configuration (nested under [capsule] in TOML)
+///
+/// SPEC-KIT-974 AC#4: Wraps export configuration for proper TOML nesting.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CapsuleConfig {
+    /// Export configuration (nested under [capsule.export] in TOML)
+    #[serde(default)]
+    pub export: CapsuleExportConfig,
+}
+
+/// Capsule export configuration (D16)
+///
+/// SPEC-KIT-974 AC#4: Controls auto-export behavior at Unlock.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapsuleExportConfig {
+    /// Export mode: manual | risk | always (default: risk)
+    ///
+    /// - `manual`: Never auto-export; user must run `speckit capsule export` explicitly
+    /// - `risk`: Auto-export iff high_risk OR audit_handoff_required
+    /// - `always`: Always auto-export at Unlock completion
+    #[serde(default = "default_export_mode")]
+    pub mode: String,
+
+    /// High-risk classification trigger (default: false)
+    ///
+    /// When true in risk mode, triggers auto-export at Unlock.
+    #[serde(default)]
+    pub high_risk: bool,
+
+    /// Audit handoff required trigger (default: false)
+    ///
+    /// When true in risk mode, triggers auto-export at Unlock.
+    #[serde(default)]
+    pub audit_handoff_required: bool,
+}
+
+fn default_export_mode() -> String {
+    "risk".to_string()
+}
+
+impl Default for CapsuleExportConfig {
+    fn default() -> Self {
+        Self {
+            mode: default_export_mode(),
+            high_risk: false,
+            audit_handoff_required: false,
+        }
+    }
+}
+
 /// Conditional skip rules
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -237,6 +291,7 @@ impl PipelineConfig {
             stage_models: HashMap::new(),
             skip_conditions: HashMap::new(),
             skip_reasons: HashMap::new(),
+            capsule: CapsuleConfig::default(),
             created: None,
             modified: None,
         }
@@ -741,5 +796,99 @@ enabled_stages = ["implement", "validate", "unlock"]
         assert!(config.is_enabled(StageType::Validate));
         assert!(config.is_enabled(StageType::Unlock));
         assert!(!config.is_enabled(StageType::Plan));
+    }
+
+    // =========================================================================
+    // SPEC-KIT-974 AC#4: Capsule export configuration tests
+    // =========================================================================
+
+    #[test]
+    fn test_capsule_export_config_default() {
+        let config = CapsuleExportConfig::default();
+        assert_eq!(config.mode, "risk", "default mode should be 'risk'");
+    }
+
+    #[test]
+    fn test_capsule_export_config_in_pipeline_defaults() {
+        let config = PipelineConfig::defaults();
+        assert_eq!(
+            config.capsule.export.mode, "risk",
+            "pipeline defaults should have capsule.export.mode='risk'"
+        );
+        assert!(!config.capsule.export.high_risk, "high_risk should default to false");
+        assert!(
+            !config.capsule.export.audit_handoff_required,
+            "audit_handoff_required should default to false"
+        );
+    }
+
+    #[test]
+    fn test_capsule_export_config_deserialize() {
+        let toml_str = r#"
+spec_id = "TEST"
+enabled_stages = ["plan"]
+
+[capsule.export]
+mode = "always"
+"#;
+        let config: PipelineConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.capsule.export.mode, "always");
+    }
+
+    #[test]
+    fn test_capsule_export_config_deserialize_default() {
+        // When capsule section is omitted, defaults should apply
+        let toml_str = r#"
+spec_id = "TEST"
+enabled_stages = ["plan"]
+"#;
+        let config: PipelineConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.capsule.export.mode, "risk");
+        assert!(!config.capsule.export.high_risk);
+        assert!(!config.capsule.export.audit_handoff_required);
+    }
+
+    #[test]
+    fn test_capsule_export_config_high_risk_default() {
+        let config = CapsuleExportConfig::default();
+        assert!(!config.high_risk, "high_risk should default to false");
+        assert!(
+            !config.audit_handoff_required,
+            "audit_handoff_required should default to false"
+        );
+    }
+
+    #[test]
+    fn test_capsule_export_config_deserialize_nested_with_flags() {
+        let toml_str = r#"
+spec_id = "TEST"
+enabled_stages = ["plan"]
+
+[capsule.export]
+mode = "risk"
+high_risk = true
+audit_handoff_required = false
+"#;
+        let config: PipelineConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.capsule.export.mode, "risk");
+        assert!(config.capsule.export.high_risk);
+        assert!(!config.capsule.export.audit_handoff_required);
+    }
+
+    #[test]
+    fn test_capsule_export_config_deserialize_all_flags() {
+        let toml_str = r#"
+spec_id = "TEST"
+enabled_stages = ["plan"]
+
+[capsule.export]
+mode = "always"
+high_risk = true
+audit_handoff_required = true
+"#;
+        let config: PipelineConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.capsule.export.mode, "always");
+        assert!(config.capsule.export.high_risk);
+        assert!(config.capsule.export.audit_handoff_required);
     }
 }
