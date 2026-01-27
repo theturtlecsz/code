@@ -1511,6 +1511,12 @@ pub struct CapsuleImportedPayload {
     /// SHA-256 hash of imported content
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_hash: Option<String>,
+    /// Mount name assigned to this import (SPEC-KIT-974 AC#7)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mount_name: Option<String>,
+    /// Whether verification passed during import (SPEC-KIT-974 AC#7)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification_passed: Option<bool>,
 }
 
 // =============================================================================

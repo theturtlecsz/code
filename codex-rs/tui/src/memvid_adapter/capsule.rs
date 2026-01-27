@@ -2886,6 +2886,7 @@ impl CapsuleHandle {
         }
 
         // === 9. Emit CapsuleImported event (D104: auto-register) ===
+        // SPEC-KIT-974 AC#7: Include mount_name and verification_passed in event payload
         let payload = CapsuleImportedPayload {
             source_type: "file".to_string(),
             source: Some(options.source_path.display().to_string()),
@@ -2898,15 +2899,20 @@ impl CapsuleHandle {
             checkpoints_imported,
             imported_at: chrono::Utc::now(),
             content_hash: Some(content_hash.clone()),
+            mount_name: Some(mount_name.clone()),
+            verification_passed: Some(verification_passed),
         };
 
         // === 10. Rollback on event emission failure ===
+        // SPEC-KIT-974 Task 5: Harden rollback - don't clobber registry if load fails
         if let Err(e) = self.emit_capsule_imported("import", &mount_name, &payload) {
-            // Rollback: remove mounted file and restore registry
+            // Best-effort rollback: delete mounted file
             let _ = std::fs::remove_file(&mounted_path);
-            let mut rollback_registry = self.load_mounts_registry().unwrap_or_default();
-            rollback_registry.mounts.remove(&mount_name);
-            let _ = self.save_mounts_registry(&rollback_registry);
+            // Only modify registry if we can load it; don't overwrite with empty on load failure
+            if let Ok(mut rollback_registry) = self.load_mounts_registry() {
+                rollback_registry.mounts.remove(&mount_name);
+                let _ = self.save_mounts_registry(&rollback_registry);
+            }
             return Err(e);
         }
 
@@ -3142,9 +3148,15 @@ impl CapsuleHandle {
             .as_secs();
         let age_days = age_secs / 86400;
 
-        // Check if pinned (look for .pin marker file or manifest)
-        let pin_marker = path.with_extension("pin");
-        let is_pinned = pin_marker.exists();
+        // SPEC-KIT-974 Task 4: Check if pinned - support both marker formats for compatibility
+        // Preferred: <filename>.pin (e.g., capsule.mv2.pin)
+        let preferred_pin = path.with_file_name(format!(
+            "{}.pin",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ));
+        // Legacy: path.with_extension("pin") (e.g., capsule.pin for capsule.mv2)
+        let legacy_pin = path.with_extension("pin");
+        let is_pinned = preferred_pin.exists() || legacy_pin.exists();
 
         Ok(ExportCandidate {
             path: path.to_path_buf(),
