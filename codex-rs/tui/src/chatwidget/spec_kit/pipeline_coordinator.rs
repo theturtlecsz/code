@@ -32,6 +32,83 @@ use crate::spec_prompts::SpecStage;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use super::stage0_integration::Tier2Trace;
+
+/// Emit Tier2 degraded-mode retrieval events when health check failed.
+///
+/// ADR-003: Best-effort, non-blocking - emit events to audit trail for replay verification.
+/// Emits RetrievalRequest/Response events with source="tier2:notebooklm" when:
+/// - Tier2 was enabled AND
+/// - Health check was performed and failed (error.is_some())
+///
+/// Does NOT emit for: pre-check hit, no notebook configured, Tier2 disabled, or healthy Tier2.
+pub(crate) fn emit_tier2_degraded_events_if_needed(
+    cwd: &Path,
+    spec_id: &str,
+    run_id: &str,
+    trace: &Tier2Trace,
+) {
+    // Gate: only emit if health check actually failed (not merely skipped)
+    if !trace.should_emit_degraded_event() {
+        return;
+    }
+
+    use crate::memvid_adapter::{RetrievalRequestPayload, RetrievalResponsePayload};
+    use uuid::Uuid;
+
+    let Ok(handle) = CapsuleHandle::open(default_capsule_config(cwd)) else {
+        tracing::warn!(target: "stage0", "Failed to open capsule for Tier2 degraded-mode events");
+        return;
+    };
+
+    if handle.switch_branch(BranchId::for_run(run_id)).is_err() {
+        tracing::warn!(target: "stage0", "Failed to switch branch for Tier2 degraded-mode events");
+        return;
+    }
+
+    let request_id = Uuid::new_v4().to_string();
+
+    let req_payload = RetrievalRequestPayload {
+        request_id: request_id.clone(),
+        query: String::new(), // No query in health check (privacy-safe)
+        config: serde_json::json!({
+            "base_url": &trace.base_url,
+            "notebook_id": &trace.notebook_id,
+            "tier2_enabled": trace.enabled,
+            "health_ok": trace.health_ok,
+            "skip_reason": &trace.skip_reason,
+            "latency_ms": trace.latency_ms,
+        }),
+        source: "tier2:notebooklm".to_string(),
+        stage: Some("Stage0".to_string()),
+        role: None,
+    };
+
+    let resp_payload = RetrievalResponsePayload {
+        request_id,
+        hit_uris: vec![], // No results in degraded mode
+        fused_scores: None,
+        explainability: None,
+        latency_ms: trace.latency_ms,
+        error: trace.error.clone(),
+    };
+
+    if let Err(e) = handle.emit_retrieval_request(spec_id, run_id, &req_payload) {
+        tracing::warn!(
+            target: "stage0",
+            error = %e,
+            "Failed to emit Tier2 degraded-mode RetrievalRequest (best-effort)"
+        );
+    }
+    if let Err(e) = handle.emit_retrieval_response(spec_id, run_id, Some("Stage0"), &resp_payload) {
+        tracing::warn!(
+            target: "stage0",
+            error = %e,
+            "Failed to emit Tier2 degraded-mode RetrievalResponse (best-effort)"
+        );
+    }
+}
+
 /// Handle /speckit.auto command initiation
 pub fn handle_spec_auto(
     widget: &mut ChatWidget,
@@ -626,6 +703,73 @@ pub fn process_stage0_result(
                     }
                 }
             }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────────
+        // ADR-003: Emit PK degraded-mode retrieval events when routing was disabled
+        // Best-effort, non-blocking - emit events to audit trail for replay verification
+        // ─────────────────────────────────────────────────────────────────────────────
+        if let (Some(run_id), Some(trace)) = (&run_id_for_persist, &result.pk_routing_trace) {
+            // Only emit if PK was enabled but routing was disabled (degraded mode)
+            if trace.enabled && !trace.routing_enabled {
+                use crate::memvid_adapter::{
+                    BranchId, CapsuleHandle, RetrievalRequestPayload, RetrievalResponsePayload,
+                    default_capsule_config,
+                };
+                use uuid::Uuid;
+
+                if let Ok(handle) = CapsuleHandle::open(default_capsule_config(&widget.config.cwd)) {
+                    if handle.switch_branch(BranchId::for_run(run_id)).is_ok() {
+                        let request_id = Uuid::new_v4().to_string();
+
+                        let req_payload = RetrievalRequestPayload {
+                            request_id: request_id.clone(),
+                            query: String::new(), // No query executed in degraded mode
+                            config: serde_json::json!({
+                                "domain": &trace.domain,
+                                "pk_enabled": trace.enabled,
+                                "routing_enabled": trace.routing_enabled,
+                                "gate_reason": &trace.reason,
+                                "latency_ms": trace.latency_ms,
+                            }),
+                            source: format!("product-knowledge:{}", trace.domain),
+                            stage: Some("Stage0".to_string()),
+                            role: None,
+                        };
+
+                        let resp_payload = RetrievalResponsePayload {
+                            request_id,
+                            hit_uris: vec![], // No results in degraded mode
+                            fused_scores: None,
+                            explainability: None,
+                            latency_ms: trace.latency_ms,
+                            error: Some(format!("skipped: {}", trace.reason)),
+                        };
+
+                        if let Err(e) = handle.emit_retrieval_request(&spec_id, run_id, &req_payload) {
+                            tracing::warn!(
+                                target: "stage0",
+                                error = %e,
+                                "Failed to emit PK degraded-mode RetrievalRequest (best-effort)"
+                            );
+                        }
+                        if let Err(e) =
+                            handle.emit_retrieval_response(&spec_id, run_id, Some("Stage0"), &resp_payload)
+                        {
+                            tracing::warn!(
+                                target: "stage0",
+                                error = %e,
+                                "Failed to emit PK degraded-mode RetrievalResponse (best-effort)"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // ADR-003: Emit Tier2 degraded-mode retrieval events when health check failed
+        if let (Some(run_id), Some(trace)) = (&run_id_for_persist, &result.tier2_trace) {
+            emit_tier2_degraded_events_if_needed(&widget.config.cwd, &spec_id, run_id, trace);
         }
 
         // S33: Trace evidence writing
@@ -3442,4 +3586,248 @@ fn handle_spec_auto_after_maieutic(
 
     widget.spec_auto_state = Some(state);
     advance_spec_auto(widget);
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memvid_adapter::{EventType, RetrievalRequestPayload};
+    use tempfile::TempDir;
+
+    /// Helper to create a Tier2Trace for testing
+    fn make_tier2_trace(enabled: bool, health_ok: bool, error: Option<&str>) -> Tier2Trace {
+        Tier2Trace {
+            base_url: "http://localhost:3456".to_string(),
+            notebook_id: "test-notebook".to_string(),
+            enabled,
+            health_ok,
+            latency_ms: Some(100),
+            skip_reason: if error.is_some() {
+                error.map(|e| e.to_string())
+            } else if !health_ok {
+                Some("intentional skip".to_string())
+            } else {
+                None
+            },
+            error: error.map(|e| e.to_string()),
+        }
+    }
+
+    /// Count tier2:notebooklm events in capsule
+    fn count_tier2_events(handle: &CapsuleHandle, run_id: &str) -> (usize, usize) {
+        let events = handle.list_events_filtered(Some(&BranchId::for_run(run_id)));
+
+        let requests = events
+            .iter()
+            .filter(|e| e.event_type == EventType::RetrievalRequest)
+            .filter(|e| {
+                // payload is serde_json::Value, check if it can be parsed as RetrievalRequestPayload
+                if !e.payload.is_null() {
+                    if let Ok(req) = serde_json::from_value::<RetrievalRequestPayload>(e.payload.clone())
+                    {
+                        return req.source == "tier2:notebooklm";
+                    }
+                }
+                false
+            })
+            .count();
+
+        let responses = events
+            .iter()
+            .filter(|e| e.event_type == EventType::RetrievalResponse)
+            .count();
+
+        (requests, responses)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Negative cases: should NOT emit events
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_tier2_emission_precheck_skip_no_events() {
+        let temp_dir = TempDir::new().unwrap();
+        let run_id = "run-precheck-skip";
+
+        // Pre-check hit: enabled=true, health_ok=false, error=None
+        let trace = make_tier2_trace(true, false, None);
+        assert!(
+            !trace.should_emit_degraded_event(),
+            "Pre-check skip should NOT emit"
+        );
+
+        emit_tier2_degraded_events_if_needed(temp_dir.path(), "SPEC-TEST", run_id, &trace);
+
+        // Assert zero I/O: no capsule file created
+        let capsule_path = default_capsule_config(temp_dir.path()).capsule_path;
+        assert!(
+            !capsule_path.exists(),
+            "Helper must not touch capsule on non-emission paths"
+        );
+    }
+
+    #[test]
+    fn test_tier2_emission_no_notebook_no_events() {
+        let temp_dir = TempDir::new().unwrap();
+        let run_id = "run-no-notebook";
+
+        // No notebook: enabled=true, health_ok=false, error=None
+        let trace = make_tier2_trace(true, false, None);
+        assert!(
+            !trace.should_emit_degraded_event(),
+            "No notebook configured should NOT emit"
+        );
+
+        emit_tier2_degraded_events_if_needed(temp_dir.path(), "SPEC-TEST", run_id, &trace);
+
+        // Assert zero I/O: no capsule file created
+        let capsule_path = default_capsule_config(temp_dir.path()).capsule_path;
+        assert!(
+            !capsule_path.exists(),
+            "Helper must not touch capsule on non-emission paths"
+        );
+    }
+
+    #[test]
+    fn test_tier2_emission_disabled_no_events() {
+        let temp_dir = TempDir::new().unwrap();
+        let run_id = "run-disabled";
+
+        // Disabled: enabled=false, health_ok=false, error=None
+        let trace = make_tier2_trace(false, false, None);
+        assert!(
+            !trace.should_emit_degraded_event(),
+            "Disabled Tier2 should NOT emit"
+        );
+
+        emit_tier2_degraded_events_if_needed(temp_dir.path(), "SPEC-TEST", run_id, &trace);
+
+        // Assert zero I/O: no capsule file created
+        let capsule_path = default_capsule_config(temp_dir.path()).capsule_path;
+        assert!(
+            !capsule_path.exists(),
+            "Helper must not touch capsule on non-emission paths"
+        );
+    }
+
+    #[test]
+    fn test_tier2_emission_healthy_no_events() {
+        let temp_dir = TempDir::new().unwrap();
+        let run_id = "run-healthy";
+
+        // Healthy: enabled=true, health_ok=true, error=None
+        let trace = make_tier2_trace(true, true, None);
+        assert!(
+            !trace.should_emit_degraded_event(),
+            "Healthy Tier2 should NOT emit"
+        );
+
+        emit_tier2_degraded_events_if_needed(temp_dir.path(), "SPEC-TEST", run_id, &trace);
+
+        // Assert zero I/O: no capsule file created
+        let capsule_path = default_capsule_config(temp_dir.path()).capsule_path;
+        assert!(
+            !capsule_path.exists(),
+            "Helper must not touch capsule on non-emission paths"
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Positive cases: SHOULD emit events
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_tier2_emission_unhealthy_emits_events() {
+        let temp_dir = TempDir::new().unwrap();
+        let run_id = "run-unhealthy";
+
+        // Unhealthy (timeout): enabled=true, health_ok=false, error=Some
+        let trace = make_tier2_trace(true, false, Some("NotebookLM service timeout"));
+        assert!(
+            trace.should_emit_degraded_event(),
+            "Unhealthy Tier2 SHOULD emit"
+        );
+
+        // Call helper (opens and closes its own capsule handle)
+        emit_tier2_degraded_events_if_needed(temp_dir.path(), "SPEC-TEST", run_id, &trace);
+
+        // Reopen capsule to verify events
+        let config = default_capsule_config(temp_dir.path());
+        let handle = CapsuleHandle::open(config).expect("should reopen capsule");
+
+        let (requests, responses) = count_tier2_events(&handle, run_id);
+        assert_eq!(
+            requests, 1,
+            "Should emit exactly 1 RetrievalRequest for unhealthy Tier2"
+        );
+        assert_eq!(
+            responses, 1,
+            "Should emit exactly 1 RetrievalResponse for unhealthy Tier2"
+        );
+    }
+
+    #[test]
+    fn test_tier2_emission_unreachable_emits_events() {
+        let temp_dir = TempDir::new().unwrap();
+        let run_id = "run-unreachable";
+
+        // Unreachable: enabled=true, health_ok=false, error=Some
+        let trace = make_tier2_trace(true, false, Some("NotebookLM service unreachable"));
+
+        // Call helper (opens and closes its own capsule handle)
+        emit_tier2_degraded_events_if_needed(temp_dir.path(), "SPEC-TEST", run_id, &trace);
+
+        // Reopen capsule to verify events
+        let config = default_capsule_config(temp_dir.path());
+        let handle = CapsuleHandle::open(config).expect("should reopen capsule");
+
+        let (requests, responses) = count_tier2_events(&handle, run_id);
+        assert_eq!(
+            requests, 1,
+            "Should emit exactly 1 RetrievalRequest for unreachable Tier2"
+        );
+        assert_eq!(
+            responses, 1,
+            "Should emit exactly 1 RetrievalResponse for unreachable Tier2"
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Edge case: disabled with error (should NOT emit - enabled gate wins)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_tier2_emission_disabled_with_error_no_events() {
+        let temp_dir = TempDir::new().unwrap();
+        let run_id = "run-disabled-error";
+
+        // Edge case: disabled but with error (enabled gate should win)
+        let trace = Tier2Trace {
+            base_url: "http://localhost:3456".to_string(),
+            notebook_id: "test-notebook".to_string(),
+            enabled: false, // Disabled
+            health_ok: false,
+            latency_ms: Some(100),
+            skip_reason: Some("Tier2 disabled".to_string()),
+            error: Some("This error should be ignored".to_string()), // Error present but irrelevant
+        };
+
+        assert!(
+            !trace.should_emit_degraded_event(),
+            "Disabled Tier2 should NOT emit even with error"
+        );
+
+        emit_tier2_degraded_events_if_needed(temp_dir.path(), "SPEC-TEST", run_id, &trace);
+
+        // Assert zero I/O: no capsule file created
+        let capsule_path = default_capsule_config(temp_dir.path()).capsule_path;
+        assert!(
+            !capsule_path.exists(),
+            "Helper must not touch capsule on non-emission paths"
+        );
+    }
 }
