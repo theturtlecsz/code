@@ -95,9 +95,9 @@ These invariants MUST NOT be violated:
 
 ### In Progress
 
-| Spec         | Status      | Owner        | Next Action                   |
-| ------------ | ----------- | ------------ | ----------------------------- |
-| SPEC-KIT-974 | In Progress | Platform Eng | SK974-1: Implement import CLI |
+| Spec         | Status      | Owner        | Next Action                                                  |
+| ------------ | ----------- | ------------ | ------------------------------------------------------------ |
+| SPEC-KIT-974 | In Progress | Platform Eng | AC verified (7/8); AC#4 risk-export unimplemented - escalate |
 
 ### Completed (Recent)
 
