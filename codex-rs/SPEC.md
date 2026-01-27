@@ -95,14 +95,15 @@ These invariants MUST NOT be violated:
 
 ### In Progress
 
-| Spec         | Status      | Owner        | Next Action                                 |
-| ------------ | ----------- | ------------ | ------------------------------------------- |
-| SPEC-KIT-974 | In Progress | Platform Eng | 8/8 verified; ready for completion/closeout |
+| Spec   | Status | Owner | Next Action |
+| ------ | ------ | ----- | ----------- |
+| (none) | -      | -     | -           |
 
 ### Completed (Recent)
 
 | Spec                | Completion Date | Key Deliverables                                                                        |
 | ------------------- | --------------- | --------------------------------------------------------------------------------------- |
+| SPEC-KIT-974        | 2026-01-27      | Export/import, encryption, safe export, risk auto-export, GC enhancements               |
 | SPEC-KIT-979        | 2026-01-21      | Local-memory sunset phases, CLI flags, nightly parity workflow, import CLI, diagnostics |
 | SPEC-KIT-976        | 2026-01-19      | Logic Mesh graph foundation: Card/Edge schemas, CLI commands, 6 tests passing           |
 | SPEC-KIT-973        | 2026-01-19      | Time-travel TUI commands (timeline, asof, diff), label lookup, 3 tests passing          |
