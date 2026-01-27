@@ -4332,14 +4332,14 @@ fn run_capsule_import(capsule_path: &PathBuf, args: CapsuleImportArgs) -> anyhow
 ///
 /// SPEC-KIT-974: Garbage collect expired export files.
 fn run_capsule_gc(capsule_path: &PathBuf, args: CapsuleGcArgs) -> anyhow::Result<()> {
-    // Open workspace capsule read-only (GC operates on export files, not capsule itself)
+    // SPEC-KIT-974 AC#8: Open write-capable so audit events are persisted
     let config = CapsuleConfig {
         capsule_path: capsule_path.clone(),
         workspace_id: "cli".to_string(),
         ..Default::default()
     };
 
-    let handle = match CapsuleHandle::open_read_only(config) {
+    let handle = match CapsuleHandle::open(config) {
         Ok(h) => h,
         Err(e) => {
             if args.json {

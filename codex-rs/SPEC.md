@@ -95,9 +95,9 @@ These invariants MUST NOT be violated:
 
 ### In Progress
 
-| Spec         | Status      | Owner        | Next Action                                                  |
-| ------------ | ----------- | ------------ | ------------------------------------------------------------ |
-| SPEC-KIT-974 | In Progress | Platform Eng | AC verified (7/8); AC#4 risk-export unimplemented - escalate |
+| Spec         | Status      | Owner        | Next Action                                 |
+| ------------ | ----------- | ------------ | ------------------------------------------- |
+| SPEC-KIT-974 | In Progress | Platform Eng | 8/8 verified; ready for completion/closeout |
 
 ### Completed (Recent)
 

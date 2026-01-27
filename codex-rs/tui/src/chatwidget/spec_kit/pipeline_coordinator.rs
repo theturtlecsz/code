@@ -14,7 +14,7 @@ use super::super::ChatWidget;
 use super::agent_orchestrator::auto_submit_spec_stage_prompt;
 use super::command_handlers::{halt_spec_auto_no_resume, halt_spec_auto_with_error};
 use super::consensus_coordinator::{block_on_sync, persist_cost_summary, run_consensus_with_retry};
-use super::pipeline_config::{PipelineConfig, PipelineOverrides}; // SPEC-948
+use super::pipeline_config::{CapsuleExportConfig, PipelineConfig, PipelineOverrides}; // SPEC-948
 use super::quality_gate_handler::{
     determine_quality_checkpoint, execute_quality_checkpoint, finalize_quality_gates,
 };
@@ -2219,6 +2219,30 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                                         );
                                     }
                                 }
+
+                                // SPEC-KIT-974 AC#4: Risk-based auto-export at Unlock
+                                if let Some(state) = widget.spec_auto_state.as_ref() {
+                                    let export_config = &state.pipeline_config.capsule.export;
+                                    if should_auto_export_capsule(export_config) {
+                                        let output_path = widget.config.cwd
+                                            .join("docs/specs")
+                                            .join(&spec_id)
+                                            .join("runs")
+                                            .join(run_id)
+                                            .join("capsule.mv2e");
+                                        if let Err(e) = auto_export_capsule_at_unlock(
+                                            &widget.config.cwd,
+                                            &spec_id,
+                                            run_id,
+                                            &output_path,
+                                        ) {
+                                            tracing::warn!(
+                                                "Auto-export at Unlock failed (non-fatal): {}",
+                                                e
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                         Err(err) => {
@@ -2814,6 +2838,82 @@ fn record_stage_skip(spec_id: &str, stage: SpecStage, reason: &str) -> Result<()
         .map_err(|e| format!("Failed to write skip telemetry to {:?}: {}", skip_file, e))?;
 
     tracing::debug!("📝 Skip telemetry recorded: {:?}", skip_file);
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPEC-KIT-974 AC#4: Risk-based auto-export at Unlock
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Determine if risk-based auto-export should trigger at Unlock.
+///
+/// SPEC-KIT-974 AC#4: Controls when capsule is auto-exported.
+///
+/// - `always`: Always auto-export at Unlock completion
+/// - `risk`: Auto-export only when risk conditions are met (high_risk OR audit_handoff_required)
+/// - `manual`: Never auto-export; user must run `speckit capsule export` explicitly
+fn should_auto_export_capsule(config: &CapsuleExportConfig) -> bool {
+    match config.mode.as_str() {
+        "always" => true,
+        "manual" => false,
+        "risk" => {
+            // Risk mode: export iff high_risk OR audit_handoff_required
+            config.high_risk || config.audit_handoff_required
+        }
+        _ => {
+            tracing::warn!(
+                "Unknown capsule.export.mode '{}', defaulting to manual",
+                config.mode
+            );
+            false
+        }
+    }
+}
+
+/// Best-effort auto-export capsule at Unlock completion.
+///
+/// SPEC-KIT-974 AC#4: Performs encrypted, safe-mode, non-interactive export.
+fn auto_export_capsule_at_unlock(
+    cwd: &std::path::Path,
+    spec_id: &str,
+    run_id: &str,
+    output_path: &std::path::Path,
+) -> Result<(), String> {
+    use crate::memvid_adapter::{CapsuleHandle, ExportOptions};
+
+    // Ensure output directory exists
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create export directory: {}", e))?;
+    }
+
+    // Open capsule
+    let capsule_config = default_capsule_config(cwd);
+    let handle = CapsuleHandle::open(capsule_config)
+        .map_err(|e| format!("Failed to open capsule for export: {}", e))?;
+
+    // Export with LOCKED settings: encrypt=true, safe_mode=true, interactive=false
+    // Passphrase is sourced from SPECKIT_MEMVID_PASSPHRASE env var (required for non-interactive)
+    // Branch isolation: export only from the run-specific branch
+    let options = ExportOptions {
+        output_path: output_path.to_path_buf(),
+        spec_id: Some(spec_id.to_string()),
+        run_id: Some(run_id.to_string()),
+        branch: Some(BranchId::for_run(run_id)),
+        encrypt: true,
+        safe_mode: true,
+        interactive: false, // Non-interactive; requires SPECKIT_MEMVID_PASSPHRASE env var
+    };
+
+    let result = handle
+        .export(&options)
+        .map_err(|e| format!("Export failed: {}", e))?;
+
+    tracing::info!(
+        "SPEC-KIT-974: Auto-exported capsule at Unlock ({} bytes, safe_mode=true, encrypt=true)",
+        result.bytes_written
+    );
+
     Ok(())
 }
 
@@ -3597,6 +3697,105 @@ mod tests {
     use super::*;
     use crate::memvid_adapter::{EventType, RetrievalRequestPayload};
     use tempfile::TempDir;
+
+    // =========================================================================
+    // SPEC-KIT-974 AC#4: should_auto_export_capsule unit tests
+    // =========================================================================
+
+    #[test]
+    fn test_should_auto_export_capsule_always() {
+        let config = CapsuleExportConfig {
+            mode: "always".to_string(),
+            high_risk: false,
+            audit_handoff_required: false,
+        };
+        assert!(
+            should_auto_export_capsule(&config),
+            "always mode should always export"
+        );
+    }
+
+    #[test]
+    fn test_should_auto_export_capsule_manual() {
+        let config = CapsuleExportConfig {
+            mode: "manual".to_string(),
+            high_risk: true, // Even with flags, manual = no export
+            audit_handoff_required: true,
+        };
+        assert!(
+            !should_auto_export_capsule(&config),
+            "manual mode should never export regardless of flags"
+        );
+    }
+
+    #[test]
+    fn test_should_auto_export_capsule_risk_high_risk() {
+        let config = CapsuleExportConfig {
+            mode: "risk".to_string(),
+            high_risk: true,
+            audit_handoff_required: false,
+        };
+        assert!(
+            should_auto_export_capsule(&config),
+            "risk mode should export when high_risk=true"
+        );
+    }
+
+    #[test]
+    fn test_should_auto_export_capsule_risk_audit() {
+        let config = CapsuleExportConfig {
+            mode: "risk".to_string(),
+            high_risk: false,
+            audit_handoff_required: true,
+        };
+        assert!(
+            should_auto_export_capsule(&config),
+            "risk mode should export when audit_handoff_required=true"
+        );
+    }
+
+    #[test]
+    fn test_should_auto_export_capsule_risk_both_flags() {
+        let config = CapsuleExportConfig {
+            mode: "risk".to_string(),
+            high_risk: true,
+            audit_handoff_required: true,
+        };
+        assert!(
+            should_auto_export_capsule(&config),
+            "risk mode should export when both flags are true"
+        );
+    }
+
+    #[test]
+    fn test_should_auto_export_capsule_risk_no_flags() {
+        let config = CapsuleExportConfig {
+            mode: "risk".to_string(),
+            high_risk: false,
+            audit_handoff_required: false,
+        };
+        assert!(
+            !should_auto_export_capsule(&config),
+            "risk mode should NOT export when both flags are false"
+        );
+    }
+
+    #[test]
+    fn test_should_auto_export_capsule_unknown_mode() {
+        let config = CapsuleExportConfig {
+            mode: "unknown".to_string(),
+            high_risk: true,
+            audit_handoff_required: true,
+        };
+        assert!(
+            !should_auto_export_capsule(&config),
+            "unknown mode should default to manual (no export)"
+        );
+    }
+
+    // =========================================================================
+    // Tier2 degraded event emission tests
+    // =========================================================================
 
     /// Helper to create a Tier2Trace for testing
     fn make_tier2_trace(enabled: bool, health_ok: bool, error: Option<&str>) -> Tier2Trace {

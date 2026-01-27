@@ -4998,22 +4998,34 @@ fn test_export_produces_single_mv2_file() {
     );
     assert!(result.bytes_written > 0, "export should have content");
 
-    // Verify no sidecar files (only export.mv2 in directory, not source.mv2.lock)
+    // SPEC-KIT-974 AC#1: Verify single file, no sidecars
+    // List directory entries by filename (not full path)
     let export_parent = export_path.parent().unwrap();
-    let files_in_dir: Vec<_> = std::fs::read_dir(export_parent)
+    let export_stem = export_path.file_stem().unwrap().to_str().unwrap();
+    let filenames: Vec<String> = std::fs::read_dir(export_parent)
         .unwrap()
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .starts_with(export_path.file_stem().unwrap().to_str().unwrap())
-        })
+        .map(|e| e.file_name().to_string_lossy().to_string())
         .collect();
 
-    // Should only have the .mv2 file, no sidecars like .mv2.manifest
-    assert_eq!(
-        files_in_dir.len(),
-        0,
-        "should have no sidecar files starting with 'export'"
+    // Assert export file exists
+    assert!(
+        filenames.contains(&"export.mv2".to_string()),
+        "export.mv2 must exist in {:?}, found: {:?}",
+        export_parent,
+        filenames
+    );
+
+    // Assert no sidecar files (files starting with "export" stem but not the export itself)
+    let sidecars: Vec<&String> = filenames
+        .iter()
+        .filter(|name| name.starts_with(export_stem) && *name != "export.mv2")
+        .collect();
+    assert!(
+        sidecars.is_empty(),
+        "no sidecar files should exist starting with '{}', found: {:?}",
+        export_stem,
+        sidecars
     );
 }
 
@@ -6414,10 +6426,11 @@ fn test_import_mv2e_wrong_passphrase() {
     }
 }
 
-/// P0-5: GC dry-run should not delete files.
+/// SPEC-KIT-974 AC#8: GC dry-run should not delete files.
 #[test]
 fn test_gc_dry_run_no_delete() {
     use crate::memvid_adapter::capsule::GcConfig;
+    use filetime::{set_file_mtime, FileTime};
 
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join(".speckit/memvid/workspace.mv2");
@@ -6438,11 +6451,13 @@ fn test_gc_dry_run_no_delete() {
     let old_export = exports_dir.join("capsule.mv2");
     std::fs::write(&old_export, b"old export data").expect("write old export");
 
-    // Set file modification time to old (> 30 days ago)
-    // Note: This is a simplification - actual test would need filetime crate
+    // Set file modification time to 40 days ago
+    let now = std::time::SystemTime::now();
+    let old_time = now - std::time::Duration::from_secs(40 * 86400);
+    set_file_mtime(&old_export, FileTime::from_system_time(old_time)).expect("set mtime");
 
     let gc_config = GcConfig {
-        retention_days: 0, // Everything is expired
+        retention_days: 30,
         keep_pinned: true,
         clean_temp_files: true,
         dry_run: true, // Dry run!
@@ -6451,15 +6466,62 @@ fn test_gc_dry_run_no_delete() {
     let result = handle.gc(&gc_config).expect("gc should succeed");
 
     // Dry run should report deletions but not actually delete
-    assert!(result.dry_run);
-    // File should still exist
-    // (Note: actual deletion depends on file age which is hard to test without mocking)
+    assert!(result.dry_run, "result should indicate dry run");
+    assert!(old_export.exists(), "file should still exist after dry run");
 }
 
-/// P0-5: GC should preserve pinned exports.
+/// SPEC-KIT-974 AC#8: GC retention deletes old exports, preserves new ones.
+#[test]
+fn test_gc_retention_deletes_old_preserves_new() {
+    use crate::memvid_adapter::capsule::GcConfig;
+    use filetime::{set_file_mtime, FileTime};
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join(".speckit/memvid/workspace.mv2");
+    std::fs::create_dir_all(capsule_path.parent().unwrap()).expect("create dirs");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "gc_retention_test".to_string(),
+        ..Default::default()
+    };
+    let handle = CapsuleHandle::open(config).expect("create capsule");
+
+    // Create export dir with old and new files
+    let exports_dir = temp_dir.path().join("docs/specs/SPEC-RET/runs/run-test");
+    std::fs::create_dir_all(&exports_dir).expect("create dir");
+    let old_export = exports_dir.join("old.mv2");
+    let new_export = exports_dir.join("new.mv2");
+    std::fs::write(&old_export, b"old export").expect("write old");
+    std::fs::write(&new_export, b"new export").expect("write new");
+
+    // Set mtimes: old = 40 days ago, new = 1 day ago
+    let now = std::time::SystemTime::now();
+    let old_time = now - std::time::Duration::from_secs(40 * 86400);
+    let new_time = now - std::time::Duration::from_secs(1 * 86400);
+    set_file_mtime(&old_export, FileTime::from_system_time(old_time)).expect("set old mtime");
+    set_file_mtime(&new_export, FileTime::from_system_time(new_time)).expect("set new mtime");
+
+    let gc_config = GcConfig {
+        retention_days: 30,
+        keep_pinned: true,
+        clean_temp_files: true,
+        dry_run: false,
+    };
+
+    let result = handle.gc(&gc_config).expect("gc");
+
+    // Old should be deleted, new should remain
+    assert!(!old_export.exists(), "old export should be deleted");
+    assert!(new_export.exists(), "new export should be preserved");
+    assert!(result.exports_deleted > 0, "should have deleted at least one export");
+}
+
+/// SPEC-KIT-974 AC#8: GC should preserve pinned exports even when old.
 #[test]
 fn test_gc_preserves_pinned() {
     use crate::memvid_adapter::capsule::GcConfig;
+    use filetime::{set_file_mtime, FileTime};
 
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join(".speckit/memvid/workspace.mv2");
@@ -6472,26 +6534,96 @@ fn test_gc_preserves_pinned() {
     };
     let handle = CapsuleHandle::open(config).expect("create capsule");
 
-    // Create export dir with pinned file
+    // Create export dir with pinned file (old) and unpinned file (also old)
     let exports_dir = temp_dir.path().join("docs/specs/SPEC-PIN/runs/run-pinned");
     std::fs::create_dir_all(&exports_dir).expect("create dir");
-    let pinned_export = exports_dir.join("capsule.mv2");
-    let pin_marker = exports_dir.join("capsule.mv2.pin");
-    std::fs::write(&pinned_export, b"pinned export").expect("write export");
+    let pinned_export = exports_dir.join("pinned.mv2");
+    let unpinned_export = exports_dir.join("unpinned.mv2");
+    // SPEC-KIT-974 Task 4: Preferred marker is <filename>.pin (e.g., pinned.mv2.pin)
+    let pin_marker = exports_dir.join("pinned.mv2.pin");
+    std::fs::write(&pinned_export, b"pinned export").expect("write pinned");
+    std::fs::write(&unpinned_export, b"unpinned export").expect("write unpinned");
     std::fs::write(&pin_marker, b"milestone").expect("write pin marker");
 
+    // Set mtimes to 40 days ago (beyond retention)
+    let old_time = std::time::SystemTime::now() - std::time::Duration::from_secs(40 * 86400);
+    set_file_mtime(&pinned_export, FileTime::from_system_time(old_time)).expect("set pinned mtime");
+    set_file_mtime(&unpinned_export, FileTime::from_system_time(old_time)).expect("set unpinned mtime");
+
     let gc_config = GcConfig {
-        retention_days: 0, // Everything would be expired
-        keep_pinned: true, // But we keep pinned
+        retention_days: 30,
+        keep_pinned: true, // Preserve pinned
         clean_temp_files: true,
         dry_run: false,
     };
 
     let result = handle.gc(&gc_config).expect("gc");
 
-    // Pinned exports should be preserved (tracked in exports_preserved)
-    // Note: actual behavior depends on how gc scans directories
-    assert!(!result.dry_run);
+    // Pinned file should be preserved, unpinned should be deleted
+    assert!(pinned_export.exists(), "pinned export should be preserved");
+    assert!(!unpinned_export.exists(), "unpinned old export should be deleted");
+    assert!(result.exports_preserved > 0, "should have preserved pinned exports");
+    assert!(result.exports_deleted > 0, "should have deleted unpinned exports");
+}
+
+/// SPEC-KIT-974 AC#8: GC audit event must be persisted (survives reopen).
+#[test]
+fn test_gc_audit_event_persisted() {
+    use crate::memvid_adapter::capsule::GcConfig;
+    use filetime::{set_file_mtime, FileTime};
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join(".speckit/memvid/workspace.mv2");
+    std::fs::create_dir_all(capsule_path.parent().unwrap()).expect("create dirs");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "gc_audit_test".to_string(),
+        ..Default::default()
+    };
+
+    // Create old export to trigger deletion
+    let exports_dir = temp_dir.path().join("docs/specs/SPEC-AUDIT/runs/run-old");
+    std::fs::create_dir_all(&exports_dir).expect("create dir");
+    let old_export = exports_dir.join("capsule.mv2");
+    std::fs::write(&old_export, b"old export").expect("write export");
+
+    // Set mtime to 40 days ago
+    let old_time = std::time::SystemTime::now() - std::time::Duration::from_secs(40 * 86400);
+    set_file_mtime(&old_export, FileTime::from_system_time(old_time)).expect("set mtime");
+
+    // Run GC (with actual deletion)
+    {
+        let handle = CapsuleHandle::open(config.clone()).expect("open capsule");
+        let gc_config = GcConfig {
+            retention_days: 30,
+            keep_pinned: true,
+            clean_temp_files: true,
+            dry_run: false,
+        };
+        let result = handle.gc(&gc_config).expect("gc");
+        assert!(result.exports_deleted > 0, "should have deleted exports");
+    } // handle dropped, capsule closed
+
+    // Reopen and verify audit event persisted
+    let handle2 = CapsuleHandle::open(config).expect("reopen capsule");
+    let events = handle2.list_events();
+    let gc_events: Vec<_> = events
+        .iter()
+        .filter(|e| {
+            e.event_type == EventType::GateDecision
+                && e.payload
+                    .get("gate_name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s == "CapsuleGC")
+                    .unwrap_or(false)
+        })
+        .collect();
+
+    assert!(
+        !gc_events.is_empty(),
+        "GC audit event (GateDecision with gate_name=CapsuleGC) should be persisted after reopen"
+    );
 }
 
 // =============================================================================
@@ -7234,15 +7366,25 @@ fn test_capsule_imported_event_has_required_fields() {
         "content_hash should match exported capsule"
     );
 
-    // 2. Mount name (in the import result, not directly in payload, but source should be there)
+    // 2. Mount name - SPEC-KIT-974 AC#7: now in event payload
     assert!(payload.source.is_some(), "source path must be present");
     assert!(
         payload.source.as_ref().unwrap().contains("export.mv2"),
         "source should reference the exported file"
     );
+    assert_eq!(
+        payload.mount_name,
+        Some("event_test_mount".to_string()),
+        "mount_name must be present in event payload"
+    );
 
-    // 3. Validation result - verification_passed is in ImportResult, not directly in payload
-    // But we can verify the import succeeded
+    // 3. Validation result - SPEC-KIT-974 AC#7: now in event payload
+    assert_eq!(
+        payload.verification_passed,
+        Some(true),
+        "verification_passed must be present in event payload"
+    );
+    // Also verify consistency with ImportResult
     assert!(
         import_result.verification_passed,
         "verification should have passed"
