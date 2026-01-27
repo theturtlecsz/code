@@ -183,6 +183,10 @@ pub struct Stage0ExecutionResult {
     pub curated_insights_count: usize,
     /// Pre-check trace for capsule event emission (Phase 2 ADR-003)
     pub precheck_trace: Option<PrecheckTrace>,
+    /// Tier2 (NotebookLM) trace for degraded-mode event emission (ADR-003)
+    pub tier2_trace: Option<Tier2Trace>,
+    /// Product-knowledge routing trace for degraded-mode event emission (ADR-003)
+    pub pk_routing_trace: Option<PkRoutingTrace>,
 }
 
 /// Trace data for pre-check retrieval (for capsule event emission).
@@ -214,6 +218,58 @@ pub struct PrecheckTrace {
     pub latency_ms: Option<u64>,
     /// Error message if search failed
     pub error: Option<String>,
+}
+
+/// Trace data for Tier2 (NotebookLM) health check (for capsule event emission).
+///
+/// ADR-003: Captures Tier2 parameters and results for auditing. Emitted as
+/// correlated RetrievalRequest/Response events when Tier2 is enabled but
+/// health check failed (degraded mode).
+#[derive(Debug, Clone)]
+pub struct Tier2Trace {
+    /// NotebookLM service base URL
+    pub base_url: String,
+    /// Notebook ID configured for queries
+    pub notebook_id: String,
+    /// Whether Tier2 was enabled in config
+    pub enabled: bool,
+    /// Whether health check passed
+    pub health_ok: bool,
+    /// Health check latency in milliseconds
+    pub latency_ms: Option<u64>,
+    /// Reason for skipping Tier2 (if applicable)
+    pub skip_reason: Option<String>,
+    /// Error message from health check (if failed)
+    pub error: Option<String>,
+}
+
+impl Tier2Trace {
+    /// Returns true if degraded-mode events should be emitted.
+    ///
+    /// Emission gate: enabled && error.is_some()
+    /// - Does NOT emit for: pre-check hit, no notebook, disabled, or healthy Tier2
+    /// - DOES emit for: enabled + health check failed with error
+    pub fn should_emit_degraded_event(&self) -> bool {
+        self.enabled && self.error.is_some()
+    }
+}
+
+/// Trace data for product-knowledge routing (for capsule event emission).
+///
+/// ADR-003: Captures PK routing state for auditing when routing is disabled
+/// (e.g., sunset phase, explicit disable, or gate override).
+#[derive(Debug, Clone)]
+pub struct PkRoutingTrace {
+    /// Whether product-knowledge was enabled in config
+    pub enabled: bool,
+    /// Whether routing to PK was actually performed
+    pub routing_enabled: bool,
+    /// Target domain (e.g., "codex-product")
+    pub domain: String,
+    /// Reason routing was disabled
+    pub reason: String,
+    /// Operation latency in milliseconds
+    pub latency_ms: Option<u64>,
 }
 
 /// Configuration for Stage 0 execution
@@ -270,6 +326,8 @@ pub fn run_stage0_for_spec(
             precheck_candidates_found: 0,
             curated_insights_count: 0,
             precheck_trace: None,
+            tier2_trace: None,
+            pk_routing_trace: None,
         };
     }
 
@@ -292,6 +350,8 @@ pub fn run_stage0_for_spec(
                 precheck_candidates_found: 0,
                 curated_insights_count: 0,
                 precheck_trace: None,
+                tier2_trace: None,
+                pk_routing_trace: None,
             };
         }
     };
@@ -339,6 +399,8 @@ pub fn run_stage0_for_spec(
                 precheck_candidates_found: 0,
                 curated_insights_count: 0,
                 precheck_trace: None,
+                tier2_trace: None,
+                pk_routing_trace: None,
             };
         }
     }
@@ -377,6 +439,8 @@ pub fn run_stage0_for_spec(
                 precheck_candidates_found: 0,
                 curated_insights_count: 0,
                 precheck_trace: None,
+                tier2_trace: None,
+                pk_routing_trace: None,
             };
         }
     };
@@ -424,6 +488,8 @@ pub fn run_stage0_for_spec(
                 precheck_candidates_found: 0,
                 curated_insights_count: 0,
                 precheck_trace: None,
+                tier2_trace: None,
+                pk_routing_trace: None,
             };
         }
     };
@@ -726,6 +792,8 @@ pub fn run_stage0_for_spec(
                 precheck_candidates_found,
                 curated_insights_count: curated_count,
                 precheck_trace,
+                tier2_trace: None, // TODO: Populate from engine trace
+                pk_routing_trace: None, // TODO: Populate from engine trace
             }
         }
         Err(e) => {
@@ -753,6 +821,8 @@ pub fn run_stage0_for_spec(
                 precheck_candidates_found,
                 curated_insights_count: 0,
                 precheck_trace,
+                tier2_trace: None,
+                pk_routing_trace: None,
             }
         }
     }

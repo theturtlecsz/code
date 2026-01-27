@@ -58,6 +58,7 @@ CANONICAL_DOCS_ROOT = {
     "docs/PROGRAM.md": "Active specs and dependency DAG",
     "docs/SPEC-KIT.md": "Spec-kit reference (CLI, architecture, quality gates)",
     "docs/VISION.md": "Product identity and vision",
+    "docs/PRODUCT-KNOWLEDGE-SYSTEM-DESIGN.md": "ADR-003 product knowledge layer design",
 }
 
 # Migration docs (temporary, must have expiry header)
