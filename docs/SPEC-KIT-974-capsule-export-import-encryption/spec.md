@@ -40,6 +40,9 @@ Make capsules shareable and enterprise-safe: encrypted exports, reproducible imp
 * Export triggers (D16):
   * Config: `capsule.export.mode = manual | risk | always` (default: `risk`).
   * `risk` means auto-export is performed only when: (a) Spec classification is high-risk, (b) Judge requests export, or (c) an Unlock gate requires an audit handoff.
+  * Risk-mode trigger flags:
+    * `capsule.export.high_risk = false` (default) — set `true` to classify spec as high-risk
+    * `capsule.export.audit_handoff_required = false` (default) — set `true` when Unlock gate requires audit handoff
 * Retention/GC (D20, D116):
   * Config: `capsule.export.retention_days = 30` (default) + `capsule.export.keep_pinned = true`.
   * Command: `speckit capsule gc` removes expired run exports and orphaned temp files.

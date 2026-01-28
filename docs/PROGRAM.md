@@ -1,7 +1,7 @@
 # Active Program (v1.0.0)
 
 **Scope**: 2026-Q1 Memvid-First Workbench + Model Policy v2
-**Last Updated**: 2026-01-22
+**Last Updated**: 2026-01-28
 **Status**: ACTIVE
 
 ***
@@ -46,10 +46,10 @@ This document pins the **only** work considered "ACTIVE" for the 2026-Q1 program
 
 ### Product UX (Days 30-60)
 
-| Spec                                                                    | Description                              | Status      |
-| ----------------------------------------------------------------------- | ---------------------------------------- | ----------- |
-| [SPEC-KIT-973](./SPEC-KIT-973-time-travel-ui/spec.md)                   | Time-Travel UI + Branching               | Completed   |
-| [SPEC-KIT-974](./SPEC-KIT-974-capsule-export-import-encryption/spec.md) | Export/Import + Encryption + Safe Export | In Progress |
+| Spec                                                                    | Description                              | Status    |
+| ----------------------------------------------------------------------- | ---------------------------------------- | --------- |
+| [SPEC-KIT-973](./SPEC-KIT-973-time-travel-ui/spec.md)                   | Time-Travel UI + Branching               | Completed |
+| [SPEC-KIT-974](./SPEC-KIT-974-capsule-export-import-encryption/spec.md) | Export/Import + Encryption + Safe Export | Completed |
 
 ### Higher-Level Intelligence (Days 45-75)
 
@@ -129,6 +129,7 @@ When in doubt: treat as ARCHIVE until `SPEC.md` or this file says otherwise.
 
 | Version | Date       | Changes                                                              |
 | ------- | ---------- | -------------------------------------------------------------------- |
+| v1.0.2  | 2026-01-28 | SPEC-KIT-974 status updated to Completed                             |
 | v1.0.1  | 2026-01-23 | DOC-001: Reconcile status markers with SPEC.md (9 specs → Completed) |
 | v1.0.0  | 2026-01-22 | Initial canonical version (migrated from PROGRAM\_2026Q1\_ACTIVE.md) |
 

@@ -7394,3 +7394,237 @@ fn test_capsule_imported_event_has_required_fields() {
         "mount name should match requested"
     );
 }
+
+// =============================================================================
+// SPEC-KIT-974: Export/Import Retrieval Parity Tests
+// Validates the Replay Truth Table invariant:
+// "Exported capsule, imported elsewhere → Identical to source, Deterministic"
+// =============================================================================
+
+/// P0-A: Validates that an exported capsule imported elsewhere yields identical
+/// retrieval results for the same search query.
+///
+/// This test verifies the canonical truth-table claim in SPEC.md (lines 143-151)
+/// that exported capsules produce deterministic, identical results when imported.
+#[tokio::test]
+async fn test_export_import_retrieval_parity() {
+    use crate::memvid_adapter::capsule::{ExportOptions, ImportOptions};
+    use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams};
+
+    let temp_dir = TempDir::new().unwrap();
+    let source_path = temp_dir.path().join("source.mv2");
+    let export_path = temp_dir.path().join("exported.mv2");
+    let workspace_path = temp_dir.path().join("workspace.mv2");
+
+    // =========================================================================
+    // Step 1: Create source capsule with artifacts designed for stable ranking
+    // =========================================================================
+    let source_config = CapsuleConfig {
+        capsule_path: source_path.clone(),
+        workspace_id: "parity_source".to_string(),
+        ..Default::default()
+    };
+    let source_handle = CapsuleHandle::open(source_config.clone()).expect("should create source");
+
+    // Corpus designed to produce stable, non-tied rankings for "authentication flow"
+    // Artifact 1: Heavy on authentication keywords (should rank #1)
+    source_handle
+        .put(
+            "SPEC-PARITY",
+            "run-1",
+            ObjectType::Artifact,
+            "auth_heavy.md",
+            b"# Authentication Flow Implementation\n\
+              The authentication flow handles user login, logout, and session management.\n\
+              Authentication tokens are validated on each request.\n\
+              The authentication module integrates with OAuth providers."
+                .to_vec(),
+            serde_json::json!({"type": "doc", "topic": "auth"}),
+        )
+        .expect("should put auth_heavy");
+
+    // Artifact 2: Moderate authentication + security (should rank #2)
+    source_handle
+        .put(
+            "SPEC-PARITY",
+            "run-1",
+            ObjectType::Artifact,
+            "auth_moderate.md",
+            b"# Security and Authentication\n\
+              This module provides authentication and security features.\n\
+              Password hashing and token generation are handled here."
+                .to_vec(),
+            serde_json::json!({"type": "doc", "topic": "security"}),
+        )
+        .expect("should put auth_moderate");
+
+    // Artifact 3: Light authentication mention (should rank #3)
+    source_handle
+        .put(
+            "SPEC-PARITY",
+            "run-1",
+            ObjectType::Artifact,
+            "auth_light.md",
+            b"# User Management\n\
+              User profiles and settings are managed here.\n\
+              Requires authentication to access."
+                .to_vec(),
+            serde_json::json!({"type": "doc", "topic": "users"}),
+        )
+        .expect("should put auth_light");
+
+    // Artifact 4: Unrelated - performance (should not rank highly)
+    source_handle
+        .put(
+            "SPEC-PARITY",
+            "run-1",
+            ObjectType::Artifact,
+            "performance.md",
+            b"# Performance Optimization\n\
+              This guide covers caching strategies and query optimization.\n\
+              Database indexing and connection pooling are discussed."
+                .to_vec(),
+            serde_json::json!({"type": "doc", "topic": "perf"}),
+        )
+        .expect("should put performance");
+
+    // Artifact 5: Unrelated - networking (should not rank highly)
+    source_handle
+        .put(
+            "SPEC-PARITY",
+            "run-1",
+            ObjectType::Artifact,
+            "networking.md",
+            b"# Networking Configuration\n\
+              Load balancer setup and DNS configuration.\n\
+              Firewall rules and port forwarding."
+                .to_vec(),
+            serde_json::json!({"type": "doc", "topic": "network"}),
+        )
+        .expect("should put networking");
+
+    // Commit to create checkpoint
+    source_handle
+        .commit_stage("SPEC-PARITY", "run-1", "plan", None)
+        .expect("should commit");
+
+    // =========================================================================
+    // Step 2: Export to unencrypted .mv2
+    // =========================================================================
+    let export_opts = ExportOptions {
+        output_path: export_path.clone(),
+        spec_id: Some("SPEC-PARITY".to_string()),
+        run_id: Some("run-1".to_string()),
+        encrypt: false,
+        ..Default::default()
+    };
+    source_handle.export(&export_opts).expect("should export");
+    drop(source_handle); // Release lock before opening adapter
+
+    // =========================================================================
+    // Step 3: Search on source capsule (reopen via adapter after export)
+    // =========================================================================
+    let source_adapter = MemvidMemoryAdapter::new(source_config.clone());
+    source_adapter.open().await.expect("should open source");
+
+    let search_params = LocalMemorySearchParams {
+        iqo: Iqo {
+            keywords: vec!["authentication".to_string(), "flow".to_string()],
+            ..Default::default()
+        },
+        max_results: 5,
+    };
+
+    let source_results = source_adapter
+        .search_memories(search_params.clone())
+        .await
+        .expect("source search should succeed");
+
+    assert!(
+        !source_results.is_empty(),
+        "source should have search results"
+    );
+
+    // Extract top 3 result IDs for comparison
+    let source_top_ids: Vec<String> = source_results
+        .iter()
+        .take(3)
+        .map(|r| r.id.clone())
+        .collect();
+
+    drop(source_adapter); // Release source before import
+
+    // =========================================================================
+    // Step 4: Import into workspace and search on imported capsule
+    // =========================================================================
+    let workspace_config = CapsuleConfig {
+        capsule_path: workspace_path.clone(),
+        workspace_id: "parity_workspace".to_string(),
+        ..Default::default()
+    };
+    let workspace_handle =
+        CapsuleHandle::open(workspace_config.clone()).expect("should create workspace");
+
+    let import_opts = ImportOptions::for_file(&export_path)
+        .with_mount_name("parity_import")
+        .with_interactive(false);
+
+    let import_result = workspace_handle
+        .import(&import_opts)
+        .expect("should import");
+
+    assert!(
+        import_result.verification_passed,
+        "import verification should pass"
+    );
+
+    // Open the imported capsule for searching
+    let imported_path = import_result
+        .mounted_path
+        .expect("should have mounted path");
+    let imported_config = CapsuleConfig {
+        capsule_path: imported_path,
+        workspace_id: "parity_imported".to_string(),
+        ..Default::default()
+    };
+    let imported_adapter = MemvidMemoryAdapter::new(imported_config);
+    imported_adapter
+        .open()
+        .await
+        .expect("should open imported capsule");
+
+    // =========================================================================
+    // Step 5: Search on imported capsule with same query
+    // =========================================================================
+    let imported_results = imported_adapter
+        .search_memories(search_params)
+        .await
+        .expect("imported search should succeed");
+
+    assert!(
+        !imported_results.is_empty(),
+        "imported should have search results"
+    );
+
+    // Extract top 3 result IDs
+    let imported_top_ids: Vec<String> = imported_results
+        .iter()
+        .take(3)
+        .map(|r| r.id.clone())
+        .collect();
+
+    // =========================================================================
+    // Step 6: Assert retrieval parity (Replay Truth Table invariant)
+    // =========================================================================
+    assert_eq!(
+        source_top_ids.len(),
+        imported_top_ids.len(),
+        "should have same number of top results"
+    );
+
+    assert_eq!(
+        source_top_ids, imported_top_ids,
+        "Retrieval parity violated: source top-3 {:?} != imported top-3 {:?}",
+        source_top_ids, imported_top_ids
+    );
+}
