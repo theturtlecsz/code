@@ -115,6 +115,29 @@ pub struct MemoryMeta {
     pub snippet: String,
     /// Source URI in capsule
     pub uri: Option<LogicalUri>,
+    /// SPEC-KIT-980: Whether this artifact should be indexed for search.
+    /// Default: true. Set to false for raw binary storage without indexing.
+    pub indexable: bool,
+    /// SPEC-KIT-980: Checkpoint at which this memory became visible.
+    /// Used for as-of filtering in search results.
+    pub visible_from: Option<String>,
+}
+
+/// Result from multi-modal ingestion (SPEC-KIT-980).
+///
+/// When ingesting PDF/DOCX files with extraction enabled:
+/// - `uri`: URI of the raw bytes artifact (indexable=false)
+/// - `extracted_uri`: URI of the extracted text artifact (indexable=true)
+#[derive(Debug, Clone)]
+pub struct IngestResult {
+    /// URI of the primary artifact (raw bytes for PDF/DOCX, or full artifact for text)
+    pub uri: LogicalUri,
+    /// URI of extracted text (only for PDF/DOCX when extraction succeeds)
+    pub extracted_uri: Option<LogicalUri>,
+    /// Whether extraction was performed
+    pub extracted: bool,
+    /// Extraction metadata (page_count, word_count, etc.)
+    pub extraction_meta: Option<serde_json::Value>,
 }
 
 impl MemvidMemoryAdapter {
@@ -282,6 +305,141 @@ impl MemvidMemoryAdapter {
         Ok(uri)
     }
 
+    /// Ingest an artifact with optional text extraction for supported formats.
+    ///
+    /// ## SPEC-KIT-980: Multi-Modal Ingestion
+    /// For PDF/DOCX files (when feature enabled):
+    /// 1. Store raw bytes as non-indexable artifact
+    /// 2. Extract text and store as indexable artifact
+    /// 3. Return URIs for both artifacts
+    ///
+    /// For unsupported formats or when features are disabled, behaves like `ingest()`.
+    ///
+    /// ## Returns
+    /// - `IngestResult` with primary URI and optional extracted URI
+    pub async fn ingest_multimodal(
+        &self,
+        spec_id: &str,
+        run_id: &str,
+        path: &str,
+        data: Vec<u8>,
+        metadata: serde_json::Value,
+    ) -> Result<IngestResult, CapsuleError> {
+        use crate::memvid_adapter::extractor::{extract_text, is_extraction_supported};
+        use std::path::Path;
+
+        // Get file extension
+        let extension = Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+
+        // Check if extraction is supported for this format
+        if !is_extraction_supported(extension) {
+            // No extraction - behave like regular ingest
+            let uri = self.ingest(spec_id, run_id, path, data, metadata).await?;
+            return Ok(IngestResult {
+                uri,
+                extracted_uri: None,
+                extracted: false,
+                extraction_meta: None,
+            });
+        }
+
+        // Attempt extraction
+        match extract_text(&data, extension) {
+            Ok(result) => {
+                // Store raw bytes as non-indexable
+                let mut raw_metadata = metadata.clone();
+                if let Some(obj) = raw_metadata.as_object_mut() {
+                    obj.insert("indexable".to_string(), serde_json::json!(false));
+                    obj.insert(
+                        "extracted_uri".to_string(),
+                        serde_json::json!(format!(
+                            "mv2://{}/{}/{}/artifact/{}.extracted",
+                            self.config.workspace_id, spec_id, run_id, path
+                        )),
+                    );
+                    obj.insert("file_type".to_string(), serde_json::json!(extension));
+                }
+
+                let raw_uri = self
+                    .ingest(spec_id, run_id, path, data, raw_metadata)
+                    .await?;
+
+                // Store extracted text as indexable
+                let extracted_path = format!("{}.extracted", path);
+                let mut extracted_metadata = serde_json::json!({
+                    "indexable": true,
+                    "source_uri": raw_uri.as_str(),
+                    "file_type": format!("{}.extracted", extension),
+                    "extraction_method": result.extraction_method,
+                    "word_count": result.word_count,
+                });
+                if let Some(pc) = result.page_count {
+                    if let Some(obj) = extracted_metadata.as_object_mut() {
+                        obj.insert("page_count".to_string(), serde_json::json!(pc));
+                    }
+                }
+                // Copy domain and tags from original metadata
+                if let Some(domain) = metadata.get("domain") {
+                    if let Some(obj) = extracted_metadata.as_object_mut() {
+                        obj.insert("domain".to_string(), domain.clone());
+                    }
+                }
+                if let Some(tags) = metadata.get("tags") {
+                    if let Some(obj) = extracted_metadata.as_object_mut() {
+                        obj.insert("tags".to_string(), tags.clone());
+                    }
+                }
+                if let Some(importance) = metadata.get("importance") {
+                    if let Some(obj) = extracted_metadata.as_object_mut() {
+                        obj.insert("importance".to_string(), importance.clone());
+                    }
+                }
+
+                let extracted_uri = self
+                    .ingest(
+                        spec_id,
+                        run_id,
+                        &extracted_path,
+                        result.text.into_bytes(),
+                        extracted_metadata,
+                    )
+                    .await?;
+
+                let extraction_meta = serde_json::json!({
+                    "method": result.extraction_method,
+                    "word_count": result.word_count,
+                    "page_count": result.page_count,
+                });
+
+                Ok(IngestResult {
+                    uri: raw_uri,
+                    extracted_uri: Some(extracted_uri),
+                    extracted: true,
+                    extraction_meta: Some(extraction_meta),
+                })
+            }
+            Err(e) => {
+                // Extraction failed - log warning and store as regular artifact
+                tracing::warn!(
+                    "SPEC-KIT-980: Text extraction failed for {}: {}. Storing without extraction.",
+                    path,
+                    e
+                );
+
+                let uri = self.ingest(spec_id, run_id, path, data, metadata).await?;
+                Ok(IngestResult {
+                    uri,
+                    extracted_uri: None,
+                    extracted: false,
+                    extraction_meta: None,
+                })
+            }
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     // SPEC-KIT-972: Memory indexing
     // ─────────────────────────────────────────────────────────────────────────────
@@ -290,6 +448,9 @@ impl MemvidMemoryAdapter {
     ///
     /// Extracts text content, domain, tags, and importance from metadata
     /// and adds to the TF-IDF index.
+    ///
+    /// SPEC-KIT-980: For non-indexable artifacts, stores minimal metadata
+    /// without UTF-8 decoding the data (avoids expensive decode for large binaries).
     async fn index_memory(
         &self,
         uri: &LogicalUri,
@@ -300,8 +461,11 @@ impl MemvidMemoryAdapter {
         // Generate a stable ID from URI
         let id = uri.as_str().to_string();
 
-        // Extract text content (assume UTF-8)
-        let text = String::from_utf8_lossy(data).to_string();
+        // SPEC-KIT-980: Check indexable flag FIRST (default true)
+        let indexable = metadata
+            .get("indexable")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
 
         // Extract domain from metadata or default to spec-id domain
         let domain = metadata
@@ -328,6 +492,30 @@ impl MemvidMemoryAdapter {
             .and_then(|v| v.as_f64())
             .map(|f| f as f32);
 
+        // SPEC-KIT-980: Early return for non-indexable - store metadata without decoding bytes
+        if !indexable {
+            let mem_meta = MemoryMeta {
+                id: id.clone(),
+                domain,
+                tags,
+                importance,
+                created_at: Some(Utc::now()),
+                snippet: "[binary artifact - not indexed]".to_string(),
+                uri: Some(uri.clone()),
+                indexable: false,
+                visible_from: None,
+            };
+            {
+                let mut meta_map = self.memory_meta.write().await;
+                meta_map.insert(id.clone(), mem_meta);
+            }
+            tracing::debug!("Skipping search index for {}: marked non-indexable", id);
+            return;
+        }
+
+        // Only decode text for indexable artifacts
+        let text = String::from_utf8_lossy(data).to_string();
+
         // Create snippet (first 200 chars)
         let snippet = text.chars().take(200).collect::<String>();
 
@@ -338,8 +526,10 @@ impl MemvidMemoryAdapter {
             tags: tags.clone(),
             importance,
             created_at: Some(Utc::now()),
-            snippet: snippet.clone(),
+            snippet,
             uri: Some(uri.clone()),
+            indexable: true,
+            visible_from: None, // SPEC-KIT-980: Set during checkpoint commit
         };
 
         {
@@ -367,11 +557,18 @@ impl MemvidMemoryAdapter {
     /// Add a memory directly to the search index (for testing or bulk import).
     pub async fn add_memory_to_index(&self, meta: MemoryMeta, content: &str) {
         let id = meta.id.clone();
+        let indexable = meta.indexable;
 
-        // Store metadata
+        // Store metadata (always store, even if not indexable)
         {
             let mut meta_map = self.memory_meta.write().await;
             meta_map.insert(id.clone(), meta.clone());
+        }
+
+        // SPEC-KIT-980: Skip TF-IDF indexing if not indexable
+        if !indexable {
+            tracing::debug!("Skipping search index for {}: marked non-indexable", id);
+            return;
         }
 
         // Create vector document
@@ -542,12 +739,39 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
         // Filter and score results
         let mut candidates: Vec<(String, f64, Option<MemoryMeta>)> = Vec::new();
 
+        // SPEC-KIT-980: Prepare as-of filtering if checkpoint specified
+        let as_of_checkpoint = params
+            .as_of
+            .as_ref()
+            .map(|s| CheckpointId::new(s.clone()));
+        let capsule_guard = self.capsule.read().await;
+
         for result in search_results {
             let meta = meta_map.get(&result.id).cloned();
 
             // Apply IQO filters
             if !self.passes_iqo_filters(&meta, &params) {
                 continue;
+            }
+
+            // SPEC-KIT-980: Apply as-of filtering if checkpoint specified
+            if let Some(ref checkpoint_id) = as_of_checkpoint {
+                if let Some(ref m) = meta {
+                    if let Some(ref uri) = m.uri {
+                        // Check if URI was visible at the checkpoint
+                        if let Some(ref handle) = *capsule_guard {
+                            if handle.resolve_uri(uri, None, Some(checkpoint_id)).is_err() {
+                                // URI was not visible at this checkpoint
+                                tracing::debug!(
+                                    "SPEC-KIT-980: Excluding {} - not visible at checkpoint {}",
+                                    result.id,
+                                    checkpoint_id.as_str()
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                }
             }
 
             // Compute hybrid score
@@ -1107,6 +1331,8 @@ mod adapter_tests {
                 created_at: Some(Utc::now()),
                 snippet: "Rust error handling pattern".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "Rust error handling pattern using Result and Option types for safe error propagation",
         ).await;
@@ -1121,6 +1347,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "Decision to use async/await".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "Decision to use async/await pattern for all IO operations in the codebase",
             )
@@ -1136,6 +1364,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "Database connection pool pattern".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "Database connection pool pattern for PostgreSQL with r2d2",
             )
@@ -1150,6 +1380,7 @@ mod adapter_tests {
                 ..Default::default()
             },
             max_results: 10,
+            as_of: None,
         };
 
         let results = adapter.search_memories(params).await.unwrap();
@@ -1186,6 +1417,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "Pattern in spec-kit".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "Important pattern for spec-kit workflow",
             )
@@ -1201,6 +1434,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "Pattern in infrastructure".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "Important pattern for infrastructure deployment",
             )
@@ -1214,6 +1449,7 @@ mod adapter_tests {
                 ..Default::default()
             },
             max_results: 10,
+            as_of: None,
         };
 
         let results = adapter.search_memories(params).await.unwrap();
@@ -1252,6 +1488,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "Fixed critical bug".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "Fixed critical bug in memory retrieval causing crashes",
             )
@@ -1267,6 +1505,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "New pattern".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "New pattern for memory retrieval",
             )
@@ -1280,6 +1520,7 @@ mod adapter_tests {
                 ..Default::default()
             },
             max_results: 10,
+            as_of: None,
         };
 
         let results = adapter.search_memories(params).await.unwrap();
@@ -1314,6 +1555,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "System memory".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "System generated memory for internal use",
             )
@@ -1329,6 +1572,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "User memory".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "User created memory for decision tracking",
             )
@@ -1342,6 +1587,7 @@ mod adapter_tests {
                 ..Default::default()
             },
             max_results: 10,
+            as_of: None,
         };
 
         let results = adapter.search_memories(params).await.unwrap();
@@ -1376,6 +1622,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "Test memory".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "Test memory content",
             )
@@ -1385,6 +1633,7 @@ mod adapter_tests {
         let params = LocalMemorySearchParams {
             iqo: Iqo::default(),
             max_results: 10,
+            as_of: None,
         };
 
         let results = adapter.search_memories(params).await.unwrap();
@@ -1430,6 +1679,7 @@ mod adapter_tests {
                 ..Default::default()
             },
             max_results: 10,
+            as_of: None,
         };
 
         let results = adapter.search_memories(params).await.unwrap();
@@ -1462,6 +1712,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "Rust Rust Rust".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "Rust Rust Rust - highly relevant to Rust programming language",
             )
@@ -1477,6 +1729,8 @@ mod adapter_tests {
                     created_at: Some(Utc::now()),
                     snippet: "Python programming".to_string(),
                     uri: None,
+                    indexable: true,
+                    visible_from: None,
                 },
                 "Python programming with occasional Rust interop",
             )
@@ -1489,6 +1743,7 @@ mod adapter_tests {
                 ..Default::default()
             },
             max_results: 10,
+            as_of: None,
         };
 
         let results = adapter.search_memories(params).await.unwrap();
@@ -1529,6 +1784,7 @@ mod adapter_tests {
                 ..Default::default()
             },
             max_results: 10,
+            as_of: None,
         };
         let results = client.search_memories(params).await.unwrap();
         assert!(results.is_empty()); // No data yet
@@ -1568,6 +1824,7 @@ mod adapter_tests {
                 ..Default::default()
             },
             max_results: 10,
+            as_of: None,
         };
         let results = client.search_memories(params).await.unwrap();
         assert!(results.is_empty());
@@ -1632,6 +1889,7 @@ mod adapter_tests {
                 ..Default::default()
             },
             max_results: 10,
+            as_of: None,
         };
         let results = client.search_memories(params).await.unwrap();
         assert!(results.is_empty());

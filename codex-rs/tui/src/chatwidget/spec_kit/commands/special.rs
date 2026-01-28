@@ -2379,6 +2379,7 @@ impl SpecKitCommand for Stage0IndexCommand {
             let params = LocalMemorySearchParams {
                 iqo,
                 max_results: max_memories,
+                as_of: None,
             };
 
             let memories = local_mem

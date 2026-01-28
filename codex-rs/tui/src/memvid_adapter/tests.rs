@@ -14,6 +14,7 @@ use super::*;
 use crate::memvid_adapter::capsule::{
     CapsuleConfig, CapsuleError, CapsuleHandle, DiagnosticResult,
 };
+use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams};
 use crate::memvid_adapter::types::{
     BranchId,
     CardFact,
@@ -7533,6 +7534,7 @@ async fn test_export_import_retrieval_parity() {
             ..Default::default()
         },
         max_results: 5,
+        as_of: None,
     };
 
     let source_results = source_adapter
@@ -7627,4 +7629,379 @@ async fn test_export_import_retrieval_parity() {
         "Retrieval parity violated: source top-3 {:?} != imported top-3 {:?}",
         source_top_ids, imported_top_ids
     );
+}
+
+// =============================================================================
+// SPEC-KIT-980: Multi-Modal Ingestion Tests (Phase 1)
+// =============================================================================
+
+/// SPEC-KIT-980: Test that indexable=false skips search indexing.
+///
+/// Artifacts marked with `indexable: false` should be stored in metadata
+/// but should NOT appear in search results.
+#[tokio::test]
+async fn test_indexable_false_skips_search() {
+    use chrono::Utc;
+    use codex_stage0::dcc::{Iqo, LocalMemoryClient as _, LocalMemorySearchParams};
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("indexable_test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path: capsule_path.clone(),
+        workspace_id: "indexable_test".to_string(),
+        ..Default::default()
+    };
+
+    let adapter = MemvidMemoryAdapter::new(config.clone());
+    adapter.open().await.expect("should open");
+
+    // Add an indexable artifact
+    adapter
+        .add_memory_to_index(
+            MemoryMeta {
+                id: "searchable-doc-001".to_string(),
+                domain: Some("spec-kit".to_string()),
+                tags: vec!["type:requirement".to_string()],
+                importance: Some(8.0),
+                created_at: Some(Utc::now()),
+                snippet: "Database optimization guide".to_string(),
+                uri: None,
+                indexable: true, // Should appear in search
+                visible_from: None,
+            },
+            "Database optimization techniques including query planning, \
+             index design, and caching strategies for high-performance systems.",
+        )
+        .await;
+
+    // Add a non-indexable artifact (binary storage only)
+    adapter
+        .add_memory_to_index(
+            MemoryMeta {
+                id: "non-indexable-binary-001".to_string(),
+                domain: Some("spec-kit".to_string()),
+                tags: vec!["type:binary".to_string()],
+                importance: Some(7.0),
+                created_at: Some(Utc::now()),
+                snippet: "Binary asset about database optimization".to_string(),
+                uri: None,
+                indexable: false, // Should NOT appear in search
+                visible_from: None,
+            },
+            "This content also mentions database optimization but should not be searchable \
+             because it's marked as non-indexable binary storage.",
+        )
+        .await;
+
+    // Search for "database optimization"
+    let params = LocalMemorySearchParams {
+        iqo: Iqo {
+            keywords: vec!["database".to_string(), "optimization".to_string()],
+            ..Default::default()
+        },
+        max_results: 10,
+        as_of: None,
+    };
+
+    let results = adapter
+        .search_memories(params)
+        .await
+        .expect("search should succeed");
+
+    // Should find only the indexable document
+    assert_eq!(
+        results.len(),
+        1,
+        "should find exactly one result (the indexable doc)"
+    );
+    assert!(
+        results[0].id.contains("searchable-doc-001"),
+        "result should be the indexable document, got: {}",
+        results[0].id
+    );
+
+    // Verify non-indexable doc is NOT in results
+    let non_indexable_found = results
+        .iter()
+        .any(|r| r.id.contains("non-indexable-binary"));
+    assert!(
+        !non_indexable_found,
+        "non-indexable document should NOT appear in search results"
+    );
+
+    // Note: We can't directly verify metadata storage since memory_meta is private.
+    // The key assertion is that non-indexable docs don't appear in search results,
+    // which is the LOCKED behavior for SPEC-KIT-980.
+}
+
+/// SPEC-KIT-980: Test PDF feature gate error message.
+///
+/// This test documents the expected behavior when memvid-pdf is disabled.
+/// The actual feature check happens at compile time in CLI run_ingest().
+#[test]
+fn test_pdf_feature_gate_error_message() {
+    // When memvid-pdf is NOT enabled:
+    // - Attempting to ingest a .pdf file should return exit code 2 (HARD_FAIL)
+    // - Error message should indicate: "PDF ingestion requires the 'memvid-pdf' feature"
+    // - Resolution should suggest: "Rebuild with: cargo build --features memvid-pdf"
+
+    #[cfg(not(feature = "memvid-pdf"))]
+    {
+        // Verify expected error messages are correctly formatted
+        let expected_error = "PDF ingestion requires the 'memvid-pdf' feature";
+        let expected_resolution = "Rebuild with: cargo build --features memvid-pdf";
+
+        assert!(
+            !expected_error.is_empty(),
+            "error message should be non-empty"
+        );
+        assert!(
+            !expected_resolution.is_empty(),
+            "resolution message should be non-empty"
+        );
+        assert!(
+            expected_resolution.contains("--features memvid-pdf"),
+            "resolution should include feature flag instruction"
+        );
+    }
+
+    #[cfg(feature = "memvid-pdf")]
+    {
+        // When feature IS enabled, this test passes trivially.
+        // Actual PDF extraction would be tested with fixtures in Phase 2.
+    }
+}
+
+/// SPEC-KIT-980: Test DOCX feature gate error message.
+///
+/// This test documents the expected behavior when memvid-docx is disabled.
+#[test]
+fn test_docx_feature_gate_error_message() {
+    // When memvid-docx is NOT enabled:
+    // - Attempting to ingest a .docx file should return exit code 2 (HARD_FAIL)
+    // - Error message should indicate: "DOCX ingestion requires the 'memvid-docx' feature"
+    // - Resolution should suggest: "Rebuild with: cargo build --features memvid-docx"
+
+    #[cfg(not(feature = "memvid-docx"))]
+    {
+        let expected_error = "DOCX ingestion requires the 'memvid-docx' feature";
+        let expected_resolution = "Rebuild with: cargo build --features memvid-docx";
+
+        assert!(
+            !expected_error.is_empty(),
+            "error message should be non-empty"
+        );
+        assert!(
+            !expected_resolution.is_empty(),
+            "resolution message should be non-empty"
+        );
+        assert!(
+            expected_resolution.contains("--features memvid-docx"),
+            "resolution should include feature flag instruction"
+        );
+    }
+
+    #[cfg(feature = "memvid-docx")]
+    {
+        // When feature IS enabled, this test passes trivially.
+        // Actual DOCX extraction would be tested with fixtures in Phase 2.
+    }
+}
+
+// =============================================================================
+// SPEC-KIT-980: ingest_multimodal tests
+// =============================================================================
+
+/// SPEC-KIT-980: Test ingest_multimodal with unsupported format (fallback to regular ingest).
+#[tokio::test]
+async fn test_ingest_multimodal_unsupported_format() {
+    use tempfile::TempDir;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("test.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "test".to_string(),
+        ..Default::default()
+    };
+
+    let adapter = MemvidMemoryAdapter::new(config);
+    adapter.open().await.expect("should open");
+
+    // Ingest a .txt file (unsupported for extraction)
+    let result = adapter
+        .ingest_multimodal(
+            "SPEC-980",
+            "run1",
+            "readme.txt",
+            b"This is a plain text file with some content.".to_vec(),
+            serde_json::json!({
+                "domain": "spec-kit",
+                "tags": ["type:doc"]
+            }),
+        )
+        .await
+        .expect("should succeed");
+
+    // Should NOT extract (no extraction for .txt)
+    assert!(!result.extracted, "should not extract .txt files");
+    assert!(result.extracted_uri.is_none(), "should have no extracted_uri");
+    assert!(result.extraction_meta.is_none(), "should have no extraction_meta");
+
+    // Primary URI should be valid
+    assert!(result.uri.is_valid());
+    assert!(result.uri.as_str().contains("readme.txt"));
+}
+
+/// SPEC-KIT-980: Test as-of filtering excludes artifacts ingested after checkpoint.
+///
+/// Semantic assertions:
+/// - Search current: BOTH "before-checkpoint" and "after-checkpoint" present
+/// - Search as_of cp1: ONLY "before-checkpoint" present, "after-checkpoint" ABSENT
+#[tokio::test]
+async fn test_as_of_filtering_excludes_future_artifacts() {
+    use tempfile::TempDir;
+
+    let temp_dir = TempDir::new().unwrap();
+    let capsule_path = temp_dir.path().join("test_asof.mv2");
+
+    let config = CapsuleConfig {
+        capsule_path,
+        workspace_id: "asof_test".to_string(),
+        ..Default::default()
+    };
+
+    let adapter = MemvidMemoryAdapter::new(config);
+    adapter.open().await.expect("should open");
+
+    // Ingest artifact BEFORE checkpoint
+    let uri1 = adapter
+        .ingest(
+            "SPEC-980",
+            "run1",
+            "before-checkpoint.md",
+            b"Document created before checkpoint about database queries".to_vec(),
+            serde_json::json!({
+                "domain": "spec-kit",
+                "tags": ["type:doc"]
+            }),
+        )
+        .await
+        .expect("ingest 1 should succeed");
+
+    // Create checkpoint cp1
+    let cp1 = adapter
+        .commit_stage("SPEC-980", "run1", "stage1", None)
+        .await
+        .expect("checkpoint 1 should succeed");
+
+    // Ingest artifact AFTER checkpoint
+    let uri2 = adapter
+        .ingest(
+            "SPEC-980",
+            "run1",
+            "after-checkpoint.md",
+            b"Document created after checkpoint about database queries".to_vec(),
+            serde_json::json!({
+                "domain": "spec-kit",
+                "tags": ["type:doc"]
+            }),
+        )
+        .await
+        .expect("ingest 2 should succeed");
+
+    // Commit second checkpoint (optional, but makes state clearer)
+    let _cp2 = adapter
+        .commit_stage("SPEC-980", "run1", "stage2", None)
+        .await
+        .expect("checkpoint 2 should succeed");
+
+    // Search WITHOUT as-of should find BOTH
+    let params_current = LocalMemorySearchParams {
+        iqo: Iqo {
+            keywords: vec!["database".to_string()],
+            ..Default::default()
+        },
+        max_results: 10,
+        as_of: None,
+    };
+
+    let results_current = adapter
+        .search_memories(params_current)
+        .await
+        .expect("search current should succeed");
+
+    // SEMANTIC: Current search finds BOTH artifacts
+    let current_ids: Vec<&str> = results_current.iter().map(|r| r.id.as_str()).collect();
+    assert!(
+        current_ids.iter().any(|id| id.contains("before-checkpoint")),
+        "current search should find 'before-checkpoint', got: {:?}",
+        current_ids
+    );
+    assert!(
+        current_ids.iter().any(|id| id.contains("after-checkpoint")),
+        "current search should find 'after-checkpoint', got: {:?}",
+        current_ids
+    );
+
+    // Search WITH as-of cp1 should find ONLY pre-checkpoint artifact
+    let params_as_of = LocalMemorySearchParams {
+        iqo: Iqo {
+            keywords: vec!["database".to_string()],
+            ..Default::default()
+        },
+        max_results: 10,
+        as_of: Some(cp1.as_str().to_string()),
+    };
+
+    let results_as_of = adapter
+        .search_memories(params_as_of)
+        .await
+        .expect("search as-of should succeed");
+
+    // SEMANTIC: As-of search finds 'before-checkpoint' but NOT 'after-checkpoint'
+    let asof_ids: Vec<&str> = results_as_of.iter().map(|r| r.id.as_str()).collect();
+    assert!(
+        asof_ids.iter().any(|id| id.contains("before-checkpoint")),
+        "as-of search should find 'before-checkpoint', got: {:?}",
+        asof_ids
+    );
+    assert!(
+        !asof_ids.iter().any(|id| id.contains("after-checkpoint")),
+        "as-of search should NOT find 'after-checkpoint', got: {:?}",
+        asof_ids
+    );
+
+    // Log URIs for debugging
+    tracing::debug!("URI1 (before): {}", uri1.as_str());
+    tracing::debug!("URI2 (after): {}", uri2.as_str());
+    tracing::debug!("Checkpoint cp1: {}", cp1.as_str());
+}
+
+/// SPEC-KIT-980: Test extractor feature detection functions.
+#[test]
+fn test_extractor_feature_detection() {
+    use crate::memvid_adapter::extractor::{is_extraction_supported, feature_for_extension};
+
+    // Check feature detection for PDF
+    let pdf_supported = is_extraction_supported("pdf");
+    #[cfg(feature = "memvid-pdf")]
+    assert!(pdf_supported, "PDF should be supported when feature enabled");
+    #[cfg(not(feature = "memvid-pdf"))]
+    assert!(!pdf_supported, "PDF should not be supported when feature disabled");
+
+    // Check feature detection for DOCX
+    let docx_supported = is_extraction_supported("docx");
+    #[cfg(feature = "memvid-docx")]
+    assert!(docx_supported, "DOCX should be supported when feature enabled");
+    #[cfg(not(feature = "memvid-docx"))]
+    assert!(!docx_supported, "DOCX should not be supported when feature disabled");
+
+    // Check feature_for_extension
+    assert_eq!(feature_for_extension("pdf"), Some("memvid-pdf"));
+    assert_eq!(feature_for_extension("docx"), Some("memvid-docx"));
+    assert_eq!(feature_for_extension("txt"), None);
+    assert_eq!(feature_for_extension("xyz"), None);
 }

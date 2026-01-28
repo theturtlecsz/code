@@ -202,6 +202,7 @@ async fn seed_architecture_bible(
     let params = LocalMemorySearchParams {
         iqo,
         max_results: config.max_memories_per_artifact * 2,
+        as_of: None,
     };
 
     let memories = local_mem
@@ -268,6 +269,7 @@ async fn seed_stack_justification(
     let params = LocalMemorySearchParams {
         iqo,
         max_results: config.max_memories_per_artifact,
+        as_of: None,
     };
 
     let memories = local_mem
@@ -326,6 +328,7 @@ async fn seed_bug_retros(
     let params = LocalMemorySearchParams {
         iqo,
         max_results: config.max_memories_per_artifact * 2,
+        as_of: None,
     };
 
     let memories = local_mem
@@ -416,6 +419,7 @@ async fn seed_project_diary(
     let params = LocalMemorySearchParams {
         iqo,
         max_results: config.max_memories_per_artifact * 2,
+        as_of: None,
     };
 
     let memories = local_mem

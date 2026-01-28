@@ -78,12 +78,16 @@ pub struct LocalMemorySummary {
 }
 
 /// Search parameters for local-memory query
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct LocalMemorySearchParams {
     /// The IQO to use for filtering/ranking
     pub iqo: Iqo,
     /// Maximum results to return
     pub max_results: usize,
+    /// SPEC-KIT-980: Checkpoint ID for as-of filtering.
+    /// When set, only returns memories that were visible at this checkpoint.
+    /// None means current/latest state.
+    pub as_of: Option<String>,
 }
 
 /// Trait for local-memory client abstraction
@@ -626,6 +630,7 @@ fn build_constitution_search_params(limit: usize) -> LocalMemorySearchParams {
             exclude_tags: vec![], // Constitution memories are never system-tagged
         },
         max_results: limit,
+        as_of: None,
     }
 }
 
@@ -676,6 +681,7 @@ where
     let search_params = LocalMemorySearchParams {
         iqo: iqo.clone(),
         max_results: ctx.cfg.context_compiler.pre_filter_limit,
+        as_of: None,
     };
     let summaries = ctx.local_mem.search_memories(search_params).await?;
 
@@ -951,6 +957,7 @@ where
                     exclude_tags: vec!["system:true".to_string()],
                 },
                 max_results: pk_cfg.max_items * 2,
+                as_of: None,
             };
 
             // Query local-memory for product knowledge

@@ -97,6 +97,7 @@ struct SearchArgs {
     explain: bool,
     help: bool,
     max_results: usize,
+    as_of: Option<String>, // SPEC-KIT-980: checkpoint ID or label for as-of filtering
 }
 
 fn parse_search_args(args: &str) -> SearchArgs {
@@ -136,6 +137,13 @@ fn parse_search_args(args: &str) -> SearchArgs {
                     if let Ok(n) = tokens[i].parse() {
                         result.max_results = n;
                     }
+                }
+            }
+            "--asof" => {
+                // SPEC-KIT-980: as-of checkpoint filtering
+                if i + 1 < tokens.len() {
+                    i += 1;
+                    result.as_of = Some(tokens[i].clone());
                 }
             }
             _ => {
@@ -187,6 +195,28 @@ async fn execute_search(args: &SearchArgs) -> Result<Vec<SearchResult>, String> 
         return Err("Failed to open capsule.".to_string());
     }
 
+    // SPEC-KIT-980: Resolve as_of - if not a valid checkpoint ID, try as label
+    let resolved_as_of = if let Some(ref asof_str) = args.as_of {
+        // Try parsing as checkpoint ID first (64-char hex string)
+        if asof_str.len() == 64 && asof_str.chars().all(|c| c.is_ascii_hexdigit()) {
+            Some(asof_str.clone())
+        } else {
+            // Try resolving as label
+            match adapter.list_checkpoints().await {
+                Ok(checkpoints) => {
+                    checkpoints
+                        .iter()
+                        .find(|cp| cp.label.as_deref() == Some(asof_str.as_str()))
+                        .map(|cp| cp.checkpoint_id.as_str().to_string())
+                        .or_else(|| Some(asof_str.clone())) // Not found - use original
+                }
+                Err(_) => Some(asof_str.clone()), // On error, use original
+            }
+        }
+    } else {
+        None
+    };
+
     let params = LocalMemorySearchParams {
         iqo: Iqo {
             keywords: args.keywords.clone(),
@@ -198,6 +228,7 @@ async fn execute_search(args: &SearchArgs) -> Result<Vec<SearchResult>, String> 
             notebook_focus: Vec::new(),
         },
         max_results: args.max_results,
+        as_of: resolved_as_of,
     };
 
     let hits = adapter
@@ -257,6 +288,7 @@ fn show_help(widget: &mut ChatWidget) {
         Line::from("  --domain, -d <D>    Filter by domain"),
         Line::from("  --tag, -t <T>       Require tag (can be repeated)"),
         Line::from("  --max, -n <N>       Max results (default: 10)"),
+        Line::from("  --asof <ID|label>   Only return artifacts visible at checkpoint"),
         Line::from("  --help, -h          Show this help"),
         Line::from(""),
         Line::from("Examples:"),
@@ -459,5 +491,31 @@ mod tests {
         assert_eq!(cmd.name(), "speckit.search");
         assert!(cmd.requires_args());
         assert!(!cmd.is_prompt_expanding());
+    }
+
+    #[test]
+    fn test_parse_search_args_asof() {
+        // SPEC-KIT-980: Test --asof parsing
+        let args = parse_search_args("query --asof abc123");
+        assert_eq!(args.as_of, Some("abc123".to_string()));
+        assert_eq!(args.keywords, vec!["query"]);
+
+        // Full checkpoint ID (64-char hex)
+        let args2 = parse_search_args("--asof 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef test");
+        assert_eq!(
+            args2.as_of,
+            Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string())
+        );
+        assert_eq!(args2.keywords, vec!["test"]);
+    }
+
+    #[test]
+    fn test_parse_search_args_asof_combined() {
+        // SPEC-KIT-980: Test --asof with other flags
+        let args = parse_search_args("--explain --asof mycp --domain spec-kit query");
+        assert!(args.explain);
+        assert_eq!(args.as_of, Some("mycp".to_string()));
+        assert_eq!(args.domain, Some("spec-kit".to_string()));
+        assert_eq!(args.keywords, vec!["query"]);
     }
 }

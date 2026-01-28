@@ -1742,6 +1742,7 @@ More content.
                     ..Default::default()
                 },
                 max_results: 10,
+                as_of: None,
             };
             let results = client.search_memories(params).await;
             assert!(results.is_ok(), "Search should succeed");
