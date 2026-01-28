@@ -55,11 +55,15 @@ use codex_tui::memvid_adapter::{
     GcConfig,
     // SK974-1: Import types
     ImportOptions,
+    // SPEC-KIT-980: Multimodal ingestion
+    IngestResult,
     LogicEdgeV1,
     LogicalUri,
     MemoryCardV1,
+    MemvidMemoryAdapter,
     // SPEC-KIT-976: Memory Card and Logic Edge types
     ObjectType,
+    default_capsule_config,
 };
 // WP-A: Projection rebuild types
 use codex_tui::{RebuildRequest, rebuild_projections};
@@ -400,6 +404,13 @@ pub enum SpeckitSubcommand {
     /// WP-A: "Filesystem Is Projection" commands. Rebuild docs/ and memory/
     /// artifacts from capsule (SoR) and OverlayDb (vision).
     Projections(ProjectionsArgs),
+
+    /// Ingest a file into the capsule
+    ///
+    /// SPEC-KIT-980: Multi-modal artifact ingestion.
+    /// Stores original bytes + extracted text for hybrid retrieval.
+    /// PDF and DOCX support requires feature flags.
+    Ingest(IngestArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -1568,6 +1579,32 @@ pub struct ProjectionsRebuildArgs {
     pub json: bool,
 }
 
+/// Arguments for `speckit ingest` command
+///
+/// SPEC-KIT-980: Ingest multi-modal artifacts into capsule.
+#[derive(Debug, Parser)]
+pub struct IngestArgs {
+    /// Path to file to ingest
+    #[arg(value_name = "PATH")]
+    pub path: PathBuf,
+
+    /// Tags to attach to the ingested artifact (comma-separated)
+    #[arg(long = "tags", value_delimiter = ',')]
+    pub tags: Vec<String>,
+
+    /// SPEC ID to associate with ingestion
+    #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
+    pub spec_id: Option<String>,
+
+    /// Stage to associate with ingestion (e.g., plan, implement)
+    #[arg(long = "stage", value_name = "STAGE")]
+    pub stage: Option<String>,
+
+    /// Output as JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -1603,6 +1640,11 @@ impl SpeckitCli {
         // Handle projections commands (don't need executor)
         if let SpeckitSubcommand::Projections(args) = self.command {
             return run_projections(cwd, args);
+        }
+
+        // Handle ingest command (SPEC-KIT-980, don't need executor)
+        if let SpeckitSubcommand::Ingest(args) = self.command {
+            return run_ingest(cwd, args);
         }
 
         // Resolve policy from env/config at adapter boundary (not in executor)
@@ -1642,6 +1684,7 @@ impl SpeckitCli {
             SpeckitSubcommand::New(_) => unreachable!("New handled above"),
             SpeckitSubcommand::Projectnew(_) => unreachable!("Projectnew handled above"),
             SpeckitSubcommand::Projections(_) => unreachable!("Projections handled above"),
+            SpeckitSubcommand::Ingest(_) => unreachable!("Ingest handled above"),
         }
     }
 }
@@ -6983,4 +7026,550 @@ fn run_projections_rebuild(cwd: PathBuf, args: ProjectionsRebuildArgs) -> anyhow
     }
 
     Ok(())
+}
+
+// =============================================================================
+// SPEC-KIT-980: Ingest Command
+// =============================================================================
+
+// =============================================================================
+// SPEC-KIT-980: Ingest Implementation
+// =============================================================================
+
+/// Output from successful ingest operation (testable struct).
+#[derive(Debug)]
+pub struct IngestOutput {
+    /// Primary artifact URI
+    pub uri: String,
+    /// Extracted text URI (if PDF/DOCX extraction succeeded)
+    pub extracted_uri: Option<String>,
+    /// Checkpoint ID after commit
+    pub checkpoint_id: String,
+    /// File extension
+    pub file_type: String,
+    /// Whether text extraction was performed
+    pub extracted: bool,
+}
+
+/// Error types for ingest operation (testable enum).
+#[derive(Debug)]
+pub enum IngestError {
+    FileNotFound(PathBuf),
+    FeatureDisabled {
+        feature: &'static str,
+        resolution: &'static str,
+    },
+    CapsuleError(String),
+    ReadError(std::io::Error),
+}
+
+impl std::fmt::Display for IngestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IngestError::FileNotFound(p) => write!(f, "File not found: {}", p.display()),
+            IngestError::FeatureDisabled { feature, resolution } => {
+                write!(f, "{} feature disabled. {}", feature, resolution)
+            }
+            IngestError::CapsuleError(e) => write!(f, "Capsule error: {}", e),
+            IngestError::ReadError(e) => write!(f, "Failed to read file: {}", e),
+        }
+    }
+}
+
+/// Core ingest logic (testable, no process::exit).
+///
+/// SPEC-KIT-980: Routes PDF/DOCX to extractor (when enabled), stores raw bytes
+/// + extracted text, and persists to the canonical workspace capsule.
+pub async fn ingest_impl(cwd: &Path, args: &IngestArgs) -> Result<IngestOutput, IngestError> {
+    // Resolve path
+    let path = if args.path.is_absolute() {
+        args.path.clone()
+    } else {
+        cwd.join(&args.path)
+    };
+
+    // Validate file exists
+    if !path.exists() {
+        return Err(IngestError::FileNotFound(path));
+    }
+
+    // Check feature gates for PDF/DOCX
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    match ext.as_str() {
+        "pdf" => {
+            #[cfg(not(feature = "memvid-pdf"))]
+            {
+                return Err(IngestError::FeatureDisabled {
+                    feature: "memvid-pdf",
+                    resolution: "Rebuild with: cargo build --features memvid-pdf",
+                });
+            }
+        }
+        "docx" => {
+            #[cfg(not(feature = "memvid-docx"))]
+            {
+                return Err(IngestError::FeatureDisabled {
+                    feature: "memvid-docx",
+                    resolution: "Rebuild with: cargo build --features memvid-docx",
+                });
+            }
+        }
+        _ => {}
+    }
+
+    // Use canonical capsule config
+    let config = default_capsule_config(cwd);
+
+    // Create adapter and open capsule
+    let adapter = MemvidMemoryAdapter::new(config);
+    adapter
+        .open()
+        .await
+        .map_err(|e| IngestError::CapsuleError(e.to_string()))?;
+
+    // Read file content
+    let content = std::fs::read(&path).map_err(IngestError::ReadError)?;
+
+    let filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown");
+
+    // Build metadata
+    let mut metadata = serde_json::json!({
+        "source_path": path.display().to_string(),
+        "file_type": ext,
+        "ingested_at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    // Collect tags, including stage tag if provided
+    let mut all_tags = args.tags.clone();
+    if let Some(ref stage) = args.stage {
+        all_tags.push(format!("stage:{}", stage));
+        metadata["stage"] = serde_json::json!(stage);
+    }
+
+    if !all_tags.is_empty() {
+        metadata["tags"] = serde_json::json!(all_tags);
+    }
+
+    // Determine spec_id and run_id
+    let spec_id = args.spec_id.as_deref().unwrap_or("UNASSIGNED");
+    let run_id = format!("ingest-{}", chrono::Utc::now().timestamp());
+
+    // Ingest using multimodal (handles PDF/DOCX extraction when features enabled)
+    let result = adapter
+        .ingest_multimodal(spec_id, &run_id, filename, content, metadata)
+        .await
+        .map_err(|e| IngestError::CapsuleError(e.to_string()))?;
+
+    // Commit with label to ensure durability
+    let label = format!(
+        "ingest:{}:{}:{}:{}",
+        spec_id,
+        args.stage.as_deref().unwrap_or("-"),
+        filename,
+        chrono::Utc::now().timestamp()
+    );
+    let checkpoint_id = adapter
+        .commit_manual(&label)
+        .await
+        .map_err(|e| IngestError::CapsuleError(e.to_string()))?;
+
+    Ok(IngestOutput {
+        uri: result.uri.as_str().to_string(),
+        extracted_uri: result.extracted_uri.map(|u| u.as_str().to_string()),
+        checkpoint_id: checkpoint_id.as_str().to_string(),
+        file_type: ext,
+        extracted: result.extracted,
+    })
+}
+
+/// Run the ingest command (CLI wrapper with output formatting and exit codes).
+///
+/// SPEC-KIT-980: Ingest multi-modal artifacts into capsule.
+/// Checks feature gates for PDF/DOCX and provides clear UX errors.
+fn run_ingest(cwd: PathBuf, args: IngestArgs) -> anyhow::Result<()> {
+    // Build tokio runtime for async ingest_impl
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+
+    let result = rt.block_on(ingest_impl(&cwd, &args));
+
+    match result {
+        Ok(output) => {
+            if args.json {
+                let json_output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": headless_exit::SUCCESS,
+                    "exit_reason": headless_exit::exit_reason(headless_exit::SUCCESS),
+                    "uri": output.uri,
+                    "extracted_uri": output.extracted_uri,
+                    "checkpoint_id": output.checkpoint_id,
+                    "file_type": output.file_type,
+                    "extracted": output.extracted,
+                    "spec_id": args.spec_id.as_deref().unwrap_or("UNASSIGNED"),
+                    "tags": args.tags,
+                });
+                println!("{}", serde_json::to_string_pretty(&json_output)?);
+            } else {
+                println!("Ingested: {}", args.path.display());
+                println!("URI: {}", output.uri);
+                if let Some(ref extracted) = output.extracted_uri {
+                    println!("Extracted URI: {}", extracted);
+                }
+                println!("Checkpoint: {}", output.checkpoint_id);
+                if let Some(ref spec) = args.spec_id {
+                    println!("SPEC: {}", spec);
+                }
+                if !args.tags.is_empty() {
+                    println!("Tags: {}", args.tags.join(", "));
+                }
+            }
+            Ok(())
+        }
+        Err(e) => {
+            let (exit_code, error_msg, resolution) = match &e {
+                IngestError::FileNotFound(p) => (
+                    headless_exit::INFRA_ERROR,
+                    format!("File not found: {}", p.display()),
+                    None,
+                ),
+                IngestError::FeatureDisabled { feature, resolution } => (
+                    headless_exit::HARD_FAIL,
+                    format!("{} ingestion requires the '{}' feature",
+                        feature.to_uppercase().replace("MEMVID-", ""), feature),
+                    Some(*resolution),
+                ),
+                IngestError::CapsuleError(msg) => (
+                    headless_exit::INFRA_ERROR,
+                    format!("Capsule error: {}", msg),
+                    None,
+                ),
+                IngestError::ReadError(io_err) => (
+                    headless_exit::INFRA_ERROR,
+                    format!("Failed to read file: {}", io_err),
+                    None,
+                ),
+            };
+
+            if args.json {
+                let mut json_output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": error_msg,
+                });
+                if let Some(res) = resolution {
+                    json_output["resolution"] = serde_json::json!(res);
+                }
+                println!("{}", serde_json::to_string_pretty(&json_output)?);
+            } else {
+                eprintln!("Error: {}", error_msg);
+                if let Some(res) = resolution {
+                    eprintln!("Resolution: {}", res);
+                }
+            }
+            std::process::exit(exit_code);
+        }
+    }
+}
+
+// =============================================================================
+// Tests (SPEC-KIT-980)
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    /// SPEC-KIT-980: Test ingest_impl durability - artifact persisted and reopenable.
+    #[tokio::test]
+    async fn test_ingest_impl_durability() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let test_file = temp_dir.path().join("test_doc.md");
+        std::fs::write(&test_file, "# Test Document\n\nTest content for durability check.")
+            .expect("write test file");
+
+        let args = IngestArgs {
+            path: test_file.clone(),
+            tags: vec!["type:test".to_string()],
+            spec_id: Some("TEST-001".to_string()),
+            stage: Some("plan".to_string()),
+            json: false,
+        };
+
+        // Ingest the file
+        let output = ingest_impl(temp_dir.path(), &args)
+            .await
+            .expect("ingest should succeed");
+
+        // Verify output structure
+        assert!(output.uri.contains("test_doc.md"), "URI should contain filename");
+        assert!(!output.checkpoint_id.is_empty(), "checkpoint_id should be set");
+        assert_eq!(output.file_type, "md");
+        assert!(!output.extracted, "md files should not be extracted");
+        assert!(output.extracted_uri.is_none(), "md files have no extracted_uri");
+
+        // Verify durability: reopen capsule and check artifact exists
+        let config = default_capsule_config(temp_dir.path());
+        let handle = CapsuleHandle::open(config).expect("should reopen capsule");
+
+        // Check capsule has content (uri_count > 0)
+        let stats = handle.stats();
+        assert!(
+            stats.uri_count > 0,
+            "capsule should have URIs after ingest, got: {}",
+            stats.uri_count
+        );
+
+        // Check checkpoint exists
+        let checkpoints = handle.list_checkpoints();
+        assert!(
+            !checkpoints.is_empty(),
+            "capsule should have at least one checkpoint"
+        );
+    }
+
+    /// SPEC-KIT-980: Test feature gate error without process::exit.
+    #[tokio::test]
+    async fn test_ingest_impl_file_not_found() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let nonexistent = temp_dir.path().join("does_not_exist.txt");
+
+        let args = IngestArgs {
+            path: nonexistent.clone(),
+            tags: vec![],
+            spec_id: None,
+            stage: None,
+            json: false,
+        };
+
+        let result = ingest_impl(temp_dir.path(), &args).await;
+        assert!(result.is_err(), "should fail for nonexistent file");
+
+        match result.unwrap_err() {
+            IngestError::FileNotFound(p) => {
+                assert!(p.to_string_lossy().contains("does_not_exist.txt"));
+            }
+            e => panic!("expected FileNotFound error, got: {:?}", e),
+        }
+    }
+
+    /// SPEC-KIT-980: Test IngestError Display implementation.
+    #[test]
+    fn test_ingest_error_display() {
+        let err = IngestError::FeatureDisabled {
+            feature: "memvid-pdf",
+            resolution: "Rebuild with: cargo build --features memvid-pdf",
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("memvid-pdf"));
+        assert!(msg.contains("Rebuild"));
+
+        let err2 = IngestError::FileNotFound(PathBuf::from("/tmp/test.txt"));
+        let msg2 = format!("{}", err2);
+        assert!(msg2.contains("/tmp/test.txt"));
+    }
+
+    // =========================================================================
+    // SPEC-KIT-980 Task 4: Feature-disabled ingest UX tests
+    // =========================================================================
+
+    /// SPEC-KIT-980: When memvid-pdf feature is OFF, ingesting a PDF returns FeatureDisabled.
+    #[cfg(not(feature = "memvid-pdf"))]
+    #[tokio::test]
+    async fn test_ingest_impl_pdf_feature_disabled() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let test_file = temp_dir.path().join("test_document.pdf");
+
+        // Write a minimal file with .pdf extension (content doesn't matter for gate check)
+        std::fs::write(&test_file, b"dummy pdf content").expect("write test file");
+
+        let args = IngestArgs {
+            path: test_file.clone(),
+            tags: vec![],
+            spec_id: None,
+            stage: None,
+            json: false,
+        };
+
+        let result = ingest_impl(temp_dir.path(), &args).await;
+        assert!(result.is_err(), "should fail when memvid-pdf feature is disabled");
+
+        match result.unwrap_err() {
+            IngestError::FeatureDisabled { feature, resolution } => {
+                assert_eq!(feature, "memvid-pdf");
+                assert!(resolution.contains("memvid-pdf"), "resolution should mention the feature");
+            }
+            e => panic!("expected FeatureDisabled error, got: {:?}", e),
+        }
+    }
+
+    /// SPEC-KIT-980: When memvid-docx feature is OFF, ingesting a DOCX returns FeatureDisabled.
+    #[cfg(not(feature = "memvid-docx"))]
+    #[tokio::test]
+    async fn test_ingest_impl_docx_feature_disabled() {
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let test_file = temp_dir.path().join("test_document.docx");
+
+        // Write a minimal file with .docx extension (content doesn't matter for gate check)
+        std::fs::write(&test_file, b"dummy docx content").expect("write test file");
+
+        let args = IngestArgs {
+            path: test_file.clone(),
+            tags: vec![],
+            spec_id: None,
+            stage: None,
+            json: false,
+        };
+
+        let result = ingest_impl(temp_dir.path(), &args).await;
+        assert!(result.is_err(), "should fail when memvid-docx feature is disabled");
+
+        match result.unwrap_err() {
+            IngestError::FeatureDisabled { feature, resolution } => {
+                assert_eq!(feature, "memvid-docx");
+                assert!(resolution.contains("memvid-docx"), "resolution should mention the feature");
+            }
+            e => panic!("expected FeatureDisabled error, got: {:?}", e),
+        }
+    }
+
+    // =========================================================================
+    // SPEC-KIT-980 Task 5: Feature-enabled searchable tests
+    // =========================================================================
+
+    /// SPEC-KIT-980: With memvid-pdf feature ON, ingesting a real PDF produces
+    /// extractable text that is searchable after capsule reopen.
+    #[cfg(feature = "memvid-pdf")]
+    #[tokio::test]
+    async fn test_ingest_pdf_searchable_after_reopen() {
+        use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams};
+
+        let temp_dir = TempDir::new().expect("create temp dir");
+
+        // Write fixture bytes to temp path
+        let fixture_bytes = include_bytes!("../tests/fixtures/sample.pdf");
+        let test_file = temp_dir.path().join("sample.pdf");
+        std::fs::write(&test_file, fixture_bytes).expect("write fixture file");
+
+        let args = IngestArgs {
+            path: test_file.clone(),
+            tags: vec!["type:test".to_string()],
+            spec_id: Some("TEST-PDF-980".to_string()),
+            stage: Some("test".to_string()),
+            json: false,
+        };
+
+        // Ingest the file
+        let output = ingest_impl(temp_dir.path(), &args)
+            .await
+            .expect("ingest should succeed with memvid-pdf feature");
+
+        // Verify extraction happened
+        assert!(output.extracted, "PDF should be extracted when feature is enabled");
+        assert!(output.extracted_uri.is_some(), "extracted_uri should be set for PDFs");
+
+        // Drop adapter state and reopen capsule for search
+        let config = default_capsule_config(temp_dir.path());
+        let adapter = MemvidMemoryAdapter::new(config);
+        adapter.open().await.expect("should reopen capsule");
+
+        // Search for the unique token
+        let params = LocalMemorySearchParams {
+            iqo: Iqo {
+                keywords: vec!["SPECKIT980_FIXTURE_TOKEN".to_string()],
+                ..Default::default()
+            },
+            max_results: 10,
+            as_of: None,
+        };
+
+        let results = adapter.search_memories(params).await.expect("search should succeed");
+
+        assert!(
+            !results.is_empty(),
+            "should find at least one hit for SPECKIT980_FIXTURE_TOKEN in ingested PDF"
+        );
+
+        // Verify stage tag is present in at least one result
+        let has_stage_tag = results
+            .iter()
+            .any(|r| r.tags.iter().any(|t| t == "stage:test"));
+        assert!(
+            has_stage_tag,
+            "at least one result should have stage:test tag"
+        );
+    }
+
+    /// SPEC-KIT-980: With memvid-docx feature ON, ingesting a real DOCX produces
+    /// extractable text that is searchable after capsule reopen.
+    #[cfg(feature = "memvid-docx")]
+    #[tokio::test]
+    async fn test_ingest_docx_searchable_after_reopen() {
+        use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams};
+
+        let temp_dir = TempDir::new().expect("create temp dir");
+
+        // Write fixture bytes to temp path
+        let fixture_bytes = include_bytes!("../tests/fixtures/sample.docx");
+        let test_file = temp_dir.path().join("sample.docx");
+        std::fs::write(&test_file, fixture_bytes).expect("write fixture file");
+
+        let args = IngestArgs {
+            path: test_file.clone(),
+            tags: vec!["type:test".to_string()],
+            spec_id: Some("TEST-DOCX-980".to_string()),
+            stage: Some("test".to_string()),
+            json: false,
+        };
+
+        // Ingest the file
+        let output = ingest_impl(temp_dir.path(), &args)
+            .await
+            .expect("ingest should succeed with memvid-docx feature");
+
+        // Verify extraction happened
+        assert!(output.extracted, "DOCX should be extracted when feature is enabled");
+        assert!(output.extracted_uri.is_some(), "extracted_uri should be set for DOCX files");
+
+        // Drop adapter state and reopen capsule for search
+        let config = default_capsule_config(temp_dir.path());
+        let adapter = MemvidMemoryAdapter::new(config);
+        adapter.open().await.expect("should reopen capsule");
+
+        // Search for the unique token
+        let params = LocalMemorySearchParams {
+            iqo: Iqo {
+                keywords: vec!["SPECKIT980_FIXTURE_TOKEN".to_string()],
+                ..Default::default()
+            },
+            max_results: 10,
+            as_of: None,
+        };
+
+        let results = adapter.search_memories(params).await.expect("search should succeed");
+
+        assert!(
+            !results.is_empty(),
+            "should find at least one hit for SPECKIT980_FIXTURE_TOKEN in ingested DOCX"
+        );
+
+        // Verify stage tag is present in at least one result
+        let has_stage_tag = results
+            .iter()
+            .any(|r| r.tags.iter().any(|t| t == "stage:test"));
+        assert!(
+            has_stage_tag,
+            "at least one result should have stage:test tag"
+        );
+    }
 }

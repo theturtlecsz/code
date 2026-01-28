@@ -464,6 +464,7 @@ impl GoldenQuery {
                 notebook_focus: Vec::new(),
             },
             max_results,
+            as_of: None,
         }
     }
 
@@ -688,6 +689,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "Stage 0 overlay engine architecture".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "Stage 0 overlay engine architecture separates concerns between \
              local-memory daemon and scoring. The design decision was to use \
@@ -702,6 +705,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "Stage 0 overlay design pattern".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "Stage 0 overlay design pattern uses a separate database to track \
              dynamic scores and Tier 2 cache entries without modifying local-memory.".to_string(),
@@ -716,6 +721,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "TF-IDF vector backend implementation".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "TF-IDF vector backend implementation uses BM25-style term frequency \
              saturation with k1=1.5 and b=0.75 parameters for scoring.".to_string(),
@@ -729,6 +736,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "BM25 scoring formula".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "BM25 scoring formula: TF * IDF where TF = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl/avgdl)) \
              and IDF = log((N + 1) / (df + 1)) + 1".to_string(),
@@ -743,6 +752,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "Window resize crash bug".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "Bug: Window resize causes crash when terminal size drops below minimum. \
              Root cause was unchecked subtraction in viewport calculation. \
@@ -757,6 +768,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "Segfault in async handler".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "Segfault in async handler due to memory corruption. The buffer was \
              being written to after being moved. Fix: Use Arc for shared ownership.".to_string(),
@@ -771,6 +784,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "SPEC-KIT-102 NotebookLM integration".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "SPEC-KIT-102 defines NotebookLM integration for Stage 0. The key insight \
              is that NotebookLM provides synthesis capabilities beyond local-memory search.".to_string(),
@@ -784,6 +799,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "Tier 2 NotebookLM orchestration".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "Tier 2 orchestration calls NotebookLM via MCP for Divine Truth synthesis. \
              Cache TTL is 24 hours to balance freshness with query costs.".to_string(),
@@ -798,6 +815,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "Rust error handling best practice".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "Rust error handling best practice: Use thiserror for library errors \
              and anyhow for application errors. Result<T, E> is the standard pattern.".to_string(),
@@ -811,6 +830,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "thiserror derive macro".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "thiserror derive macro generates Error trait implementations. \
              Use #[error] for Display, #[from] for automatic From conversions.".to_string(),
@@ -825,6 +846,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "Q3 planning meeting notes".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "Meeting notes from Q3 planning session. Discussed roadmap priorities \
              and resource allocation for the next quarter.".to_string(),
@@ -838,6 +861,8 @@ pub fn golden_test_memories() -> Vec<(MemoryMeta, String)> {
                 created_at: Some(Utc::now()),
                 snippet: "CI/CD configuration guide".to_string(),
                 uri: None,
+                indexable: true,
+                visible_from: None,
             },
             "Configuration guide for CI/CD pipeline. Uses GitHub Actions with \
              cargo test and clippy checks on every PR.".to_string(),
@@ -1860,6 +1885,7 @@ mod tests {
                         ..Default::default()
                     },
                     max_results: 10,
+                    as_of: None,
                 },
             ),
             (
@@ -1871,6 +1897,7 @@ mod tests {
                         ..Default::default()
                     },
                     max_results: 10,
+                    as_of: None,
                 },
             ),
             (
@@ -1882,6 +1909,7 @@ mod tests {
                         ..Default::default()
                     },
                     max_results: 10,
+                    as_of: None,
                 },
             ),
             (
@@ -1893,6 +1921,7 @@ mod tests {
                         ..Default::default()
                     },
                     max_results: 10,
+                    as_of: None,
                 },
             ),
             (
@@ -1904,6 +1933,7 @@ mod tests {
                         ..Default::default()
                     },
                     max_results: 10,
+                    as_of: None,
                 },
             ),
             (
@@ -1914,6 +1944,7 @@ mod tests {
                         ..Default::default()
                     },
                     max_results: 10,
+                    as_of: None,
                 },
             ),
             (
@@ -1926,6 +1957,7 @@ mod tests {
                         ..Default::default()
                     },
                     max_results: 10,
+                    as_of: None,
                 },
             ),
         ];

@@ -15,6 +15,11 @@ path = "src/lib.rs"
 [lints]
 workspace = true
 
+[features]
+# SPEC-KIT-980: Forward feature gates to codex-tui
+memvid-pdf = ["codex-tui/memvid-pdf"]
+memvid-docx = ["codex-tui/memvid-docx"]
+
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }

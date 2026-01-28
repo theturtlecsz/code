@@ -39,6 +39,8 @@ pub const DEFAULT_WORKSPACE_ID: &str = "default";
 mod adapter;
 mod capsule;
 pub mod eval;
+/// SPEC-KIT-980: Multi-modal document extraction (PDF, DOCX)
+pub mod extractor;
 pub mod lock;
 pub mod policy_capture;
 /// SPEC-KIT-979: Sunset phase resolution and enforcement for local-memory deprecation.
@@ -46,8 +48,12 @@ pub mod sunset_phase;
 mod types;
 
 pub use adapter::{
-    EmitContext, MemoryMeta, MemvidMemoryAdapter, UnifiedMemoryClient, create_memory_client,
-    create_unified_memory_client,
+    EmitContext, IngestResult, MemoryMeta, MemvidMemoryAdapter, UnifiedMemoryClient,
+    create_memory_client, create_unified_memory_client,
+};
+pub use extractor::{
+    ExtractionError, ExtractionResult, extract_docx, extract_pdf, extract_text,
+    feature_for_extension, is_extraction_supported,
 };
 pub use capsule::{
     CapsuleConfig,

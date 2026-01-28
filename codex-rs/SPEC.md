@@ -1,7 +1,7 @@
 # SPEC.md - Codex-RS / Spec-Kit Task Tracking
 
 **Version:** V6 Docs Contract
-**Last Updated:** 2026-01-23
+**Last Updated:** 2026-01-28
 
 ***
 
@@ -103,6 +103,7 @@ These invariants MUST NOT be violated:
 
 | Spec                | Completion Date | Key Deliverables                                                                        |
 | ------------------- | --------------- | --------------------------------------------------------------------------------------- |
+| SPEC-KIT-980        | 2026-01-28      | PDF/DOCX ingest with feature gates, text extraction, searchable capsule persistence     |
 | SPEC-KIT-974        | 2026-01-27      | Export/import, encryption, safe export, risk auto-export, GC enhancements               |
 | SPEC-KIT-979        | 2026-01-21      | Local-memory sunset phases, CLI flags, nightly parity workflow, import CLI, diagnostics |
 | SPEC-KIT-976        | 2026-01-19      | Logic Mesh graph foundation: Card/Edge schemas, CLI commands, 6 tests passing           |

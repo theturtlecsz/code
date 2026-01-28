@@ -62,7 +62,7 @@ This document pins the **only** work considered "ACTIVE" for the 2026-Q1 program
 | Spec                                                        | Description                                                | Status    |
 | ----------------------------------------------------------- | ---------------------------------------------------------- | --------- |
 | [SPEC-KIT-979](./SPEC-KIT-979-local-memory-sunset/spec.md)  | Local-Memory Sunset (Parity gates → remove daemon)         | Completed |
-| [SPEC-KIT-980](./SPEC-KIT-980-multimodal-ingestion/spec.md) | Multi-Modal Ingestion (PDF/DOCX first; CLIP/Whisper gated) | Pending   |
+| [SPEC-KIT-980](./SPEC-KIT-980-multimodal-ingestion/spec.md) | Multi-Modal Ingestion (PDF/DOCX first; CLIP/Whisper gated) | Completed |
 
 ***
 
@@ -129,6 +129,8 @@ When in doubt: treat as ARCHIVE until `SPEC.md` or this file says otherwise.
 
 | Version | Date       | Changes                                                              |
 | ------- | ---------- | -------------------------------------------------------------------- |
+| v1.0.4  | 2026-01-28 | SPEC-KIT-980 Completed (PDF/DOCX ingest, extraction, searchable)     |
+| v1.0.3  | 2026-01-28 | SPEC-KIT-980 Phase 1 started (feature gates + ingest CLI)            |
 | v1.0.2  | 2026-01-28 | SPEC-KIT-974 status updated to Completed                             |
 | v1.0.1  | 2026-01-23 | DOC-001: Reconcile status markers with SPEC.md (9 specs → Completed) |
 | v1.0.0  | 2026-01-22 | Initial canonical version (migrated from PROGRAM\_2026Q1\_ACTIVE.md) |
