@@ -516,7 +516,10 @@ pub fn run_stage0_for_spec(
     let mut precheck_trace: Option<PrecheckTrace> = None;
 
     let precheck_skip_tier2 = if stage0_cfg.context_compiler.product_knowledge.enabled
-        && stage0_cfg.context_compiler.product_knowledge.precheck_enabled
+        && stage0_cfg
+            .context_compiler
+            .product_knowledge
+            .precheck_enabled
         && memory_backend == MemoryBackend::LocalMemory
     {
         // Extract query from spec content (first 500 chars as search query)
@@ -557,7 +560,10 @@ pub fn run_stage0_for_spec(
                 // Run pre-check filtering and threshold check
                 let precheck_result = codex_stage0::precheck_product_knowledge(
                     summaries,
-                    stage0_cfg.context_compiler.product_knowledge.precheck_threshold,
+                    stage0_cfg
+                        .context_compiler
+                        .product_knowledge
+                        .precheck_threshold,
                     stage0_cfg.context_compiler.product_knowledge.min_importance,
                     &query,
                 );
@@ -571,13 +577,19 @@ pub fn run_stage0_for_spec(
                     query: query.clone(),
                     limit: 10,
                     min_importance: stage0_cfg.context_compiler.product_knowledge.min_importance,
-                    threshold: stage0_cfg.context_compiler.product_knowledge.precheck_threshold,
+                    threshold: stage0_cfg
+                        .context_compiler
+                        .product_knowledge
+                        .precheck_threshold,
                     hit: precheck_result.hit,
                     max_relevance: precheck_result.max_relevance,
                     hit_uris: results
                         .iter()
                         .filter_map(|r| {
-                            r.memory.id.as_ref().map(|id| format!("lm://{}/{}", domain, id))
+                            r.memory
+                                .id
+                                .as_ref()
+                                .map(|id| format!("lm://{}/{}", domain, id))
                         })
                         .collect(),
                     fused_scores: results
@@ -602,7 +614,10 @@ pub fn run_stage0_for_spec(
                         spec_id,
                         precheck_result.candidates.len(),
                         precheck_result.max_relevance,
-                        stage0_cfg.context_compiler.product_knowledge.precheck_threshold
+                        stage0_cfg
+                            .context_compiler
+                            .product_knowledge
+                            .precheck_threshold
                     );
                     false // Proceed to Tier2
                 }
@@ -616,7 +631,10 @@ pub fn run_stage0_for_spec(
                     query: query.clone(),
                     limit: 10,
                     min_importance: stage0_cfg.context_compiler.product_knowledge.min_importance,
-                    threshold: stage0_cfg.context_compiler.product_knowledge.precheck_threshold,
+                    threshold: stage0_cfg
+                        .context_compiler
+                        .product_knowledge
+                        .precheck_threshold,
                     hit: false,
                     max_relevance: 0.0,
                     hit_uris: vec![],
@@ -637,108 +655,107 @@ pub fn run_stage0_for_spec(
     // CONVERGENCE: Tier2 fail-closed with explicit diagnostics
     // Per MEMO_codex-rs.md Section 1: "emit diagnostics with actionable next steps"
     // ADR-003: Build Tier2Trace alongside for degraded-mode event emission
-    let (tier2_opt, tier2_skip_reason, tier2_trace) =
-        if precheck_skip_tier2 {
-            // Pre-check hit - skip Tier2 entirely
-            (
+    let (tier2_opt, tier2_skip_reason, tier2_trace) = if precheck_skip_tier2 {
+        // Pre-check hit - skip Tier2 entirely
+        (
+            None,
+            Some("pre-check hit (cached insight found)".to_string()),
+            Tier2Trace {
+                base_url: stage0_cfg
+                    .tier2
+                    .base_url
+                    .clone()
+                    .unwrap_or_else(|| "http://127.0.0.1:3456".to_string()),
+                notebook_id: stage0_cfg.tier2.notebook.clone(),
+                enabled: stage0_cfg.tier2.enabled,
+                health_ok: false, // Not checked (pre-empted)
+                latency_ms: None, // No health check performed
+                skip_reason: Some("pre-check hit (cached insight found)".to_string()),
+                error: None, // No error means no degraded event emission
+            },
+        )
+    } else if stage0_cfg.tier2.enabled && !stage0_cfg.tier2.notebook.trim().is_empty() {
+        // Check NotebookLM service health before creating adapter
+        send_progress(&progress_tx, Stage0Progress::CheckingTier2Health);
+        let base_url = stage0_cfg
+            .tier2
+            .base_url
+            .clone()
+            .unwrap_or_else(|| "http://127.0.0.1:3456".to_string());
+
+        let health_start = std::time::Instant::now();
+        let health_result = check_tier2_service_health(&base_url);
+        let health_latency_ms = health_start.elapsed().as_millis() as u64;
+
+        match health_result {
+            Ok(()) => (
+                Some(Tier2HttpAdapter::new(
+                    base_url.clone(),
+                    stage0_cfg.tier2.notebook.clone(),
+                )),
                 None,
-                Some("pre-check hit (cached insight found)".to_string()),
                 Tier2Trace {
-                    base_url: stage0_cfg
-                        .tier2
-                        .base_url
-                        .clone()
-                        .unwrap_or_else(|| "http://127.0.0.1:3456".to_string()),
+                    base_url,
                     notebook_id: stage0_cfg.tier2.notebook.clone(),
-                    enabled: stage0_cfg.tier2.enabled,
-                    health_ok: false, // Not checked (pre-empted)
-                    latency_ms: None, // No health check performed
-                    skip_reason: Some("pre-check hit (cached insight found)".to_string()),
-                    error: None, // No error means no degraded event emission
+                    enabled: true,
+                    health_ok: true,
+                    latency_ms: Some(health_latency_ms),
+                    skip_reason: None,
+                    error: None, // Healthy - no degraded event emission
                 },
-            )
-        } else if stage0_cfg.tier2.enabled && !stage0_cfg.tier2.notebook.trim().is_empty() {
-            // Check NotebookLM service health before creating adapter
-            send_progress(&progress_tx, Stage0Progress::CheckingTier2Health);
-            let base_url = stage0_cfg
-                .tier2
-                .base_url
-                .clone()
-                .unwrap_or_else(|| "http://127.0.0.1:3456".to_string());
-
-            let health_start = std::time::Instant::now();
-            let health_result = check_tier2_service_health(&base_url);
-            let health_latency_ms = health_start.elapsed().as_millis() as u64;
-
-            match health_result {
-                Ok(()) => (
-                    Some(Tier2HttpAdapter::new(
-                        base_url.clone(),
-                        stage0_cfg.tier2.notebook.clone(),
-                    )),
+            ),
+            Err(reason) => {
+                // Tier2 fail-closed: skip with diagnostic
+                tracing::warn!(
+                    "Stage0 Tier2 skipped: {}. Run 'code doctor' for details.",
+                    reason
+                );
+                (
                     None,
+                    Some(reason.clone()),
                     Tier2Trace {
                         base_url,
                         notebook_id: stage0_cfg.tier2.notebook.clone(),
                         enabled: true,
-                        health_ok: true,
+                        health_ok: false,
                         latency_ms: Some(health_latency_ms),
-                        skip_reason: None,
-                        error: None, // Healthy - no degraded event emission
+                        skip_reason: Some(reason.clone()),
+                        error: Some(reason), // Error triggers degraded event emission
                     },
-                ),
-                Err(reason) => {
-                    // Tier2 fail-closed: skip with diagnostic
-                    tracing::warn!(
-                        "Stage0 Tier2 skipped: {}. Run 'code doctor' for details.",
-                        reason
-                    );
-                    (
-                        None,
-                        Some(reason.clone()),
-                        Tier2Trace {
-                            base_url,
-                            notebook_id: stage0_cfg.tier2.notebook.clone(),
-                            enabled: true,
-                            health_ok: false,
-                            latency_ms: Some(health_latency_ms),
-                            skip_reason: Some(reason.clone()),
-                            error: Some(reason), // Error triggers degraded event emission
-                        },
-                    )
-                }
+                )
             }
+        }
+    } else {
+        // No notebook configured or Tier2 disabled
+        let base_url = stage0_cfg
+            .tier2
+            .base_url
+            .clone()
+            .unwrap_or_else(|| "http://127.0.0.1:3456".to_string());
+        let (skip_reason, enabled) = if stage0_cfg.tier2.enabled {
+            let msg = "No notebook configured".to_string();
+            tracing::info!(
+                "Stage0 Tier2 skipped: {}. Add tier2.notebook to stage0.toml",
+                msg
+            );
+            (msg, true)
         } else {
-            // No notebook configured or Tier2 disabled
-            let base_url = stage0_cfg
-                .tier2
-                .base_url
-                .clone()
-                .unwrap_or_else(|| "http://127.0.0.1:3456".to_string());
-            let (skip_reason, enabled) = if stage0_cfg.tier2.enabled {
-                let msg = "No notebook configured".to_string();
-                tracing::info!(
-                    "Stage0 Tier2 skipped: {}. Add tier2.notebook to stage0.toml",
-                    msg
-                );
-                (msg, true)
-            } else {
-                ("Tier2 disabled".to_string(), false)
-            };
-            (
-                None,
-                Some(skip_reason.clone()),
-                Tier2Trace {
-                    base_url,
-                    notebook_id: stage0_cfg.tier2.notebook.clone(),
-                    enabled,
-                    health_ok: false, // Not checked
-                    latency_ms: None, // No health check performed
-                    skip_reason: Some(skip_reason),
-                    error: None, // No error means no degraded event emission
-                },
-            )
+            ("Tier2 disabled".to_string(), false)
         };
+        (
+            None,
+            Some(skip_reason.clone()),
+            Tier2Trace {
+                base_url,
+                notebook_id: stage0_cfg.tier2.notebook.clone(),
+                enabled,
+                health_ok: false, // Not checked
+                latency_ms: None, // No health check performed
+                skip_reason: Some(skip_reason),
+                error: None, // No error means no degraded event emission
+            },
+        )
+    };
 
     // Build environment context
     let env = EnvCtx {
@@ -756,7 +773,10 @@ pub fn run_stage0_for_spec(
 
     // ADR-003 Prompt F: Save curation settings before moving stage0_cfg
     let curation_enabled = stage0_cfg.context_compiler.product_knowledge.enabled
-        && stage0_cfg.context_compiler.product_knowledge.curation_enabled;
+        && stage0_cfg
+            .context_compiler
+            .product_knowledge
+            .curation_enabled;
 
     // Run Stage 0 engine
     // Note: Stage0Engine contains rusqlite::Connection which is not Send,
@@ -1506,8 +1526,8 @@ pub fn persist_or_strip_product_knowledge(
     // Attempt capsule write + flush
     let write_result = (|| -> Result<(), String> {
         let config = default_capsule_config(cwd);
-        let handle = CapsuleHandle::open(config)
-            .map_err(|e| format!("Failed to open capsule: {}", e))?;
+        let handle =
+            CapsuleHandle::open(config).map_err(|e| format!("Failed to open capsule: {}", e))?;
 
         handle
             .switch_branch(BranchId::for_run(run_id))
@@ -1559,7 +1579,8 @@ pub fn persist_or_strip_product_knowledge(
                 "Failed to emit lane RetrievalRequest (best-effort)"
             );
         }
-        if let Err(e) = handle.emit_retrieval_response(spec_id, run_id, Some("Stage0"), &resp_payload)
+        if let Err(e) =
+            handle.emit_retrieval_response(spec_id, run_id, Some("Stage0"), &resp_payload)
         {
             tracing::warn!(
                 target: "stage0",

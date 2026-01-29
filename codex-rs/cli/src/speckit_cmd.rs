@@ -65,6 +65,11 @@ use codex_tui::memvid_adapter::{
     ObjectType,
     default_capsule_config,
 };
+// SPEC-KIT-900: Headless pipeline execution
+use codex_tui::headless::{
+    HeadlessError, HeadlessPipelineRunner, HeadlessResult, format_result_json,
+};
+use codex_tui::{DelegationBounds, ElicitationMode, MaieuticSpec};
 // WP-A: Projection rebuild types
 use codex_tui::{RebuildRequest, rebuild_projections};
 use std::io::Write;
@@ -170,12 +175,12 @@ struct NeedsInputOutput {
 /// Returns Ok(true) if intake found, Ok(false) if missing, Err on infrastructure failure.
 fn check_intake_presence(cwd: &Path, spec_id: &str) -> Result<bool, String> {
     use codex_tui::memvid_adapter::{
-        default_capsule_config, CapsuleHandle, EventType, IntakeCompletedPayload, IntakeKind,
+        CapsuleHandle, EventType, IntakeCompletedPayload, IntakeKind, default_capsule_config,
     };
 
     let capsule_config = default_capsule_config(cwd);
-    let capsule =
-        CapsuleHandle::open(capsule_config).map_err(|e| format!("Failed to open capsule: {}", e))?;
+    let capsule = CapsuleHandle::open(capsule_config)
+        .map_err(|e| format!("Failed to open capsule: {}", e))?;
 
     let events = capsule.list_events();
     let intake_found = events.iter().any(|ev| {
@@ -256,7 +261,10 @@ fn check_intake_for_execution(cwd: &Path, spec_id: &str, headless: bool, json_ou
                 // Safe to use println here since we're about to exit
                 #[allow(clippy::print_stdout)]
                 {
-                    println!("{}", serde_json::to_string_pretty(&output).unwrap_or_default());
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&output).unwrap_or_default()
+                    );
                 }
             } else {
                 #[allow(clippy::print_stderr)]
@@ -337,11 +345,12 @@ pub enum SpeckitSubcommand {
     /// Use --no-dry-run to actually trigger agent execution (TUI only).
     Unlock(UnlockArgs),
 
-    /// Validate multiple stages in a batch (dry-run only)
+    /// Validate or execute stages in a batch
     ///
     /// SPEC-KIT-921 P7-A: Run command validates stages from --from to --to.
-    /// This is validation-only (no agent spawning) - a readiness check for CI.
-    /// Reports aggregated outcome with per-stage results.
+    /// Without --execute: validation-only (readiness check for CI).
+    /// With --execute + --maieutic-answers: triggers headless pipeline (agent spawning WIP).
+    /// Maieutic input required for headless execution.
     Run(RunArgs),
 
     /// Migrate legacy spec.md to PRD.md
@@ -1436,7 +1445,12 @@ pub struct GraphQueryArgs {
 #[derive(Debug, Parser)]
 pub struct NewArgs {
     /// Feature description (required)
-    #[arg(long = "desc", short = 'd', required = true, value_name = "DESCRIPTION")]
+    #[arg(
+        long = "desc",
+        short = 'd',
+        required = true,
+        value_name = "DESCRIPTION"
+    )]
     pub description: String,
 
     /// Enable deep intake questions
@@ -1448,7 +1462,11 @@ pub struct NewArgs {
     pub answers_path: Option<PathBuf>,
 
     /// Inline intake answers as JSON string (intake_answers@1.0 schema)
-    #[arg(long = "answers-json", value_name = "JSON", conflicts_with = "answers_path")]
+    #[arg(
+        long = "answers-json",
+        value_name = "JSON",
+        conflicts_with = "answers_path"
+    )]
     pub answers_json: Option<String>,
 
     /// Output as JSON instead of text
@@ -1517,7 +1535,11 @@ pub struct ProjectNewArgs {
     pub answers_path: Option<PathBuf>,
 
     /// Inline wrapper answers as JSON string (projectnew_answers@1.0 schema)
-    #[arg(long = "answers-json", value_name = "JSON", conflicts_with = "answers_path")]
+    #[arg(
+        long = "answers-json",
+        value_name = "JSON",
+        conflicts_with = "answers_path"
+    )]
     pub answers_json: Option<String>,
 
     /// Output as JSON instead of text
@@ -1657,6 +1679,8 @@ impl SpeckitCli {
 
         // SPEC-KIT-920: Default headless=false, maieutic_input=None
         // Run command will set these based on its flags
+        // Save repo_root before moving into executor (needed for run_headless_pipeline)
+        let repo_root = cwd.clone();
         let executor = SpeckitExecutor::new(ExecutionContext {
             repo_root: cwd,
             policy_snapshot: Some(policy_snapshot),
@@ -1674,7 +1698,7 @@ impl SpeckitCli {
             SpeckitSubcommand::Validate(args) => run_validate(executor, args),
             SpeckitSubcommand::Audit(args) => run_audit(executor, args),
             SpeckitSubcommand::Unlock(args) => run_unlock(executor, args),
-            SpeckitSubcommand::Run(args) => run_run(executor, args),
+            SpeckitSubcommand::Run(args) => run_run(executor, args, repo_root.clone()),
             SpeckitSubcommand::Migrate(args) => run_migrate(executor, args),
             SpeckitSubcommand::Capsule(_) => unreachable!("Capsule handled above"),
             SpeckitSubcommand::Reflex(_) => unreachable!("Reflex handled above"),
@@ -2827,7 +2851,7 @@ fn explain_review_exit_code(
 /// - Exit 10 (NEEDS_INPUT) if headless+execute without maieutic
 /// - Exit 11 (NEEDS_APPROVAL) if approval checkpoint reached
 /// - Exit 12 (BLOCKED_SHIP) if ship blocked by policy
-fn run_run(executor: SpeckitExecutor, args: RunArgs) -> anyhow::Result<()> {
+fn run_run(executor: SpeckitExecutor, args: RunArgs, cwd: PathBuf) -> anyhow::Result<()> {
     // SPEC-KIT-920: Detect headless mode (explicit flag OR non-TTY stdin)
     use std::io::IsTerminal;
     let headless = args.headless || !std::io::stdin().is_terminal();
@@ -2906,6 +2930,12 @@ fn run_run(executor: SpeckitExecutor, args: RunArgs) -> anyhow::Result<()> {
     let from_stage = parse_stage(&args.from_stage)?;
     let to_stage = parse_stage(&args.to_stage)?;
 
+    // SPEC-KIT-900: Route to headless runner when --execute is set
+    if args.execute {
+        return run_headless_pipeline(args, headless, from_stage, to_stage, cwd);
+    }
+
+    // Validation-only path (existing behavior when --execute is not set)
     let command = SpeckitCommand::Run {
         spec_id: args.spec_id.clone(),
         from_stage,
@@ -3034,6 +3064,193 @@ fn run_run(executor: SpeckitExecutor, args: RunArgs) -> anyhow::Result<()> {
             unreachable!("Run command should return Run or Error outcome")
         }
     }
+}
+
+/// Run headless pipeline execution (SPEC-KIT-900)
+///
+/// This is the execute path, invoked when --execute is set.
+/// Unlike the validation-only path, this actually runs the pipeline.
+///
+/// Exit codes:
+/// - 0: SUCCESS
+/// - 3: INFRA_ERROR
+/// - 10: NEEDS_INPUT (missing maieutic)
+/// - 11: NEEDS_APPROVAL (checkpoint requires human)
+/// - 13: PROMPT_ATTEMPTED (any prompt attempt)
+fn run_headless_pipeline(
+    args: RunArgs,
+    headless: bool,
+    from_stage: Stage,
+    to_stage: Stage,
+    cwd: PathBuf,
+) -> anyhow::Result<()> {
+    use chrono::Utc;
+    use codex_core::config::ConfigOverrides;
+    use codex_tui::headless::output::HeadlessOutput;
+    use codex_tui::headless::{HeadlessConfig, exit_codes};
+    use std::collections::HashMap;
+
+    tracing::info!(
+        spec_id = %args.spec_id,
+        from = %from_stage.as_str(),
+        to = %to_stage.as_str(),
+        headless = headless,
+        "Starting headless pipeline execution"
+    );
+
+    // Parse maieutic answers from JSON or file
+    let maieutic_spec = if let Some(ref json_str) = args.maieutic_answers {
+        // Parse inline JSON answers
+        let answers: HashMap<String, serde_json::Value> = serde_json::from_str(json_str)
+            .map_err(|e| anyhow::anyhow!("Failed to parse maieutic answers JSON: {}", e))?;
+
+        // Convert to string HashMap
+        let mut string_answers: HashMap<String, String> = HashMap::new();
+        for (k, v) in answers {
+            let value_str = match v {
+                serde_json::Value::String(s) => s,
+                serde_json::Value::Array(arr) => arr
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                _ => v.to_string(),
+            };
+            string_answers.insert(k, value_str);
+        }
+
+        // Create run ID
+        let run_id = format!(
+            "headless-{}-{}",
+            args.spec_id,
+            Utc::now().format("%Y%m%d%H%M%S")
+        );
+
+        MaieuticSpec::from_answers(args.spec_id.clone(), run_id, &string_answers, 0)
+    } else if let Some(ref path) = args.maieutic_path {
+        // Load from file
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            anyhow::anyhow!("Failed to read maieutic file {}: {}", path.display(), e)
+        })?;
+
+        // Parse as JSON
+        let answers: HashMap<String, serde_json::Value> = serde_json::from_str(&content)
+            .map_err(|e| anyhow::anyhow!("Failed to parse maieutic file as JSON: {}", e))?;
+
+        let mut string_answers: HashMap<String, String> = HashMap::new();
+        for (k, v) in answers {
+            let value_str = match v {
+                serde_json::Value::String(s) => s,
+                serde_json::Value::Array(arr) => arr
+                    .iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                _ => v.to_string(),
+            };
+            string_answers.insert(k, value_str);
+        }
+
+        let run_id = format!(
+            "headless-{}-{}",
+            args.spec_id,
+            Utc::now().format("%Y%m%d%H%M%S")
+        );
+
+        MaieuticSpec::from_answers(args.spec_id.clone(), run_id, &string_answers, 0)
+    } else {
+        // This should have been caught earlier, but handle it anyway
+        if args.json {
+            let json = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "mode": "execute",
+                "exit_code": headless_exit::NEEDS_INPUT,
+                "exit_reason": headless_exit::exit_reason(headless_exit::NEEDS_INPUT),
+                "error": "Headless execution requires maieutic input",
+            });
+            println!("{}", serde_json::to_string_pretty(&json)?);
+        } else {
+            eprintln!("Error: Headless execution requires maieutic input");
+        }
+        std::process::exit(headless_exit::NEEDS_INPUT);
+    };
+
+    // Get config (cwd is passed as parameter)
+    let planner_config = match codex_core::config::Config::load_with_cli_overrides(
+        vec![],
+        ConfigOverrides::default(),
+    ) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            if args.json {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "mode": "execute",
+                    "exit_code": headless_exit::INFRA_ERROR,
+                    "exit_reason": headless_exit::exit_reason(headless_exit::INFRA_ERROR),
+                    "error": format!("Failed to load config: {}", e),
+                });
+                println!("{}", serde_json::to_string_pretty(&json).unwrap());
+            } else {
+                eprintln!("Error: Failed to load config: {}", e);
+            }
+            std::process::exit(headless_exit::INFRA_ERROR);
+        }
+    };
+
+    // Create headless config
+    let config = HeadlessConfig {
+        json_output: args.json,
+        ..Default::default()
+    };
+
+    // Create and run the headless pipeline
+    let mut runner = HeadlessPipelineRunner::new(
+        args.spec_id.clone(),
+        from_stage,
+        to_stage,
+        maieutic_spec,
+        config,
+        planner_config,
+        cwd,
+    );
+
+    let result = runner.run();
+
+    // Output result
+    let output = result.to_output(&args.spec_id, from_stage.as_str(), to_stage.as_str());
+
+    if args.json {
+        println!("{}", format_result_json(&output));
+    } else {
+        // Text output
+        if result.exit_code == 0 {
+            println!(
+                "✓ Headless pipeline completed for {} (stages {} to {})",
+                args.spec_id,
+                from_stage.display_name(),
+                to_stage.display_name()
+            );
+            for stage in &result.stages_completed {
+                println!("  ✓ {}", stage);
+            }
+        } else {
+            eprintln!(
+                "✗ Headless pipeline failed for {} (exit code {})",
+                args.spec_id, result.exit_code
+            );
+            if let Some(ref err) = result.error {
+                eprintln!("  Error: {}", err);
+            }
+            for stage in &result.stages_completed {
+                println!("  ✓ {} (completed)", stage);
+            }
+        }
+    }
+
+    std::process::exit(result.exit_code);
 }
 
 /// Run the migrate command
@@ -6103,12 +6320,13 @@ fn load_answers(
     answers_json: &Option<String>,
 ) -> Result<String, String> {
     match (answers_path, answers_json) {
-        (Some(path), None) => {
-            std::fs::read_to_string(path)
-                .map_err(|e| format!("Failed to read answers file '{}': {}", path.display(), e))
-        }
+        (Some(path), None) => std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read answers file '{}': {}", path.display(), e)),
         (None, Some(json)) => Ok(json.clone()),
-        (None, None) => Err("Missing required answers. Provide --answers <path> or --answers-json <json>.".to_string()),
+        (None, None) => Err(
+            "Missing required answers. Provide --answers <path> or --answers-json <json>."
+                .to_string(),
+        ),
         (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents this"),
     }
 }
@@ -6116,11 +6334,10 @@ fn load_answers(
 /// Run `speckit new` command - create a new SPEC from intake answers
 fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
     use codex_tui::{
-        IntakeAnswers, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION,
-        build_design_brief, build_spec_intake_answers, capitalize_words,
+        IntakeAnswers, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION, build_design_brief,
+        build_spec_intake_answers, capitalize_words, capture_grounding_for_spec_intake,
         create_spec_filesystem_projections, persist_spec_intake_to_capsule,
-        validate_spec_answers, spec_id_generator::generate_next_spec_id,
-        capture_grounding_for_spec_intake,
+        spec_id_generator::generate_next_spec_id, validate_spec_answers,
     };
     use std::collections::HashMap;
 
@@ -6182,8 +6399,10 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            eprintln!("Error: Schema version mismatch: got '{}', expected '{}'",
-                intake.schema_version, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION);
+            eprintln!(
+                "Error: Schema version mismatch: got '{}', expected '{}'",
+                intake.schema_version, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION
+            );
         }
         std::process::exit(exit_code);
     }
@@ -6208,14 +6427,18 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            eprintln!("Error: Question set mismatch: --deep={} but question_set_id='{}' (expected '{}')",
-                args.deep, intake.question_set_id, expected_question_set);
+            eprintln!(
+                "Error: Question set mismatch: --deep={} but question_set_id='{}' (expected '{}')",
+                args.deep, intake.question_set_id, expected_question_set
+            );
         }
         std::process::exit(exit_code);
     }
 
     // Step 5: Convert BTreeMap to HashMap for validation
-    let answers: HashMap<String, String> = intake.answers.iter()
+    let answers: HashMap<String, String> = intake
+        .answers
+        .iter()
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
 
@@ -6271,7 +6494,10 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
         match capture_grounding_for_spec_intake(&cwd, &spec_id, &intake_id) {
             Ok(result) => {
                 if !args.json {
-                    eprintln!("Deep grounding captured: {} artifacts", result.grounding_uris.len());
+                    eprintln!(
+                        "Deep grounding captured: {} artifacts",
+                        result.grounding_uris.len()
+                    );
                 }
                 result.grounding_uris
             }
@@ -6301,7 +6527,13 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
     let grounding_uris_for_json = grounding_uris.clone(); // For JSON output
     let intake_answers = build_spec_intake_answers(&answers, args.deep, validation.warnings);
     let design_brief = match build_design_brief(
-        &answers, &spec_id, &intake_id, &args.description, args.deep, created_via, grounding_uris
+        &answers,
+        &spec_id,
+        &intake_id,
+        &args.description,
+        args.deep,
+        created_via,
+        grounding_uris,
     ) {
         Ok(b) => b,
         Err(e) => {
@@ -6324,7 +6556,13 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
 
     // Step 9: Persist to capsule (SoR)
     let capsule_result = match persist_spec_intake_to_capsule(
-        &cwd, &spec_id, &intake_id, &intake_answers, &design_brief, args.deep, created_via
+        &cwd,
+        &spec_id,
+        &intake_id,
+        &intake_answers,
+        &design_brief,
+        args.deep,
+        created_via,
     ) {
         Ok(r) => r,
         Err(e) => {
@@ -6349,12 +6587,19 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
 
     // Step 10: Create filesystem projections (warn on failure, don't exit)
     let dir_name = match create_spec_filesystem_projections(
-        &cwd, &spec_id, &args.description, &design_brief, &capsule_result
+        &cwd,
+        &spec_id,
+        &args.description,
+        &design_brief,
+        &capsule_result,
     ) {
         Ok(d) => d,
         Err(e) => {
             // Capsule is SoR, filesystem failure is a warning
-            eprintln!("Warning: Filesystem projection failed (capsule SoR persisted): {}", e);
+            eprintln!(
+                "Warning: Filesystem projection failed (capsule SoR persisted): {}",
+                e
+            );
             format!("{}-slug", spec_id) // Fallback name
         }
     };
@@ -6404,7 +6649,10 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
         }
         println!();
         println!("Next steps:");
-        println!("  code speckit run --spec {} --from plan --to plan --execute", spec_id);
+        println!(
+            "  code speckit run --spec {} --from plan --to plan --execute",
+            spec_id
+        );
     }
 
     Ok(())
@@ -6413,14 +6661,12 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
 /// Run `speckit projectnew` command - create a new project with intake
 fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
     use codex_tui::{
-        ProjectType, create_project,
-        build_design_brief, build_spec_intake_answers,
-        create_spec_filesystem_projections, persist_spec_intake_to_capsule,
-        validate_spec_answers, spec_id_generator::generate_next_spec_id,
-        build_project_brief, build_project_intake_answers,
-        create_project_filesystem_projection, persist_project_intake_to_capsule,
-        persist_vision_to_overlay, validate_project_answers,
-        capture_grounding_for_project_intake, capture_grounding_for_spec_intake,
+        ProjectType, build_design_brief, build_project_brief, build_project_intake_answers,
+        build_spec_intake_answers, capture_grounding_for_project_intake,
+        capture_grounding_for_spec_intake, create_project, create_project_filesystem_projection,
+        create_spec_filesystem_projections, persist_project_intake_to_capsule,
+        persist_spec_intake_to_capsule, persist_vision_to_overlay,
+        spec_id_generator::generate_next_spec_id, validate_project_answers, validate_spec_answers,
     };
     use std::collections::HashMap;
 
@@ -6439,7 +6685,11 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
                 });
                 println!("{}", serde_json::to_string_pretty(&output)?);
             } else {
-                eprintln!("Error: Unknown project type '{}'. Valid: {}", args.project_type, ProjectType::valid_types());
+                eprintln!(
+                    "Error: Unknown project type '{}'. Valid: {}",
+                    args.project_type,
+                    ProjectType::valid_types()
+                );
             }
             std::process::exit(exit_code);
         }
@@ -6487,7 +6737,10 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
                 println!("{}", serde_json::to_string_pretty(&output)?);
             } else {
                 eprintln!("Error: {}", e);
-                eprintln!("Note: Project scaffold created at {}", project_dir.display());
+                eprintln!(
+                    "Note: Project scaffold created at {}",
+                    project_dir.display()
+                );
             }
             std::process::exit(exit_code);
         }
@@ -6530,8 +6783,10 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else {
-            eprintln!("Error: Wrapper schema version mismatch: got '{}', expected '{}'",
-                wrapper.schema_version, PROJECTNEW_ANSWERS_SCHEMA_VERSION);
+            eprintln!(
+                "Error: Wrapper schema version mismatch: got '{}', expected '{}'",
+                wrapper.schema_version, PROJECTNEW_ANSWERS_SCHEMA_VERSION
+            );
         }
         std::process::exit(exit_code);
     }
@@ -6562,25 +6817,26 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
     };
 
     // Step 5: Process project intake
-    let project_intake: HashMap<String, String> = match serde_json::from_value(wrapper.project.clone()) {
-        Ok(answers) => answers,
-        Err(e) => {
-            let exit_code = headless_exit::NEEDS_INPUT;
-            if args.json {
-                let output = serde_json::json!({
-                    "schema_version": SCHEMA_VERSION,
-                    "tool_version": tool_version(),
-                    "exit_code": exit_code,
-                    "exit_reason": headless_exit::exit_reason(exit_code),
-                    "error": format!("Failed to parse project intake answers: {}", e),
-                });
-                println!("{}", serde_json::to_string_pretty(&output)?);
-            } else {
-                eprintln!("Error: Failed to parse project intake answers: {}", e);
+    let project_intake: HashMap<String, String> =
+        match serde_json::from_value(wrapper.project.clone()) {
+            Ok(answers) => answers,
+            Err(e) => {
+                let exit_code = headless_exit::NEEDS_INPUT;
+                if args.json {
+                    let output = serde_json::json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "tool_version": tool_version(),
+                        "exit_code": exit_code,
+                        "exit_reason": headless_exit::exit_reason(exit_code),
+                        "error": format!("Failed to parse project intake answers: {}", e),
+                    });
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                } else {
+                    eprintln!("Error: Failed to parse project intake answers: {}", e);
+                }
+                std::process::exit(exit_code);
             }
-            std::process::exit(exit_code);
-        }
-    };
+        };
 
     // Step 5b: Validate project intake answers
     let project_validation = validate_project_answers(&project_intake, args.deep);
@@ -6614,7 +6870,10 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
         match capture_grounding_for_project_intake(&project_dir, &project_id) {
             Ok(result) => {
                 if !args.json {
-                    eprintln!("Deep grounding captured: {} artifacts", result.grounding_uris.len());
+                    eprintln!(
+                        "Deep grounding captured: {} artifacts",
+                        result.grounding_uris.len()
+                    );
                 }
                 result.grounding_uris
             }
@@ -6643,12 +6902,24 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
 
     let project_grounding_uris_for_json = project_grounding_uris.clone(); // For JSON output
     let project_intake_answers = build_project_intake_answers(&project_intake, args.deep);
-    let project_brief = build_project_brief(&project_intake, &project_id, &project_intake_id, args.deep, created_via, project_grounding_uris);
+    let project_brief = build_project_brief(
+        &project_intake,
+        &project_id,
+        &project_intake_id,
+        args.deep,
+        created_via,
+        project_grounding_uris,
+    );
 
     // Step 6: Persist project intake to capsule
     let project_capsule_result = match persist_project_intake_to_capsule(
-        &project_dir, &project_id, &project_intake_id,
-        &project_intake_answers, &project_brief, args.deep, created_via
+        &project_dir,
+        &project_id,
+        &project_intake_id,
+        &project_intake_answers,
+        &project_brief,
+        args.deep,
+        created_via,
     ) {
         Ok(r) => r,
         Err(e) => {
@@ -6672,7 +6943,11 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
 
     // Step 7: Create project filesystem projection
     if let Err(e) = create_project_filesystem_projection(
-        &project_dir, &project_id, &project_brief, &project_capsule_result, args.deep
+        &project_dir,
+        &project_id,
+        &project_brief,
+        &project_capsule_result,
+        args.deep,
     ) {
         eprintln!("Warning: Failed to create PROJECT_BRIEF.md: {}", e);
     }
@@ -6680,22 +6955,51 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
     // Step 8: Bootstrap spec (unless --no-bootstrap-spec)
     let bootstrap_result = if !args.no_bootstrap_spec {
         // Determine bootstrap description
-        let bootstrap_desc = args.bootstrap_desc
-            .or_else(|| wrapper.bootstrap_spec.as_ref().map(|b| b.description.clone()))
+        let bootstrap_desc = args
+            .bootstrap_desc
+            .or_else(|| {
+                wrapper
+                    .bootstrap_spec
+                    .as_ref()
+                    .map(|b| b.description.clone())
+            })
             .unwrap_or_else(|| "Initial setup".to_string());
 
         // Get bootstrap spec answers
-        let spec_answers: HashMap<String, String> = if let Some(ref bootstrap) = wrapper.bootstrap_spec {
+        let spec_answers: HashMap<String, String> = if let Some(ref bootstrap) =
+            wrapper.bootstrap_spec
+        {
             match serde_json::from_value(bootstrap.spec.clone()) {
                 Ok(a) => a,
                 Err(e) => {
-                    eprintln!("Warning: Failed to parse bootstrap spec answers: {}. Skipping bootstrap.", e);
-                    return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+                    eprintln!(
+                        "Warning: Failed to parse bootstrap spec answers: {}. Skipping bootstrap.",
+                        e
+                    );
+                    return output_projectnew_success(
+                        args.json,
+                        &project_id,
+                        &project_dir,
+                        &vision_result,
+                        &project_capsule_result,
+                        None,
+                        project_grounding_uris_for_json.clone(),
+                    );
                 }
             }
         } else {
-            eprintln!("Warning: --no-bootstrap-spec not set but no bootstrap_spec in wrapper. Skipping bootstrap.");
-            return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+            eprintln!(
+                "Warning: --no-bootstrap-spec not set but no bootstrap_spec in wrapper. Skipping bootstrap."
+            );
+            return output_projectnew_success(
+                args.json,
+                &project_id,
+                &project_dir,
+                &vision_result,
+                &project_capsule_result,
+                None,
+                project_grounding_uris_for_json.clone(),
+            );
         };
 
         // Validate spec answers (includes baseline + deep validation when --deep)
@@ -6705,15 +7009,34 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
             for error in &validation.errors {
                 eprintln!("  - {}", error);
             }
-            return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+            return output_projectnew_success(
+                args.json,
+                &project_id,
+                &project_dir,
+                &vision_result,
+                &project_capsule_result,
+                None,
+                project_grounding_uris_for_json.clone(),
+            );
         }
 
         // Generate spec_id (in project directory)
         let spec_id = match generate_next_spec_id(&project_dir) {
             Ok(id) => id,
             Err(e) => {
-                eprintln!("Warning: Failed to generate SPEC-ID: {}. Skipping bootstrap.", e);
-                return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+                eprintln!(
+                    "Warning: Failed to generate SPEC-ID: {}. Skipping bootstrap.",
+                    e
+                );
+                return output_projectnew_success(
+                    args.json,
+                    &project_id,
+                    &project_dir,
+                    &vision_result,
+                    &project_capsule_result,
+                    None,
+                    project_grounding_uris_for_json.clone(),
+                );
             }
         };
 
@@ -6724,14 +7047,28 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
             match capture_grounding_for_spec_intake(&project_dir, &spec_id, &spec_intake_id) {
                 Ok(result) => {
                     if !args.json {
-                        eprintln!("Deep grounding captured for bootstrap spec: {} artifacts", result.grounding_uris.len());
+                        eprintln!(
+                            "Deep grounding captured for bootstrap spec: {} artifacts",
+                            result.grounding_uris.len()
+                        );
                     }
                     result.grounding_uris
                 }
                 Err(e) => {
                     // Bootstrap grounding failure skips bootstrap (project already created)
-                    eprintln!("Warning: Bootstrap spec deep grounding failed: {}. Skipping bootstrap.", e);
-                    return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json);
+                    eprintln!(
+                        "Warning: Bootstrap spec deep grounding failed: {}. Skipping bootstrap.",
+                        e
+                    );
+                    return output_projectnew_success(
+                        args.json,
+                        &project_id,
+                        &project_dir,
+                        &vision_result,
+                        &project_capsule_result,
+                        None,
+                        project_grounding_uris_for_json,
+                    );
                 }
             }
         } else {
@@ -6739,35 +7076,77 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
         };
 
         // Build spec structs
-        let spec_intake_answers = build_spec_intake_answers(&spec_answers, args.deep, validation.warnings);
+        let spec_intake_answers =
+            build_spec_intake_answers(&spec_answers, args.deep, validation.warnings);
         let design_brief = match build_design_brief(
-            &spec_answers, &spec_id, &spec_intake_id, &bootstrap_desc, args.deep, created_via, bootstrap_grounding_uris
+            &spec_answers,
+            &spec_id,
+            &spec_intake_id,
+            &bootstrap_desc,
+            args.deep,
+            created_via,
+            bootstrap_grounding_uris,
         ) {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("Warning: Failed to build bootstrap design brief: {}. Skipping bootstrap.", e);
-                return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+                eprintln!(
+                    "Warning: Failed to build bootstrap design brief: {}. Skipping bootstrap.",
+                    e
+                );
+                return output_projectnew_success(
+                    args.json,
+                    &project_id,
+                    &project_dir,
+                    &vision_result,
+                    &project_capsule_result,
+                    None,
+                    project_grounding_uris_for_json.clone(),
+                );
             }
         };
 
         // Persist bootstrap spec to capsule
         let spec_capsule_result = match persist_spec_intake_to_capsule(
-            &project_dir, &spec_id, &spec_intake_id, &spec_intake_answers, &design_brief, args.deep, created_via
+            &project_dir,
+            &spec_id,
+            &spec_intake_id,
+            &spec_intake_answers,
+            &design_brief,
+            args.deep,
+            created_via,
         ) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("Warning: Bootstrap spec capsule persistence failed: {}. Skipping bootstrap.", e);
-                return output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, None, project_grounding_uris_for_json.clone());
+                eprintln!(
+                    "Warning: Bootstrap spec capsule persistence failed: {}. Skipping bootstrap.",
+                    e
+                );
+                return output_projectnew_success(
+                    args.json,
+                    &project_id,
+                    &project_dir,
+                    &vision_result,
+                    &project_capsule_result,
+                    None,
+                    project_grounding_uris_for_json.clone(),
+                );
             }
         };
 
         // Create spec filesystem projections
         let dir_name = match create_spec_filesystem_projections(
-            &project_dir, &spec_id, &bootstrap_desc, &design_brief, &spec_capsule_result
+            &project_dir,
+            &spec_id,
+            &bootstrap_desc,
+            &design_brief,
+            &spec_capsule_result,
         ) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("Warning: Bootstrap spec filesystem projection failed: {}. Capsule SoR persisted.", e);
+                eprintln!(
+                    "Warning: Bootstrap spec filesystem projection failed: {}. Capsule SoR persisted.",
+                    e
+                );
                 format!("{}-bootstrap", spec_id)
             }
         };
@@ -6782,7 +7161,15 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
         None
     };
 
-    output_projectnew_success(args.json, &project_id, &project_dir, &vision_result, &project_capsule_result, bootstrap_result.as_ref(), project_grounding_uris_for_json)
+    output_projectnew_success(
+        args.json,
+        &project_id,
+        &project_dir,
+        &vision_result,
+        &project_capsule_result,
+        bootstrap_result.as_ref(),
+        project_grounding_uris_for_json,
+    )
 }
 
 /// Bootstrap spec result for output
@@ -6880,10 +7267,19 @@ fn output_projectnew_success(
     } else {
         println!("Project created: {}", project_id);
         println!("  Directory: {}", project_dir.display());
-        println!("  Vision: constitution v{}, hash {}",
+        println!(
+            "  Vision: constitution v{}, hash {}",
             vision_result.constitution_version,
-            &vision_result.content_hash[..8.min(vision_result.content_hash.len())]);
-        println!("  Project Intake ID: {}", project_capsule.checkpoint_label.split(':').last().unwrap_or("unknown"));
+            &vision_result.content_hash[..8.min(vision_result.content_hash.len())]
+        );
+        println!(
+            "  Project Intake ID: {}",
+            project_capsule
+                .checkpoint_label
+                .split(':')
+                .last()
+                .unwrap_or("unknown")
+        );
         println!("  Brief URI: {}", project_capsule.brief_uri);
 
         // Show deep artifacts if present
@@ -6909,7 +7305,10 @@ fn output_projectnew_success(
         if bootstrap.is_some() {
             let b = bootstrap.unwrap();
             println!("  cd {}", project_dir.display());
-            println!("  code speckit run --spec {} --from plan --to plan --execute", b.spec_id);
+            println!(
+                "  code speckit run --spec {} --from plan --to plan --execute",
+                b.spec_id
+            );
         } else {
             println!("  cd {}", project_dir.display());
             println!("  code speckit new --desc \"<feature>\" --answers <path>");
@@ -6998,7 +7397,12 @@ fn run_projections_rebuild(cwd: PathBuf, args: ProjectionsRebuildArgs) -> anyhow
             println!();
             println!("Spec intakes processed:");
             for spec in &result.spec_intakes {
-                println!("  {} (intake: {}, deep: {})", spec.spec_id, &spec.intake_id[..8], spec.deep);
+                println!(
+                    "  {} (intake: {}, deep: {})",
+                    spec.spec_id,
+                    &spec.intake_id[..8],
+                    spec.deep
+                );
             }
         }
 
@@ -7006,7 +7410,12 @@ fn run_projections_rebuild(cwd: PathBuf, args: ProjectionsRebuildArgs) -> anyhow
             println!();
             println!("Project intakes processed:");
             for project in &result.project_intakes {
-                println!("  {} (intake: {}, deep: {})", project.project_id, &project.intake_id[..8], project.deep);
+                println!(
+                    "  {} (intake: {}, deep: {})",
+                    project.project_id,
+                    &project.intake_id[..8],
+                    project.deep
+                );
             }
         }
 
@@ -7067,7 +7476,10 @@ impl std::fmt::Display for IngestError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IngestError::FileNotFound(p) => write!(f, "File not found: {}", p.display()),
-            IngestError::FeatureDisabled { feature, resolution } => {
+            IngestError::FeatureDisabled {
+                feature,
+                resolution,
+            } => {
                 write!(f, "{} feature disabled. {}", feature, resolution)
             }
             IngestError::CapsuleError(e) => write!(f, "Capsule error: {}", e),
@@ -7240,10 +7652,16 @@ fn run_ingest(cwd: PathBuf, args: IngestArgs) -> anyhow::Result<()> {
                     format!("File not found: {}", p.display()),
                     None,
                 ),
-                IngestError::FeatureDisabled { feature, resolution } => (
+                IngestError::FeatureDisabled {
+                    feature,
+                    resolution,
+                } => (
                     headless_exit::HARD_FAIL,
-                    format!("{} ingestion requires the '{}' feature",
-                        feature.to_uppercase().replace("MEMVID-", ""), feature),
+                    format!(
+                        "{} ingestion requires the '{}' feature",
+                        feature.to_uppercase().replace("MEMVID-", ""),
+                        feature
+                    ),
                     Some(*resolution),
                 ),
                 IngestError::CapsuleError(msg) => (
@@ -7295,8 +7713,11 @@ mod tests {
     async fn test_ingest_impl_durability() {
         let temp_dir = TempDir::new().expect("create temp dir");
         let test_file = temp_dir.path().join("test_doc.md");
-        std::fs::write(&test_file, "# Test Document\n\nTest content for durability check.")
-            .expect("write test file");
+        std::fs::write(
+            &test_file,
+            "# Test Document\n\nTest content for durability check.",
+        )
+        .expect("write test file");
 
         let args = IngestArgs {
             path: test_file.clone(),
@@ -7312,11 +7733,20 @@ mod tests {
             .expect("ingest should succeed");
 
         // Verify output structure
-        assert!(output.uri.contains("test_doc.md"), "URI should contain filename");
-        assert!(!output.checkpoint_id.is_empty(), "checkpoint_id should be set");
+        assert!(
+            output.uri.contains("test_doc.md"),
+            "URI should contain filename"
+        );
+        assert!(
+            !output.checkpoint_id.is_empty(),
+            "checkpoint_id should be set"
+        );
         assert_eq!(output.file_type, "md");
         assert!(!output.extracted, "md files should not be extracted");
-        assert!(output.extracted_uri.is_none(), "md files have no extracted_uri");
+        assert!(
+            output.extracted_uri.is_none(),
+            "md files have no extracted_uri"
+        );
 
         // Verify durability: reopen capsule and check artifact exists
         let config = default_capsule_config(temp_dir.path());
@@ -7402,12 +7832,21 @@ mod tests {
         };
 
         let result = ingest_impl(temp_dir.path(), &args).await;
-        assert!(result.is_err(), "should fail when memvid-pdf feature is disabled");
+        assert!(
+            result.is_err(),
+            "should fail when memvid-pdf feature is disabled"
+        );
 
         match result.unwrap_err() {
-            IngestError::FeatureDisabled { feature, resolution } => {
+            IngestError::FeatureDisabled {
+                feature,
+                resolution,
+            } => {
                 assert_eq!(feature, "memvid-pdf");
-                assert!(resolution.contains("memvid-pdf"), "resolution should mention the feature");
+                assert!(
+                    resolution.contains("memvid-pdf"),
+                    "resolution should mention the feature"
+                );
             }
             e => panic!("expected FeatureDisabled error, got: {:?}", e),
         }
@@ -7432,12 +7871,21 @@ mod tests {
         };
 
         let result = ingest_impl(temp_dir.path(), &args).await;
-        assert!(result.is_err(), "should fail when memvid-docx feature is disabled");
+        assert!(
+            result.is_err(),
+            "should fail when memvid-docx feature is disabled"
+        );
 
         match result.unwrap_err() {
-            IngestError::FeatureDisabled { feature, resolution } => {
+            IngestError::FeatureDisabled {
+                feature,
+                resolution,
+            } => {
                 assert_eq!(feature, "memvid-docx");
-                assert!(resolution.contains("memvid-docx"), "resolution should mention the feature");
+                assert!(
+                    resolution.contains("memvid-docx"),
+                    "resolution should mention the feature"
+                );
             }
             e => panic!("expected FeatureDisabled error, got: {:?}", e),
         }
@@ -7475,8 +7923,14 @@ mod tests {
             .expect("ingest should succeed with memvid-pdf feature");
 
         // Verify extraction happened
-        assert!(output.extracted, "PDF should be extracted when feature is enabled");
-        assert!(output.extracted_uri.is_some(), "extracted_uri should be set for PDFs");
+        assert!(
+            output.extracted,
+            "PDF should be extracted when feature is enabled"
+        );
+        assert!(
+            output.extracted_uri.is_some(),
+            "extracted_uri should be set for PDFs"
+        );
 
         // Drop adapter state and reopen capsule for search
         let config = default_capsule_config(temp_dir.path());
@@ -7493,7 +7947,10 @@ mod tests {
             as_of: None,
         };
 
-        let results = adapter.search_memories(params).await.expect("search should succeed");
+        let results = adapter
+            .search_memories(params)
+            .await
+            .expect("search should succeed");
 
         assert!(
             !results.is_empty(),
@@ -7538,8 +7995,14 @@ mod tests {
             .expect("ingest should succeed with memvid-docx feature");
 
         // Verify extraction happened
-        assert!(output.extracted, "DOCX should be extracted when feature is enabled");
-        assert!(output.extracted_uri.is_some(), "extracted_uri should be set for DOCX files");
+        assert!(
+            output.extracted,
+            "DOCX should be extracted when feature is enabled"
+        );
+        assert!(
+            output.extracted_uri.is_some(),
+            "extracted_uri should be set for DOCX files"
+        );
 
         // Drop adapter state and reopen capsule for search
         let config = default_capsule_config(temp_dir.path());
@@ -7556,7 +8019,10 @@ mod tests {
             as_of: None,
         };
 
-        let results = adapter.search_memories(params).await.expect("search should succeed");
+        let results = adapter
+            .search_memories(params)
+            .await
+            .expect("search should succeed");
 
         assert!(
             !results.is_empty(),

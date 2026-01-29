@@ -210,11 +210,7 @@ impl BottomPaneView<'_> for SpecIntakeModal {
     }
 
     fn desired_height(&self, _width: u16) -> u16 {
-        if self.custom_mode {
-            18
-        } else {
-            16
-        }
+        if self.custom_mode { 18 } else { 16 }
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
@@ -248,9 +244,10 @@ impl BottomPaneView<'_> for SpecIntakeModal {
         lines.push(Line::from(""));
 
         if let Some(question) = self.current_question() {
-            lines.push(Line::from(vec![
-                Span::styled(question.title, Style::default().fg(Color::Yellow)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                question.title,
+                Style::default().fg(Color::Yellow),
+            )]));
             lines.push(Line::from(vec![
                 Span::styled("Hint: ", Style::default().fg(Color::Gray)),
                 Span::raw(question.hint),
@@ -266,7 +263,9 @@ impl BottomPaneView<'_> for SpecIntakeModal {
                 lines.push(Line::from(vec![
                     Span::styled(
                         "Enter",
-                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw(" submit | "),
                     Span::styled(
@@ -500,4 +499,3 @@ fn deep_questions() -> Vec<SpecIntakeQuestion> {
         },
     ]
 }
-

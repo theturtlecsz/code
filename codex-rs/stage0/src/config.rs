@@ -544,7 +544,6 @@ pub struct ProductKnowledgeConfig {
     // ─────────────────────────────────────────────────────────────────────────────
     // Prompt F: Pre-check + Curation settings
     // ─────────────────────────────────────────────────────────────────────────────
-
     /// Enable pre-check against codex-product before Tier2 calls (default: true when enabled)
     ///
     /// When enabled, Stage0 searches codex-product for existing insights before

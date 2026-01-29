@@ -680,7 +680,9 @@ pub fn process_stage0_result(
                         request_id,
                         hit_uris: trace.hit_uris.clone(),
                         fused_scores: Some(trace.fused_scores.clone()),
-                        explainability: Some(serde_json::json!({"max_relevance": trace.max_relevance})),
+                        explainability: Some(
+                            serde_json::json!({"max_relevance": trace.max_relevance}),
+                        ),
                         latency_ms: trace.latency_ms,
                         error: trace.error.clone(),
                     };
@@ -692,9 +694,12 @@ pub fn process_stage0_result(
                             "Failed to emit precheck RetrievalRequest (best-effort)"
                         );
                     }
-                    if let Err(e) =
-                        handle.emit_retrieval_response(&spec_id, run_id, Some("Stage0"), &resp_payload)
-                    {
+                    if let Err(e) = handle.emit_retrieval_response(
+                        &spec_id,
+                        run_id,
+                        Some("Stage0"),
+                        &resp_payload,
+                    ) {
                         tracing::warn!(
                             target: "stage0",
                             error = %e,
@@ -718,7 +723,8 @@ pub fn process_stage0_result(
                 };
                 use uuid::Uuid;
 
-                if let Ok(handle) = CapsuleHandle::open(default_capsule_config(&widget.config.cwd)) {
+                if let Ok(handle) = CapsuleHandle::open(default_capsule_config(&widget.config.cwd))
+                {
                     if handle.switch_branch(BranchId::for_run(run_id)).is_ok() {
                         let request_id = Uuid::new_v4().to_string();
 
@@ -746,16 +752,21 @@ pub fn process_stage0_result(
                             error: Some(format!("skipped: {}", trace.reason)),
                         };
 
-                        if let Err(e) = handle.emit_retrieval_request(&spec_id, run_id, &req_payload) {
+                        if let Err(e) =
+                            handle.emit_retrieval_request(&spec_id, run_id, &req_payload)
+                        {
                             tracing::warn!(
                                 target: "stage0",
                                 error = %e,
                                 "Failed to emit PK degraded-mode RetrievalRequest (best-effort)"
                             );
                         }
-                        if let Err(e) =
-                            handle.emit_retrieval_response(&spec_id, run_id, Some("Stage0"), &resp_payload)
-                        {
+                        if let Err(e) = handle.emit_retrieval_response(
+                            &spec_id,
+                            run_id,
+                            Some("Stage0"),
+                            &resp_payload,
+                        ) {
                             tracing::warn!(
                                 target: "stage0",
                                 error = %e,
@@ -1076,7 +1087,8 @@ pub fn handle_spec_plan(widget: &mut ChatWidget, spec_id: String) {
                 };
                 use uuid::Uuid;
 
-                if let Ok(handle) = CapsuleHandle::open(default_capsule_config(&widget.config.cwd)) {
+                if let Ok(handle) = CapsuleHandle::open(default_capsule_config(&widget.config.cwd))
+                {
                     if handle.switch_branch(BranchId::for_run(run_id)).is_ok() {
                         let request_id = Uuid::new_v4().to_string();
 
@@ -1099,21 +1111,28 @@ pub fn handle_spec_plan(widget: &mut ChatWidget, spec_id: String) {
                             request_id,
                             hit_uris: trace.hit_uris.clone(),
                             fused_scores: Some(trace.fused_scores.clone()),
-                            explainability: Some(serde_json::json!({"max_relevance": trace.max_relevance})),
+                            explainability: Some(
+                                serde_json::json!({"max_relevance": trace.max_relevance}),
+                            ),
                             latency_ms: trace.latency_ms,
                             error: trace.error.clone(),
                         };
 
-                        if let Err(e) = handle.emit_retrieval_request(&spec_id, run_id, &req_payload) {
+                        if let Err(e) =
+                            handle.emit_retrieval_request(&spec_id, run_id, &req_payload)
+                        {
                             tracing::warn!(
                                 target: "stage0",
                                 error = %e,
                                 "Failed to emit precheck RetrievalRequest (best-effort)"
                             );
                         }
-                        if let Err(e) =
-                            handle.emit_retrieval_response(&spec_id, run_id, Some("Stage0"), &resp_payload)
-                        {
+                        if let Err(e) = handle.emit_retrieval_response(
+                            &spec_id,
+                            run_id,
+                            Some("Stage0"),
+                            &resp_payload,
+                        ) {
                             tracing::warn!(
                                 target: "stage0",
                                 error = %e,
@@ -2224,7 +2243,9 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
                                 if let Some(state) = widget.spec_auto_state.as_ref() {
                                     let export_config = &state.pipeline_config.capsule.export;
                                     if should_auto_export_capsule(export_config) {
-                                        let output_path = widget.config.cwd
+                                        let output_path = widget
+                                            .config
+                                            .cwd
                                             .join("docs/specs")
                                             .join(&spec_id)
                                             .join("runs")
@@ -3053,7 +3074,7 @@ fn run_intake_presence_gate(
     stage0_config: super::stage0_integration::Stage0ExecutionConfig,
 ) -> bool {
     use crate::memvid_adapter::{
-        default_capsule_config, CapsuleHandle, EventType, IntakeCompletedPayload, IntakeKind,
+        CapsuleHandle, EventType, IntakeCompletedPayload, IntakeKind, default_capsule_config,
     };
 
     // Open capsule - STRICT: capsule is SoR, fail if unavailable
@@ -3099,11 +3120,13 @@ fn run_intake_presence_gate(
 
     if let Some(event) = intake_event {
         // Parse payload to get brief_uri
-        if let Ok(payload) =
-            serde_json::from_value::<IntakeCompletedPayload>(event.payload.clone())
+        if let Ok(payload) = serde_json::from_value::<IntakeCompletedPayload>(event.payload.clone())
         {
             // Verify brief_uri resolves
-            let uri = match payload.brief_uri.parse::<crate::memvid_adapter::LogicalUri>() {
+            let uri = match payload
+                .brief_uri
+                .parse::<crate::memvid_adapter::LogicalUri>()
+            {
                 Ok(u) => u,
                 Err(_) => {
                     tracing::warn!(
@@ -3826,7 +3849,8 @@ mod tests {
             .filter(|e| {
                 // payload is serde_json::Value, check if it can be parsed as RetrievalRequestPayload
                 if !e.payload.is_null() {
-                    if let Ok(req) = serde_json::from_value::<RetrievalRequestPayload>(e.payload.clone())
+                    if let Ok(req) =
+                        serde_json::from_value::<RetrievalRequestPayload>(e.payload.clone())
                     {
                         return req.source == "tier2:notebooklm";
                     }

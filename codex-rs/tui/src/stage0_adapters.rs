@@ -1245,10 +1245,20 @@ impl ProductKnowledgeCurationAdapter {
             ];
 
             // Store using CLI remember
-            match local_memory_cli::remember_blocking(&content, &memory_type, 8, &tags, &self.domain)
-            {
+            match local_memory_cli::remember_blocking(
+                &content,
+                &memory_type,
+                8,
+                &tags,
+                &self.domain,
+            ) {
                 Ok(id) => {
-                    tracing::info!("Curated insight {} (type: {}) from {}", id, memory_type, spec_id);
+                    tracing::info!(
+                        "Curated insight {} (type: {}) from {}",
+                        id,
+                        memory_type,
+                        spec_id
+                    );
                     created_ids.push(id);
                 }
                 Err(e) => {
@@ -1337,8 +1347,7 @@ impl ProductKnowledgeCurationAdapter {
     fn format_insight_content(insight: &InsightCandidate) -> String {
         format!(
             "**WHAT**: {}\n\n**WHY**: Extracted from Tier2 synthesis ({})\n\n**EVIDENCE**: Divine Truth analysis\n\n**OUTCOME**: Curated for future reuse",
-            insight.what,
-            insight.source_section
+            insight.what, insight.source_section
         )
     }
 
@@ -1363,10 +1372,7 @@ impl ProductKnowledgeCurationAdapter {
             || text.contains("cannot")
         {
             "limitation".to_string()
-        } else if text.contains("discovery")
-            || text.contains("found")
-            || text.contains("learned")
-        {
+        } else if text.contains("discovery") || text.contains("found") || text.contains("learned") {
             "discovery".to_string()
         } else {
             // Default to pattern for general insights

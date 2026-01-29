@@ -84,11 +84,13 @@ pub fn persist_vision_to_overlay(
         .collect();
 
     // Connect to overlay DB
-    let config = codex_stage0::Stage0Config::load()
-        .map_err(|e| SpecKitError::VisionPersistence(format!("Failed to load Stage0 config: {}", e)))?;
+    let config = codex_stage0::Stage0Config::load().map_err(|e| {
+        SpecKitError::VisionPersistence(format!("Failed to load Stage0 config: {}", e))
+    })?;
 
-    let db = codex_stage0::OverlayDb::connect_and_init(&config)
-        .map_err(|e| SpecKitError::VisionPersistence(format!("Failed to connect to overlay DB: {}", e)))?;
+    let db = codex_stage0::OverlayDb::connect_and_init(&config).map_err(|e| {
+        SpecKitError::VisionPersistence(format!("Failed to connect to overlay DB: {}", e))
+    })?;
 
     let mut errors: Vec<String> = Vec::new();
 
@@ -222,8 +224,9 @@ fn generate_nl_vision(
     guardrails: &[String],
 ) -> Result<PathBuf, SpecKitError> {
     let memory_dir = cwd.join("memory");
-    std::fs::create_dir_all(&memory_dir)
-        .map_err(|e| SpecKitError::VisionPersistence(format!("Failed to create memory directory: {}", e)))?;
+    std::fs::create_dir_all(&memory_dir).map_err(|e| {
+        SpecKitError::VisionPersistence(format!("Failed to create memory directory: {}", e))
+    })?;
 
     let mut md = String::new();
     md.push_str("# Project Vision\n\n");
@@ -261,8 +264,9 @@ fn generate_nl_vision(
     }
 
     let vision_path = memory_dir.join("NL_VISION.md");
-    std::fs::write(&vision_path, &md)
-        .map_err(|e| SpecKitError::VisionPersistence(format!("Failed to write NL_VISION.md: {}", e)))?;
+    std::fs::write(&vision_path, &md).map_err(|e| {
+        SpecKitError::VisionPersistence(format!("Failed to write NL_VISION.md: {}", e))
+    })?;
 
     Ok(vision_path)
 }

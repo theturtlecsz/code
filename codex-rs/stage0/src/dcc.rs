@@ -971,7 +971,8 @@ where
                     );
 
                     // Filter client-side
-                    let candidates = filter_product_knowledge_results(summaries, pk_cfg.min_importance);
+                    let candidates =
+                        filter_product_knowledge_results(summaries, pk_cfg.min_importance);
 
                     if candidates.is_empty() {
                         tracing::debug!(
@@ -1285,13 +1286,16 @@ pub fn assemble_product_knowledge_lane(
 
     for candidate in sorted.iter().take(cfg.max_items) {
         // Check total char budget
-        let content_budget = cfg.max_chars_per_item.min(cfg.max_total_chars.saturating_sub(total_chars));
+        let content_budget = cfg
+            .max_chars_per_item
+            .min(cfg.max_total_chars.saturating_sub(total_chars));
         if content_budget < 100 {
             break; // Not enough budget for meaningful content
         }
 
         // Truncate content
-        let truncated_content = truncate_product_knowledge_content(&candidate.content, content_budget);
+        let truncated_content =
+            truncate_product_knowledge_content(&candidate.content, content_budget);
         let snippet_len = truncated_content.len();
         total_chars += snippet_len + 150; // Account for metadata overhead
 
@@ -1317,7 +1321,10 @@ pub fn assemble_product_knowledge_lane(
         let mut hasher = Sha256::new();
         hasher.update(candidate.content.as_bytes());
         let hash = hasher.finalize();
-        let content_sha256 = hash.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        let content_sha256 = hash
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
 
         // Build evidence item
         items.push(ProductKnowledgeItem {
@@ -2972,9 +2979,21 @@ mod tests {
 
         // Should include only importance >= 8
         assert_eq!(candidates.len(), 3);
-        assert!(candidates.iter().any(|c| c.id == "pk-001" && c.importance == 9));
-        assert!(candidates.iter().any(|c| c.id == "pk-003" && c.importance == 8));
-        assert!(candidates.iter().any(|c| c.id == "pk-004" && c.importance == 10));
+        assert!(
+            candidates
+                .iter()
+                .any(|c| c.id == "pk-001" && c.importance == 9)
+        );
+        assert!(
+            candidates
+                .iter()
+                .any(|c| c.id == "pk-003" && c.importance == 8)
+        );
+        assert!(
+            candidates
+                .iter()
+                .any(|c| c.id == "pk-004" && c.importance == 10)
+        );
 
         // Should NOT include pk-002 (importance 7)
         assert!(!candidates.iter().any(|c| c.id == "pk-002"));
@@ -3195,7 +3214,11 @@ mod tests {
         assert_eq!(query2, query3);
 
         // Query should contain IQO keywords
-        assert!(query1.contains("stage0") || query1.contains("context") || query1.contains("compilation"));
+        assert!(
+            query1.contains("stage0")
+                || query1.contains("context")
+                || query1.contains("compilation")
+        );
 
         // Query should not be empty
         assert!(!query1.is_empty());
@@ -3239,7 +3262,10 @@ mod tests {
                 item_type: "decision".to_string(),
                 importance: 8,
                 tags: vec!["type:decision".to_string()],
-                content: format!("Content for item {} with some filler text to make it longer", i),
+                content: format!(
+                    "Content for item {} with some filler text to make it longer",
+                    i
+                ),
                 relevance_score: 0.9 - (i as f64 * 0.01),
             })
             .collect();
@@ -3263,7 +3289,15 @@ mod tests {
     #[test]
     fn test_canonical_types_complete() {
         // Verify all canonical types from ADR-003 are present
-        let expected_types = ["decision", "pattern", "bug-fix", "milestone", "discovery", "limitation", "architecture"];
+        let expected_types = [
+            "decision",
+            "pattern",
+            "bug-fix",
+            "milestone",
+            "discovery",
+            "limitation",
+            "architecture",
+        ];
 
         for expected in expected_types {
             assert!(
@@ -3300,10 +3334,7 @@ mod tests {
             LocalMemorySummary {
                 id: "pk-002".to_string(),
                 domain: Some("codex-product".to_string()),
-                tags: vec![
-                    "type:decision".to_string(),
-                    "importance:9".to_string(),
-                ],
+                tags: vec!["type:decision".to_string(), "importance:9".to_string()],
                 created_at: Some(Utc::now()),
                 snippet: "Decision to use 0.85 threshold".to_string(),
                 similarity_score: 0.88,
@@ -3313,32 +3344,38 @@ mod tests {
         let result = precheck_product_knowledge(summaries, 0.85, 8, "test query");
 
         assert!(result.hit, "Should hit when max_relevance >= threshold");
-        assert_eq!(result.candidates.len(), 2, "Both candidates should pass filtering");
-        assert!((result.max_relevance - 0.92).abs() < 0.001, "max_relevance should be 0.92");
+        assert_eq!(
+            result.candidates.len(),
+            2,
+            "Both candidates should pass filtering"
+        );
+        assert!(
+            (result.max_relevance - 0.92).abs() < 0.001,
+            "max_relevance should be 0.92"
+        );
         assert_eq!(result.query, "test query");
     }
 
     #[test]
     fn test_precheck_miss_below_threshold() {
         // Create summaries with low relevance scores
-        let summaries = vec![
-            LocalMemorySummary {
-                id: "pk-003".to_string(),
-                domain: Some("codex-product".to_string()),
-                tags: vec![
-                    "type:pattern".to_string(),
-                    "importance:8".to_string(),
-                ],
-                created_at: Some(Utc::now()),
-                snippet: "Low relevance pattern".to_string(),
-                similarity_score: 0.70, // Below threshold
-            },
-        ];
+        let summaries = vec![LocalMemorySummary {
+            id: "pk-003".to_string(),
+            domain: Some("codex-product".to_string()),
+            tags: vec!["type:pattern".to_string(), "importance:8".to_string()],
+            created_at: Some(Utc::now()),
+            snippet: "Low relevance pattern".to_string(),
+            similarity_score: 0.70, // Below threshold
+        }];
 
         let result = precheck_product_knowledge(summaries, 0.85, 8, "different query");
 
         assert!(!result.hit, "Should miss when max_relevance < threshold");
-        assert_eq!(result.candidates.len(), 1, "Candidate passes filtering but not threshold");
+        assert_eq!(
+            result.candidates.len(),
+            1,
+            "Candidate passes filtering but not threshold"
+        );
         assert!((result.max_relevance - 0.70).abs() < 0.001);
     }
 
@@ -3372,8 +3409,15 @@ mod tests {
 
         let result = precheck_product_knowledge(summaries, 0.85, 8, "importance test");
 
-        assert!(!result.hit, "Should not hit because high-importance item has low relevance");
-        assert_eq!(result.candidates.len(), 1, "Only high-importance candidate passes");
+        assert!(
+            !result.hit,
+            "Should not hit because high-importance item has low relevance"
+        );
+        assert_eq!(
+            result.candidates.len(),
+            1,
+            "Only high-importance candidate passes"
+        );
         assert_eq!(result.candidates[0].id, "pk-high-imp");
         assert!((result.max_relevance - 0.60).abs() < 0.001);
     }
@@ -3405,9 +3449,18 @@ mod tests {
 
         let result = precheck_product_knowledge(summaries, 0.85, 8, "type test");
 
-        assert!(!result.hit, "Should not hit because no candidates have canonical types");
-        assert!(result.candidates.is_empty(), "No candidates should pass without canonical type");
-        assert!((result.max_relevance - 0.0).abs() < 0.001, "max_relevance should be 0 with no candidates");
+        assert!(
+            !result.hit,
+            "Should not hit because no candidates have canonical types"
+        );
+        assert!(
+            result.candidates.is_empty(),
+            "No candidates should pass without canonical type"
+        );
+        assert!(
+            (result.max_relevance - 0.0).abs() < 0.001,
+            "max_relevance should be 0 with no candidates"
+        );
     }
 
     #[test]
@@ -3417,10 +3470,7 @@ mod tests {
             LocalMemorySummary {
                 id: "pk-valid".to_string(),
                 domain: Some("codex-product".to_string()),
-                tags: vec![
-                    "type:architecture".to_string(),
-                    "importance:10".to_string(),
-                ],
+                tags: vec!["type:architecture".to_string(), "importance:10".to_string()],
                 created_at: Some(Utc::now()),
                 snippet: "Valid architecture insight".to_string(),
                 similarity_score: 0.90,
@@ -3441,8 +3491,15 @@ mod tests {
 
         let result = precheck_product_knowledge(summaries, 0.85, 8, "filter test");
 
-        assert!(result.hit, "Should hit with valid candidate above threshold");
-        assert_eq!(result.candidates.len(), 1, "System:true candidate should be excluded");
+        assert!(
+            result.hit,
+            "Should hit with valid candidate above threshold"
+        );
+        assert_eq!(
+            result.candidates.len(),
+            1,
+            "System:true candidate should be excluded"
+        );
         assert_eq!(result.candidates[0].id, "pk-valid");
     }
 

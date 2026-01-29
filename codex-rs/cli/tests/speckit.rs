@@ -3715,6 +3715,192 @@ fn test_headless_missing_maieutic_file_exits_3() -> Result<()> {
     Ok(())
 }
 
+// =============================================================================
+// SPEC-KIT-900: HEADLESS EXECUTION ROUTING TESTS
+// =============================================================================
+// These tests verify that --execute properly routes to the headless runner
+// while the non-execute path remains validation-only.
+
+#[test]
+fn test_run_without_execute_is_validation_only() -> Result<()> {
+    // SPEC-KIT-900: Without --execute, run should be validation-only
+    // The output should NOT have mode=execute
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    setup_spec_with_prd(repo_root.path(), "SPEC-TEST-VAL-001")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-TEST-VAL-001",
+            "--from",
+            "plan",
+            "--to",
+            "tasks",
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Validation-only path should NOT have mode field (it uses overall_status)
+    assert!(
+        json.get("overall_status").is_some(),
+        "Expected overall_status in validation-only output, got: {}",
+        serde_json::to_string_pretty(&json).unwrap_or_default()
+    );
+
+    // Should NOT have mode=execute
+    let mode = json.get("mode").and_then(|v| v.as_str());
+    assert_ne!(
+        mode,
+        Some("execute"),
+        "Validation-only path should not have mode=execute"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_run_with_execute_invokes_headless_runner() -> Result<()> {
+    // SPEC-KIT-900: With --execute, run should invoke the headless runner
+    // Currently returns exit code 3 (INFRA_ERROR) because agent spawning is not implemented
+    // (escalated to architect - see SPEC-KIT-930)
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    setup_spec_with_prd(repo_root.path(), "SPEC-TEST-EXEC-001")?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-TEST-EXEC-001",
+            "--from",
+            "plan",
+            "--to",
+            "tasks",
+            "--execute",
+            "--headless",
+            "--maieutic-answers",
+            r#"{"goal":"Test goal","constraints":[],"acceptance":["Tests pass"],"delegation":"B"}"#,
+            "--json",
+        ])
+        .output()?;
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+
+    // Execute path should have mode=execute (even in error case)
+    assert_eq!(
+        json.get("mode").and_then(|v| v.as_str()),
+        Some("execute"),
+        "Execute path should have mode=execute, got: {}",
+        serde_json::to_string_pretty(&json).unwrap_or_default()
+    );
+
+    // SPEC-KIT-900: Until agent spawning is implemented, execute returns exit code 3
+    // This prevents false-green status when no artifacts are produced
+    let exit_code = json.get("exit_code").and_then(|v| v.as_i64());
+    assert_eq!(
+        exit_code,
+        Some(3),
+        "Execute should return exit code 3 (INFRA_ERROR) until agent spawning is implemented"
+    );
+
+    // Error should mention agent spawning
+    let error = json.get("error").and_then(|v| v.as_str()).unwrap_or("");
+    assert!(
+        error.contains("Agent spawning not implemented"),
+        "Error should mention agent spawning not implemented, got: {}",
+        error
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_execute_and_validation_have_different_outputs() -> Result<()> {
+    // SPEC-KIT-900: Verify that execute and validation paths produce different outputs
+    // Execute path now returns exit code 3 (agent spawning not implemented)
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    setup_spec_with_prd(repo_root.path(), "SPEC-TEST-DIFF-001")?;
+
+    // Run without --execute (validation-only)
+    let mut cmd_val = codex_command(codex_home.path(), repo_root.path())?;
+    let output_val = cmd_val
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-TEST-DIFF-001",
+            "--from",
+            "plan",
+            "--to",
+            "tasks",
+            "--json",
+        ])
+        .output()?;
+
+    // Run with --execute (will return error until agent spawning implemented)
+    let mut cmd_exec = codex_command(codex_home.path(), repo_root.path())?;
+    let output_exec = cmd_exec
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            "SPEC-TEST-DIFF-001",
+            "--from",
+            "plan",
+            "--to",
+            "tasks",
+            "--execute",
+            "--headless",
+            "--maieutic-answers",
+            r#"{"goal":"Test","constraints":[],"acceptance":["Tests pass"],"delegation":"B"}"#,
+            "--json",
+        ])
+        .output()?;
+
+    let json_val: JsonValue = serde_json::from_slice(&output_val.stdout)?;
+    let json_exec: JsonValue = serde_json::from_slice(&output_exec.stdout)?;
+
+    // Validation has overall_status
+    let has_overall_status = json_val.get("overall_status").is_some();
+    assert!(
+        has_overall_status,
+        "Validation path should have overall_status"
+    );
+
+    // Execute has mode=execute (even in error case)
+    let has_mode_execute = json_exec.get("mode").and_then(|v| v.as_str()) == Some("execute");
+    assert!(has_mode_execute, "Execute path should have mode=execute");
+
+    // Execute returns exit code 3 (INFRA_ERROR) - prevents false-green when no artifacts
+    let exec_exit_code = json_exec.get("exit_code").and_then(|v| v.as_i64());
+    assert_eq!(
+        exec_exit_code,
+        Some(3),
+        "Execute should return exit code 3 until agent spawning is implemented"
+    );
+
+    // They should be different
+    assert_ne!(
+        json_val.get("mode").and_then(|v| v.as_str()),
+        json_exec.get("mode").and_then(|v| v.as_str()),
+        "Execute and validation outputs should differ in mode"
+    );
+
+    Ok(())
+}
+
 #[test]
 #[ignore = "D133: Requires interactive mock infrastructure - tracked in SPEC-KIT-930"]
 fn test_headless_never_prompts() {

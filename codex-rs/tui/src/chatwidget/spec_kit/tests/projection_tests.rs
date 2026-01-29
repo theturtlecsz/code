@@ -3,12 +3,11 @@
 //! These tests ensure filesystem projections include capsule URIs
 //! and SHA256 hashes for traceability.
 
+use crate::chatwidget::spec_kit::intake_core::{
+    CapsulePersistenceResult, build_design_brief, create_spec_filesystem_projections,
+};
 use std::collections::HashMap;
 use tempfile::TempDir;
-use crate::chatwidget::spec_kit::intake_core::{
-    build_design_brief, CapsulePersistenceResult,
-    create_spec_filesystem_projections,
-};
 
 /// Create mock CapsulePersistenceResult for testing
 fn mock_capsule_result() -> CapsulePersistenceResult {
@@ -35,8 +34,10 @@ fn minimal_spec_answers() -> HashMap<String, String> {
     answers.insert("integration_points".into(), "API X".into());
     answers.insert("risks".into(), "Risk 1".into());
     answers.insert("open_questions".into(), "Q1".into());
-    answers.insert("acceptance_criteria".into(),
-        "AC1 (verify: manual); AC2 (verify: test)".into());
+    answers.insert(
+        "acceptance_criteria".into(),
+        "AC1 (verify: manual); AC2 (verify: test)".into(),
+    );
     answers
 }
 
@@ -62,19 +63,44 @@ fn test_spec_projection_includes_provenance_table() {
     create_spec_md(cwd);
 
     let answers = minimal_spec_answers();
-    let brief = build_design_brief(&answers, "SPEC-TEST-001", "abc123", "Test feature", false, "test", vec![]).unwrap();
+    let brief = build_design_brief(
+        &answers,
+        "SPEC-TEST-001",
+        "abc123",
+        "Test feature",
+        false,
+        "test",
+        vec![],
+    )
+    .unwrap();
     let capsule_result = mock_capsule_result();
 
-    let dir_name = create_spec_filesystem_projections(cwd, "SPEC-TEST-001", "Test feature", &brief, &capsule_result).unwrap();
+    let dir_name = create_spec_filesystem_projections(
+        cwd,
+        "SPEC-TEST-001",
+        "Test feature",
+        &brief,
+        &capsule_result,
+    )
+    .unwrap();
 
     // Read INTAKE.md and verify provenance
     let intake_path = cwd.join("docs").join(&dir_name).join("INTAKE.md");
     let intake_content = std::fs::read_to_string(&intake_path).unwrap();
 
     // Must contain URI and SHA256 columns
-    assert!(intake_content.contains("Artifact") || intake_content.contains("artifact"), "Missing provenance table header");
-    assert!(intake_content.contains(&capsule_result.answers_uri), "Missing answers URI");
-    assert!(intake_content.contains(&capsule_result.brief_uri), "Missing brief URI");
+    assert!(
+        intake_content.contains("Artifact") || intake_content.contains("artifact"),
+        "Missing provenance table header"
+    );
+    assert!(
+        intake_content.contains(&capsule_result.answers_uri),
+        "Missing answers URI"
+    );
+    assert!(
+        intake_content.contains(&capsule_result.brief_uri),
+        "Missing brief URI"
+    );
 }
 
 #[test]
@@ -87,10 +113,26 @@ fn test_spec_projection_creates_required_files() {
     create_spec_md(cwd);
 
     let answers = minimal_spec_answers();
-    let brief = build_design_brief(&answers, "SPEC-TEST-002", "def456", "Another feature", false, "test", vec![]).unwrap();
+    let brief = build_design_brief(
+        &answers,
+        "SPEC-TEST-002",
+        "def456",
+        "Another feature",
+        false,
+        "test",
+        vec![],
+    )
+    .unwrap();
     let capsule_result = mock_capsule_result();
 
-    let dir_name = create_spec_filesystem_projections(cwd, "SPEC-TEST-002", "Another feature", &brief, &capsule_result).unwrap();
+    let dir_name = create_spec_filesystem_projections(
+        cwd,
+        "SPEC-TEST-002",
+        "Another feature",
+        &brief,
+        &capsule_result,
+    )
+    .unwrap();
 
     let spec_dir = cwd.join("docs").join(&dir_name);
 

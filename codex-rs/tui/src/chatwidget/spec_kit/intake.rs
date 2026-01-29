@@ -501,10 +501,7 @@ pub fn format_project_ops_baseline(ops_baseline: &str, project_id: &str) -> Stri
 }
 
 /// Generate project architecture mermaid from primary components
-pub fn generate_project_architecture_mermaid(
-    components: &[String],
-    project_id: &str,
-) -> String {
+pub fn generate_project_architecture_mermaid(components: &[String], project_id: &str) -> String {
     let mut lines = vec![
         "---".to_string(),
         format!("title: {} Architecture", project_id),
@@ -681,11 +678,8 @@ mod ace_intake_frame_tests {
             grounding_uris: vec!["mv2://grounding/uri".to_string()],
         };
 
-        let frame = build_ace_intake_frame_from_spec(
-            &design_brief,
-            "mv2://answers/uri",
-            "mv2://brief/uri",
-        );
+        let frame =
+            build_ace_intake_frame_from_spec(&design_brief, "mv2://answers/uri", "mv2://brief/uri");
 
         assert_eq!(frame.schema_version, ACE_INTAKE_FRAME_SCHEMA_VERSION);
         assert_eq!(frame.intake_kind, "spec");
@@ -744,4 +738,3 @@ mod ace_intake_frame_tests {
         assert!(frame.open_questions.is_empty());
     }
 }
-

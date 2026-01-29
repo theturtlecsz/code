@@ -117,9 +117,15 @@ These invariants MUST NOT be violated:
 
 ### Blocked
 
-| Spec         | Blocker                                                             | Unblocks           |
-| ------------ | ------------------------------------------------------------------- | ------------------ |
-| SPEC-KIT-900 | CLI stage commands are validation-only (TUI required for execution) | Stage 0 CI testing |
+| Spec         | Blocker                                          | Unblocks |
+| ------------ | ------------------------------------------------ | -------- |
+| SPEC-KIT-900 | Agent spawning requires widget-independent infra | -        |
+
+### Unblocked (Recent)
+
+| Spec   | Resolution | Date |
+| ------ | ---------- | ---- |
+| (none) | -          | -    |
 
 ***
 

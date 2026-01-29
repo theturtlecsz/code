@@ -230,25 +230,35 @@ pub use chatwidget::spec_kit::spec_id_generator;
 
 // CLI Headless Intake Support: Re-export intake types and core functions
 pub use chatwidget::spec_kit::intake::{
-    AcceptanceCriterion, AceIntakeFrame, DeepDesignSections, DesignBrief, IntakeAnswers,
-    ProjectBrief, ProjectDeepSections,
-    ACE_INTAKE_FRAME_SCHEMA_VERSION, DESIGN_BRIEF_SCHEMA_VERSION, PROJECT_BRIEF_SCHEMA_VERSION,
-    PROJECT_INTAKE_ANSWERS_SCHEMA_VERSION, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION,
-    build_ace_intake_frame_from_project, build_ace_intake_frame_from_spec,
-    parse_acceptance_criteria, sha256_hex, split_semicolon_list, validate_integration_points,
+    ACE_INTAKE_FRAME_SCHEMA_VERSION, AcceptanceCriterion, AceIntakeFrame,
+    DESIGN_BRIEF_SCHEMA_VERSION, DeepDesignSections, DesignBrief, IntakeAnswers,
+    PROJECT_BRIEF_SCHEMA_VERSION, PROJECT_INTAKE_ANSWERS_SCHEMA_VERSION, ProjectBrief,
+    ProjectDeepSections, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION, build_ace_intake_frame_from_project,
+    build_ace_intake_frame_from_spec, parse_acceptance_criteria, sha256_hex, split_semicolon_list,
+    validate_integration_points,
 };
 
 pub use chatwidget::spec_kit::intake_core::{
-    CapsulePersistenceResult, ProjectCapsulePersistenceResult, ValidationResult,
+    CapsulePersistenceResult,
+    ProjectCapsulePersistenceResult,
+    ValidationResult,
     // Spec intake functions
-    build_design_brief, build_spec_intake_answers, create_spec_filesystem_projections,
-    persist_spec_intake_to_capsule, update_spec_tracker, validate_spec_answers,
-    write_intake_md_only,
+    build_design_brief,
     // Project intake functions
-    build_project_brief, build_project_intake_answers, create_project_filesystem_projection,
-    persist_project_intake_to_capsule, validate_project_answers,
+    build_project_brief,
+    build_project_intake_answers,
+    build_spec_intake_answers,
     // Helpers
-    capitalize_words, format_list,
+    capitalize_words,
+    create_project_filesystem_projection,
+    create_spec_filesystem_projections,
+    format_list,
+    persist_project_intake_to_capsule,
+    persist_spec_intake_to_capsule,
+    update_spec_tracker,
+    validate_project_answers,
+    validate_spec_answers,
+    write_intake_md_only,
 };
 
 pub use chatwidget::spec_kit::project_native::{
@@ -268,7 +278,7 @@ pub use chatwidget::spec_kit::rebuild_projections::{
 
 // WP-B: Deep grounding capture for headless CLI
 pub use chatwidget::spec_kit::grounding::{
-    GroundingCaptureResult, capture_grounding_for_spec_intake, capture_grounding_for_project_intake,
+    GroundingCaptureResult, capture_grounding_for_project_intake, capture_grounding_for_spec_intake,
 };
 
 // FORK-SPECIFIC: ACE integration - Re-export for testing
@@ -283,6 +293,12 @@ pub use chatwidget::spec_kit::ace_reflector::{
 // E.3/E.4: Re-export evidence archival and integrity modules for integration tests
 pub use chatwidget::spec_kit::evidence_archival;
 pub use chatwidget::spec_kit::evidence_integrity;
+
+// SPEC-KIT-900: Re-export headless pipeline execution for CLI automation
+pub use chatwidget::spec_kit::headless;
+pub use chatwidget::spec_kit::maieutic::{
+    DelegationBounds, ElicitationMode, MAIEUTIC_SPEC_VERSION, MaieuticSpec,
+};
 
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};

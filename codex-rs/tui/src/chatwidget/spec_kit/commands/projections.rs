@@ -95,9 +95,7 @@ fn execute_rebuild(widget: &mut ChatWidget, args: &[&str]) {
                     request = request.with_spec(args[i + 1].to_string());
                     i += 2;
                 } else {
-                    let lines = vec![
-                        Line::from("❌ --spec requires a SPEC-ID argument"),
-                    ];
+                    let lines = vec![Line::from("❌ --spec requires a SPEC-ID argument")];
                     widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Error));
                     return;
                 }
@@ -107,9 +105,7 @@ fn execute_rebuild(widget: &mut ChatWidget, args: &[&str]) {
                     request = request.with_project(args[i + 1].to_string());
                     i += 2;
                 } else {
-                    let lines = vec![
-                        Line::from("❌ --project requires a project ID argument"),
-                    ];
+                    let lines = vec![Line::from("❌ --project requires a project ID argument")];
                     widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Error));
                     return;
                 }
@@ -142,7 +138,10 @@ fn execute_rebuild(widget: &mut ChatWidget, args: &[&str]) {
         Line::from("🔄 Rebuilding projections from SoR..."),
         Line::from(""),
     ];
-    widget.history_push(PlainHistoryCell::new(lines.clone(), HistoryCellType::Notice));
+    widget.history_push(PlainHistoryCell::new(
+        lines.clone(),
+        HistoryCellType::Notice,
+    ));
 
     // Execute rebuild
     match rebuild_projections(&cwd, request) {
@@ -152,7 +151,10 @@ fn execute_rebuild(widget: &mut ChatWidget, args: &[&str]) {
             if result.dry_run {
                 lines.push(Line::from("📋 Dry-run: Would write files:"));
             } else {
-                lines.push(Line::from(format!("✅ Rebuilt {} files:", result.files_written.len())));
+                lines.push(Line::from(format!(
+                    "✅ Rebuilt {} files:",
+                    result.files_written.len()
+                )));
             }
             lines.push(Line::from(""));
 

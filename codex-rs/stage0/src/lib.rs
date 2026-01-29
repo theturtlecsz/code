@@ -32,14 +32,28 @@ pub mod vector;
 
 pub use config::{GateMode, MemoryBackend, Stage0Config, VectorIndexConfig};
 pub use dcc::{
-    CompileContextResult, DccContext, EnvCtx, ExplainScore, ExplainScores, Iqo, LocalMemoryClient,
-    LocalMemorySearchParams, LocalMemorySummary, MemoryCandidate, NoopVectorBackend,
-    // ADR-003: Product Knowledge types
-    ProductKnowledgeCandidate, ProductKnowledgeEvidencePack, ProductKnowledgeFilters,
-    ProductKnowledgeIntegrity, ProductKnowledgeItem, ProductKnowledgeQuery,
+    CompileContextResult,
+    DccContext,
+    EnvCtx,
+    ExplainScore,
+    ExplainScores,
+    Iqo,
+    LocalMemoryClient,
+    LocalMemorySearchParams,
+    LocalMemorySummary,
+    MemoryCandidate,
+    NoopVectorBackend,
     PRODUCT_KNOWLEDGE_CANONICAL_TYPES,
     // ADR-003 Prompt F: Pre-check types
-    PrecheckResult, precheck_product_knowledge,
+    PrecheckResult,
+    // ADR-003: Product Knowledge types
+    ProductKnowledgeCandidate,
+    ProductKnowledgeEvidencePack,
+    ProductKnowledgeFilters,
+    ProductKnowledgeIntegrity,
+    ProductKnowledgeItem,
+    ProductKnowledgeQuery,
+    precheck_product_knowledge,
 };
 pub use errors::{ErrorCategory, Result, Stage0Error};
 pub use eval::{

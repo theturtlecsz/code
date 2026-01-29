@@ -51,10 +51,6 @@ pub use adapter::{
     EmitContext, IngestResult, MemoryMeta, MemvidMemoryAdapter, UnifiedMemoryClient,
     create_memory_client, create_unified_memory_client,
 };
-pub use extractor::{
-    ExtractionError, ExtractionResult, extract_docx, extract_pdf, extract_text,
-    feature_for_extension, is_extraction_supported,
-};
 pub use capsule::{
     CapsuleConfig,
     CapsuleError,
@@ -82,6 +78,10 @@ pub use capsule::{
 pub use eval::{
     ABHarness, ABReport, EvalRunResult, GoldenQuery, golden_query_suite, golden_test_memories,
     run_ab_harness_and_save, run_ab_harness_synthetic,
+};
+pub use extractor::{
+    ExtractionError, ExtractionResult, extract_docx, extract_pdf, extract_text,
+    feature_for_extension, is_extraction_supported,
 };
 pub use lock::{LockMetadata, is_locked, lock_path_for};
 pub use policy_capture::{capture_and_store_policy, latest_policy, list_policies, load_policy};

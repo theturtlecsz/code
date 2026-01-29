@@ -12,7 +12,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use codex_tui::{
-    AceIntakeFrame, ReflectionResult, ACE_FRAME_SCHEMA_VERSION, ACE_INTAKE_FRAME_SCHEMA_VERSION,
+    ACE_FRAME_SCHEMA_VERSION, ACE_INTAKE_FRAME_SCHEMA_VERSION, AceIntakeFrame, ReflectionResult,
 };
 use schemars::schema_for;
 use std::path::PathBuf;
@@ -57,8 +57,8 @@ fn main() -> Result<()> {
     }
 
     let schema_path = args.out_dir.join("ace_frame.schema.v1.json");
-    let json =
-        serde_json::to_string_pretty(&schema_value).context("formatting ace_frame schema as pretty JSON")?;
+    let json = serde_json::to_string_pretty(&schema_value)
+        .context("formatting ace_frame schema as pretty JSON")?;
     std::fs::write(&schema_path, &json)
         .with_context(|| format!("writing ace_frame schema to {}", schema_path.display()))?;
 
@@ -94,8 +94,12 @@ fn main() -> Result<()> {
     let intake_schema_path = args.out_dir.join("ace_intake_frame.schema.v1.json");
     let intake_json = serde_json::to_string_pretty(&intake_schema_value)
         .context("formatting ace_intake_frame schema as pretty JSON")?;
-    std::fs::write(&intake_schema_path, &intake_json)
-        .with_context(|| format!("writing ace_intake_frame schema to {}", intake_schema_path.display()))?;
+    std::fs::write(&intake_schema_path, &intake_json).with_context(|| {
+        format!(
+            "writing ace_intake_frame schema to {}",
+            intake_schema_path.display()
+        )
+    })?;
 
     #[allow(clippy::print_stdout)]
     {

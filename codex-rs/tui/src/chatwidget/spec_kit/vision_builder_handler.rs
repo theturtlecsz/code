@@ -45,14 +45,18 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
             lines.push(Line::from(""));
 
             if let Some(ref nl_vision_path) = result.projections.nl_vision_path {
-                lines.push(Line::from(format!("   NL_VISION.md: {}", nl_vision_path.display())));
+                lines.push(Line::from(format!(
+                    "   NL_VISION.md: {}",
+                    nl_vision_path.display()
+                )));
             }
 
             // Check for pending projectnew flow
             if let Some(ref mut pending) = widget.pending_projectnew {
                 if pending.phase == super::commands::projectnew::ProjectNewPhase::VisionPending {
                     // Advance to project intake phase
-                    pending.phase = super::commands::projectnew::ProjectNewPhase::ProjectIntakePending;
+                    pending.phase =
+                        super::commands::projectnew::ProjectNewPhase::ProjectIntakePending;
                     let project_id = pending.project_id.clone();
                     let deep = pending.deep;
 
@@ -84,10 +88,7 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
             widget.request_redraw();
         }
         Err(e) => {
-            widget.history_push(new_error_event(format!(
-                "Vision persistence failed: {}",
-                e
-            )));
+            widget.history_push(new_error_event(format!("Vision persistence failed: {}", e)));
             widget.request_redraw();
 
             // If in projectnew flow, abort it
@@ -138,4 +139,3 @@ pub fn on_vision_builder_cancelled(widget: &mut ChatWidget) {
     ));
     widget.request_redraw();
 }
-

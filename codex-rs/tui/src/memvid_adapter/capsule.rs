@@ -27,8 +27,7 @@ use crate::memvid_adapter::lock::{CapsuleLock, LockError, LockMetadata, is_locke
 use crate::memvid_adapter::types::{
     BranchId, CapsuleExportedPayload, CapsuleImportedPayload, CheckpointId, CheckpointMetadata,
     ErrorEventPayload, EventType, GateDecisionPayload, IntakeCompletedPayload, LogicalUri,
-    MergeMode,
-    ModelCallEnvelopePayload, ObjectType, PatchApplyPayload, PhysicalPointer,
+    MergeMode, ModelCallEnvelopePayload, ObjectType, PatchApplyPayload, PhysicalPointer,
     RetrievalRequestPayload, RetrievalResponsePayload, RoutingDecisionPayload, RunEventEnvelope,
     ToolCallPayload, ToolResultPayload, UriIndex, UriIndexSnapshot,
 };
@@ -1684,7 +1683,13 @@ impl CapsuleHandle {
                 reason: format!("Failed to serialize IntakeCompleted payload: {}", e),
             })?;
 
-        self.emit_event(spec_id, run_id, None, EventType::IntakeCompleted, payload_json)
+        self.emit_event(
+            spec_id,
+            run_id,
+            None,
+            EventType::IntakeCompleted,
+            payload_json,
+        )
     }
 
     /// Emit a RoutingDecision event (SPEC-KIT-978).

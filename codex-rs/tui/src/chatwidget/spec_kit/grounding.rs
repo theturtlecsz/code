@@ -19,7 +19,7 @@ use std::sync::mpsc;
 use serde::{Deserialize, Serialize};
 
 use crate::memvid_adapter::{
-    CapsuleConfig, CapsuleHandle, ObjectType, DEFAULT_CAPSULE_RELATIVE_PATH, DEFAULT_WORKSPACE_ID,
+    CapsuleConfig, CapsuleHandle, DEFAULT_CAPSULE_RELATIVE_PATH, DEFAULT_WORKSPACE_ID, ObjectType,
 };
 use codex_core::architect::{HarvestResults, HarvesterConfig, run_harvest};
 use codex_stage0::project_intel::{ProjectSnapshot, ProjectSnapshotBuilder, SnapshotConfig};
@@ -211,13 +211,8 @@ pub async fn capture_grounding_artifacts(
     // ---------------------------------------------------------------------
     send_progress(GroundingProgress::PersistingToCapsule);
 
-    let result = persist_grounding_to_capsule(
-        cwd,
-        spec_id,
-        run_id,
-        &harvest_artifacts,
-        &intel_artifacts,
-    )?;
+    let result =
+        persist_grounding_to_capsule(cwd, spec_id, run_id, &harvest_artifacts, &intel_artifacts)?;
 
     let artifact_count = result.grounding_uris.len();
     send_progress(GroundingProgress::Complete { artifact_count });
@@ -421,8 +416,7 @@ fn persist_grounding_to_capsule(
         ..Default::default()
     };
 
-    let capsule =
-        CapsuleHandle::open(config).map_err(|e| format!("Capsule open failed: {}", e))?;
+    let capsule = CapsuleHandle::open(config).map_err(|e| format!("Capsule open failed: {}", e))?;
 
     let mut grounding_uris = Vec::new();
     let mut artifact_hashes = Vec::new();
@@ -612,9 +606,13 @@ mod tests {
     #[test]
     fn test_extract_artifact_name_from_uri() {
         let uri = "mv2://default/SPEC-123/abc/artifact/intake/grounding/harvest/churn_matrix.md";
-        assert_eq!(extract_artifact_name_from_uri(uri), "harvest/churn_matrix.md");
+        assert_eq!(
+            extract_artifact_name_from_uri(uri),
+            "harvest/churn_matrix.md"
+        );
 
-        let uri2 = "mv2://default/project/myproj/artifact/intake/grounding/project_intel/code_topology.md";
+        let uri2 =
+            "mv2://default/project/myproj/artifact/intake/grounding/project_intel/code_topology.md";
         assert_eq!(
             extract_artifact_name_from_uri(uri2),
             "project_intel/code_topology.md"

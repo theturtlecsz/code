@@ -740,10 +740,7 @@ impl LocalMemoryClient for MemvidMemoryAdapter {
         let mut candidates: Vec<(String, f64, Option<MemoryMeta>)> = Vec::new();
 
         // SPEC-KIT-980: Prepare as-of filtering if checkpoint specified
-        let as_of_checkpoint = params
-            .as_of
-            .as_ref()
-            .map(|s| CheckpointId::new(s.clone()));
+        let as_of_checkpoint = params.as_of.as_ref().map(|s| CheckpointId::new(s.clone()));
         let capsule_guard = self.capsule.read().await;
 
         for result in search_results {

@@ -19,15 +19,15 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::memvid_adapter::{
-    CapsuleConfig, CapsuleHandle, EventType, IntakeCompletedPayload, IntakeKind,
-    DEFAULT_CAPSULE_RELATIVE_PATH, DEFAULT_WORKSPACE_ID,
+    CapsuleConfig, CapsuleHandle, DEFAULT_CAPSULE_RELATIVE_PATH, DEFAULT_WORKSPACE_ID, EventType,
+    IntakeCompletedPayload, IntakeKind,
 };
 
 use super::error::SpecKitError;
 use super::intake::{DesignBrief, ProjectBrief};
 use super::intake_core::{
-    create_project_filesystem_projection, create_spec_filesystem_projections,
     CapsulePersistenceResult, ProjectCapsulePersistenceResult,
+    create_project_filesystem_projection, create_spec_filesystem_projections,
 };
 
 // =============================================================================
@@ -175,9 +175,8 @@ pub fn rebuild_projections(
         ..Default::default()
     };
 
-    let capsule = CapsuleHandle::open(config).map_err(|e| {
-        SpecKitError::RebuildError(format!("Failed to open capsule: {}", e))
-    })?;
+    let capsule = CapsuleHandle::open(config)
+        .map_err(|e| SpecKitError::RebuildError(format!("Failed to open capsule: {}", e)))?;
 
     // Step 2: Query IntakeCompleted events
     let all_events = capsule.list_events();
@@ -212,15 +211,24 @@ pub fn rebuild_projections(
         .collect();
 
     // Use latest spec intake per spec_id
-    let mut latest_spec_intakes: HashMap<String, (&crate::memvid_adapter::RunEventEnvelope, IntakeCompletedPayload)> = HashMap::new();
+    let mut latest_spec_intakes: HashMap<
+        String,
+        (
+            &crate::memvid_adapter::RunEventEnvelope,
+            IntakeCompletedPayload,
+        ),
+    > = HashMap::new();
     for (event, payload) in spec_events {
         if let Some(spec_id) = &payload.spec_id {
             // Keep latest by timestamp
             let should_replace = latest_spec_intakes
                 .get(spec_id)
-                .map(|(existing_event, _): &(&crate::memvid_adapter::RunEventEnvelope, IntakeCompletedPayload)| {
-                    event.timestamp > existing_event.timestamp
-                })
+                .map(
+                    |(existing_event, _): &(
+                        &crate::memvid_adapter::RunEventEnvelope,
+                        IntakeCompletedPayload,
+                    )| { event.timestamp > existing_event.timestamp },
+                )
                 .unwrap_or(true);
             if should_replace {
                 latest_spec_intakes.insert(spec_id.clone(), (event, payload));
@@ -273,14 +281,23 @@ pub fn rebuild_projections(
         .collect();
 
     // Use latest project intake per project_id
-    let mut latest_project_intakes: HashMap<String, (&crate::memvid_adapter::RunEventEnvelope, IntakeCompletedPayload)> = HashMap::new();
+    let mut latest_project_intakes: HashMap<
+        String,
+        (
+            &crate::memvid_adapter::RunEventEnvelope,
+            IntakeCompletedPayload,
+        ),
+    > = HashMap::new();
     for (event, payload) in project_events {
         if let Some(project_id) = &payload.project_id {
             let should_replace = latest_project_intakes
                 .get(project_id)
-                .map(|(existing_event, _): &(&crate::memvid_adapter::RunEventEnvelope, IntakeCompletedPayload)| {
-                    event.timestamp > existing_event.timestamp
-                })
+                .map(
+                    |(existing_event, _): &(
+                        &crate::memvid_adapter::RunEventEnvelope,
+                        IntakeCompletedPayload,
+                    )| { event.timestamp > existing_event.timestamp },
+                )
                 .unwrap_or(true);
             if should_replace {
                 latest_project_intakes.insert(project_id.clone(), (event, payload));
@@ -460,7 +477,9 @@ fn rebuild_project_projection(
         &capsule_result,
         payload.deep,
     )
-    .map_err(|e| SpecKitError::RebuildError(format!("Failed to create project projections: {}", e)))?;
+    .map_err(|e| {
+        SpecKitError::RebuildError(format!("Failed to create project projections: {}", e))
+    })?;
 
     // Return paths that were written
     let docs_dir = cwd.join("docs");
@@ -481,9 +500,8 @@ fn rebuild_vision_projection(
     dry_run: bool,
 ) -> Result<VisionRebuildDetails, SpecKitError> {
     // Connect to OverlayDb
-    let config = codex_stage0::Stage0Config::load().map_err(|e| {
-        SpecKitError::RebuildError(format!("Failed to load Stage0 config: {}", e))
-    })?;
+    let config = codex_stage0::Stage0Config::load()
+        .map_err(|e| SpecKitError::RebuildError(format!("Failed to load Stage0 config: {}", e)))?;
 
     let db = codex_stage0::OverlayDb::connect_and_init(&config).map_err(|e| {
         SpecKitError::RebuildError(format!("Failed to connect to OverlayDb: {}", e))
@@ -535,7 +553,7 @@ fn rebuild_vision_projection(
                 10 => guardrails.push(content),
                 9 => principles.push(content),
                 8 => goals.push(content), // Could be goal or non-goal; default to goal
-                _ => {} // Ignore non-constitution memories
+                _ => {}                   // Ignore non-constitution memories
             }
         }
     }
@@ -609,9 +627,8 @@ fn rebuild_vision_projection(
     }
 
     let vision_path = memory_dir.join("NL_VISION.md");
-    std::fs::write(&vision_path, &md).map_err(|e| {
-        SpecKitError::RebuildError(format!("Failed to write NL_VISION.md: {}", e))
-    })?;
+    std::fs::write(&vision_path, &md)
+        .map_err(|e| SpecKitError::RebuildError(format!("Failed to write NL_VISION.md: {}", e)))?;
 
     Ok(VisionRebuildDetails {
         nl_vision_path: Some(vision_path),

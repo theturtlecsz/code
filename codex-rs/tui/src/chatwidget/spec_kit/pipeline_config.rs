@@ -815,7 +815,10 @@ enabled_stages = ["implement", "validate", "unlock"]
             config.capsule.export.mode, "risk",
             "pipeline defaults should have capsule.export.mode='risk'"
         );
-        assert!(!config.capsule.export.high_risk, "high_risk should default to false");
+        assert!(
+            !config.capsule.export.high_risk,
+            "high_risk should default to false"
+        );
         assert!(
             !config.capsule.export.audit_handoff_required,
             "audit_handoff_required should default to false"
