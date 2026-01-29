@@ -1,7 +1,7 @@
 # Active Program (v1.0.0)
 
 **Scope**: 2026-Q1 Memvid-First Workbench + Model Policy v2
-**Last Updated**: 2026-01-28
+**Last Updated**: 2026-01-29
 **Status**: ACTIVE
 
 ***
@@ -111,6 +111,9 @@ The program is complete when:
    * Model I/O replay depends on capture mode (defaults: summary+hash)
    * Exports are encrypted + safe by default
 3. **Local-memory daemon is removed** only after parity gates are met
+4. **Tier 1 multi-surface parity is enforced** (D113/D133):
+   * Core automation semantics are available and consistent across TUI/CLI/headless (artifacts, gating, exit codes)
+   * Visualization may be TUI-first with CLI fallbacks
 
 ***
 
@@ -129,6 +132,7 @@ When in doubt: treat as ARCHIVE until `SPEC.md` or this file says otherwise.
 
 | Version | Date       | Changes                                                              |
 | ------- | ---------- | -------------------------------------------------------------------- |
+| v1.0.5  | 2026-01-29 | Document Tier 1 multi-surface parity as program DoD (D113/D133)      |
 | v1.0.4  | 2026-01-28 | SPEC-KIT-980 Completed (PDF/DOCX ingest, extraction, searchable)     |
 | v1.0.3  | 2026-01-28 | SPEC-KIT-980 Phase 1 started (feature gates + ingest CLI)            |
 | v1.0.2  | 2026-01-28 | SPEC-KIT-974 status updated to Completed                             |

@@ -1,7 +1,7 @@
 # SPEC.md - Codex-RS / Spec-Kit Task Tracking
 
 **Version:** V6 Docs Contract
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-29
 
 ***
 
@@ -77,6 +77,11 @@ These invariants MUST NOT be violated:
 * **Capture mode controls persistence** - `capture=none` runs in-memory only (D131)
 * **Ship requires persisted artifacts** - `capture=none` cannot ship (D132)
 
+### Multi-Surface Parity (D113/D133)
+
+* **Tier 1 commands have full parity across TUI/CLI/headless** - Artifacts, gating semantics, and exit codes must match
+* **Visualization is tiered** - UI/visualization may be TUI-first, but CLI must provide automation-critical coverage
+
 ### Headless Behavior (D133)
 
 * **Headless requires maieutic input** - `--maieutic <path>` or `--maieutic-answers <json>`
@@ -101,31 +106,32 @@ These invariants MUST NOT be violated:
 
 ### Completed (Recent)
 
-| Spec                | Completion Date | Key Deliverables                                                                        |
-| ------------------- | --------------- | --------------------------------------------------------------------------------------- |
-| SPEC-KIT-980        | 2026-01-28      | PDF/DOCX ingest with feature gates, text extraction, searchable capsule persistence     |
-| SPEC-KIT-974        | 2026-01-27      | Export/import, encryption, safe export, risk auto-export, GC enhancements               |
-| SPEC-KIT-979        | 2026-01-21      | Local-memory sunset phases, CLI flags, nightly parity workflow, import CLI, diagnostics |
-| SPEC-KIT-976        | 2026-01-19      | Logic Mesh graph foundation: Card/Edge schemas, CLI commands, 6 tests passing           |
-| SPEC-KIT-973        | 2026-01-19      | Time-travel TUI commands (timeline, asof, diff), label lookup, 3 tests passing          |
-| SPEC-KIT-978        | 2026-01-18      | Circuit breaker types, BreakerState/BreakerStateChangedPayload, EventType integration   |
-| SPEC-KIT-975        | 2026-01-18      | Replay timeline determinism, offline retrieval exactness, 5 replay tests passing        |
-| SPEC-KIT-971        | 2026-01-17      | Branch isolation, time-travel URI, checkpoints, merge at unlock, CLI complete           |
-| SPEC-KIT-977        | 2026-01-17      | PolicySnapshot capture, dual storage, CLI/TUI commands, drift detection                 |
-| SPEC-KIT-978 (core) | 2026-01-16      | JSON schema enforcement, bakeoff CLI, reflex routing decisions                          |
-| SPEC-KIT-972        | 2026-01-12      | Hybrid retrieval, A/B harness, HybridBackend                                            |
+| Spec                | Completion Date | Key Deliverables                                                                              |
+| ------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| SPEC-KIT-900        | 2026-01-29      | Headless CLI execution parity, real agent spawning via AGENT\_MANAGER, exit codes (D113/D133) |
+| SPEC-KIT-980        | 2026-01-28      | PDF/DOCX ingest with feature gates, text extraction, searchable capsule persistence           |
+| SPEC-KIT-974        | 2026-01-27      | Export/import, encryption, safe export, risk auto-export, GC enhancements                     |
+| SPEC-KIT-979        | 2026-01-21      | Local-memory sunset phases, CLI flags, nightly parity workflow, import CLI, diagnostics       |
+| SPEC-KIT-976        | 2026-01-19      | Logic Mesh graph foundation: Card/Edge schemas, CLI commands, 6 tests passing                 |
+| SPEC-KIT-973        | 2026-01-19      | Time-travel TUI commands (timeline, asof, diff), label lookup, 3 tests passing                |
+| SPEC-KIT-978        | 2026-01-18      | Circuit breaker types, BreakerState/BreakerStateChangedPayload, EventType integration         |
+| SPEC-KIT-975        | 2026-01-18      | Replay timeline determinism, offline retrieval exactness, 5 replay tests passing              |
+| SPEC-KIT-971        | 2026-01-17      | Branch isolation, time-travel URI, checkpoints, merge at unlock, CLI complete                 |
+| SPEC-KIT-977        | 2026-01-17      | PolicySnapshot capture, dual storage, CLI/TUI commands, drift detection                       |
+| SPEC-KIT-978 (core) | 2026-01-16      | JSON schema enforcement, bakeoff CLI, reflex routing decisions                                |
+| SPEC-KIT-972        | 2026-01-12      | Hybrid retrieval, A/B harness, HybridBackend                                                  |
 
 ### Blocked
 
-| Spec         | Blocker                                          | Unblocks |
-| ------------ | ------------------------------------------------ | -------- |
-| SPEC-KIT-900 | Agent spawning requires widget-independent infra | -        |
+| Spec   | Blocker | Unblocks |
+| ------ | ------- | -------- |
+| (none) | -       | -        |
 
 ### Unblocked (Recent)
 
-| Spec   | Resolution | Date |
-| ------ | ---------- | ---- |
-| (none) | -          | -    |
+| Spec         | Resolution                                                     | Date       |
+| ------------ | -------------------------------------------------------------- | ---------- |
+| SPEC-KIT-900 | Implemented via AGENT\_MANAGER + tokio block\_in\_place (D133) | 2026-01-29 |
 
 ***
 

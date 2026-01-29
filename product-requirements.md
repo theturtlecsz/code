@@ -1,6 +1,6 @@
 # Planner — Product Requirements (Spec‑Kit Workflows)
 
-> Status: v1.1 (2025-10-15) — Phase 3 complete: /speckit.\* namespace, tiered model strategy, GitHub quality commands
+> Status: v1.2 (2026-01-29) — Add Tier 1 multi-surface parity requirement (D113/D133)
 
 ## 1. Product Summary
 
@@ -160,6 +160,12 @@
 * Clarify: Identify and resolve requirement ambiguities
 * Analyze: Check cross-artifact consistency (PRD ↔ plan ↔ tasks), auto-fix issues
 * Checklist: Score requirement quality (testability, clarity, completeness)
+
+**FR-7: Multi-Surface Parity (TUI/CLI/Headless)**
+
+* Tier 1 automation features have full parity across TUI, CLI, and headless execution (see D113/D133)
+* CLI must support non-interactive execution suitable for CI/CD (same artifacts, gates, and exit codes as TUI)
+* Visualization may be TUI-first, but CLI must provide fallbacks for automation-critical workflows
 
 ## 6. Non-Functional Requirements
 
