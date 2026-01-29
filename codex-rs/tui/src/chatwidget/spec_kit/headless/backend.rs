@@ -39,17 +39,25 @@ pub trait AgentBackend: Send + Sync {
     ) -> Result<String, HeadlessError>;
 }
 
-/// Map user-facing agent names to config names
+/// Resolve a user-facing agent name (from prompts.json) to a configured agent name.
 ///
-/// This mapping mirrors the one in agent_orchestrator.rs for consistency.
-fn map_agent_name_to_config(agent_name: &str) -> String {
-    match agent_name {
-        "gemini" => "gemini_flash".to_string(),
-        "claude" => "claude_haiku".to_string(),
-        "gpt_pro" => "gpt_pro".to_string(),
-        "gpt_codex" => "gpt_codex".to_string(),
-        _ => agent_name.to_string(), // fallback to raw name for custom configs
+/// Resolution order:
+/// 1) Exact match on `AgentConfig.name`
+/// 2) Match on `AgentConfig.canonical_name` (preferred for portability)
+/// 3) Fallback to the requested name (lets downstream produce a clear error)
+fn resolve_agent_config_name(agent_name: &str, agent_configs: &[AgentConfig]) -> String {
+    if agent_configs.iter().any(|cfg| cfg.name == agent_name) {
+        return agent_name.to_string();
     }
+
+    if let Some(cfg) = agent_configs
+        .iter()
+        .find(|cfg| cfg.canonical_name.as_deref() == Some(agent_name))
+    {
+        return cfg.name.clone();
+    }
+
+    agent_name.to_string()
 }
 
 /// Real backend using codex_core::agent_tool::AGENT_MANAGER
@@ -77,7 +85,7 @@ impl AgentBackend for DefaultAgentBackend {
         stage: &str,
         timeout: Duration,
     ) -> Result<String, HeadlessError> {
-        let config_name = map_agent_name_to_config(agent_name);
+        let config_name = resolve_agent_config_name(agent_name, &self.agent_configs);
         let batch_id = format!("headless-{}-{}", spec_id, stage);
         let agent_configs = self.agent_configs.clone();
 

@@ -3793,8 +3793,9 @@ fn test_run_without_execute_is_validation_only() -> Result<()> {
 #[test]
 fn test_run_with_execute_invokes_headless_runner() -> Result<()> {
     // SPEC-KIT-900: With --execute, run should invoke the headless runner
-    // Currently returns exit code 3 (INFRA_ERROR) because agent spawning is not implemented
-    // (escalated to architect - see SPEC-KIT-930)
+    //
+    // This test intentionally runs with an empty CODEX_HOME config, so execution fails
+    // deterministically with INFRA_ERROR (3) due to missing agent configuration.
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
 
@@ -3829,20 +3830,19 @@ fn test_run_with_execute_invokes_headless_runner() -> Result<()> {
         serde_json::to_string_pretty(&json).unwrap_or_default()
     );
 
-    // SPEC-KIT-900: Until agent spawning is implemented, execute returns exit code 3
-    // This prevents false-green status when no artifacts are produced
+    // SPEC-KIT-900: Execute path should fail fast and honestly when agent config is missing
     let exit_code = json.get("exit_code").and_then(|v| v.as_i64());
     assert_eq!(
         exit_code,
         Some(3),
-        "Execute should return exit code 3 (INFRA_ERROR) until agent spawning is implemented"
+        "Execute should return exit code 3 (INFRA_ERROR) when agent config is missing"
     );
 
-    // Error should mention agent spawning or async context (SPEC-KIT-930)
+    // Error should mention missing agent config (deterministic in this test harness)
     let error = json.get("error").and_then(|v| v.as_str()).unwrap_or("");
     assert!(
-        error.contains("SPEC-KIT-930") || error.contains("async context"),
-        "Error should reference SPEC-KIT-930 or async context, got: {}",
+        error.contains("Agent config") && error.contains("config.toml"),
+        "Error should mention missing agent config, got: {}",
         error
     );
 
@@ -3852,7 +3852,7 @@ fn test_run_with_execute_invokes_headless_runner() -> Result<()> {
 #[test]
 fn test_execute_and_validation_have_different_outputs() -> Result<()> {
     // SPEC-KIT-900: Verify that execute and validation paths produce different outputs
-    // Execute path now returns exit code 3 (agent spawning not implemented)
+    // Execute path returns exit code 3 here because CODEX_HOME has no agent config.
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
 
@@ -3874,7 +3874,7 @@ fn test_execute_and_validation_have_different_outputs() -> Result<()> {
         ])
         .output()?;
 
-    // Run with --execute (will return error until agent spawning implemented)
+    // Run with --execute (will return error due to missing agent config in this test harness)
     let mut cmd_exec = codex_command(codex_home.path(), repo_root.path())?;
     let output_exec = cmd_exec
         .args([
@@ -3913,7 +3913,7 @@ fn test_execute_and_validation_have_different_outputs() -> Result<()> {
     assert_eq!(
         exec_exit_code,
         Some(3),
-        "Execute should return exit code 3 until agent spawning is implemented"
+        "Execute should return exit code 3 when agent config is missing"
     );
 
     // They should be different
