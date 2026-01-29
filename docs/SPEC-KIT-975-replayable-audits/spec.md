@@ -1,8 +1,11 @@
 # SPEC-KIT-975 — Replayable Audits v1 (Deterministic)
 
 **Date:** 2026-01-18
-**Status:** COMPLETE
+**Status:** COMPLETED
+**Completed:** 2026-01-18
 **Owner (role):** Platform+Eval Eng
+
+> **Implementation status:** Canonical completion tracker: `codex-rs/SPEC.md` Completed (Recent).
 
 ## Summary
 

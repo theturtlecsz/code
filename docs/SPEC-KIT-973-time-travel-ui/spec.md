@@ -1,8 +1,11 @@
 # SPEC-KIT-973 — Time‑Travel UX (Timeline / As‑Of / Diff)
 
 **Date:** 2026-01-10\
-**Status:** DRAFT\
+**Status:** COMPLETED\
+**Completed:** 2026-01-19\
 **Owner (role):** TUI Eng
+
+> **Implementation status:** Canonical completion tracker: `codex-rs/SPEC.md` Completed (Recent).
 
 ## Summary
 
