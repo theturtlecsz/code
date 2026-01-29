@@ -1,9 +1,12 @@
 # SPEC-KIT-979 — Migration: local-memory → Memvid + Sunset
 
 **Date:** 2026-01-20
-**Status:** READY FOR IMPLEMENTATION
+**Status:** COMPLETED
+**Completed:** 2026-01-21
 **Owner (role):** Platform Eng
 **Version:** 2.0
+
+> **Implementation status:** Canonical completion tracker: `codex-rs/SPEC.md` Completed (Recent).
 
 ***
 
