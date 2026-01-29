@@ -1,8 +1,11 @@
 # SPEC-KIT-974 — Capsule Export/Import + Encryption + Safe Export
 
 **Date:** 2026-01-10\
-**Status:** DRAFT\
+**Status:** COMPLETED\
+**Completed:** 2026-01-27\
 **Owner (role):** Platform+Security Eng
+
+> **Implementation status:** Canonical completion tracker: `codex-rs/SPEC.md` Completed (Recent).
 
 ## Summary
 
