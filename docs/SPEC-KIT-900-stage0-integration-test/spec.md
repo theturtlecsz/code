@@ -5,7 +5,7 @@
 **Session**: P87
 **Type**: Integration Test / Validation
 
----
+***
 
 ## 1. Overview
 
@@ -17,14 +17,14 @@ SPEC-KIT-900 provides a reproducible integration test for the Stage 0 pipeline u
 2. `/speckit.new` spec creation
 3. `/speckit.auto` full 6-stage pipeline with Stage 0 context injection
 4. Tier 2 (NotebookLM) synthesis caching and Divine Truth generation
-5. TASK_BRIEF.md compilation via DCC
+5. TASK\_BRIEF.md compilation via DCC
 
 ### 1.2 Benchmark Project
 
-- **Name**: ferris-says
-- **Source**: https://github.com/mgeisler/ferris-says
-- **Description**: A simple Rust library that prints text with Ferris (the Rust mascot) in ASCII art speech bubbles
-- **Why this project**: Small, well-documented, pure Rust, no external dependencies, easy to understand
+* **Name**: ferris-says
+* **Source**: <https://github.com/mgeisler/ferris-says>
+* **Description**: A simple Rust library that prints text with Ferris (the Rust mascot) in ASCII art speech bubbles
+* **Why this project**: Small, well-documented, pure Rust, no external dependencies, easy to understand
 
 ### 1.3 Test Location
 
@@ -34,30 +34,30 @@ SPEC-KIT-900 provides a reproducible integration test for the Stage 0 pipeline u
 └── ferris-clone/            # Spec-kit scaffolded copy (our test subject)
 ```
 
----
+***
 
 ## 2. Test Objectives
 
 ### 2.1 Stage 0 Validation Points
 
-| Checkpoint | Description | Validation |
-|------------|-------------|------------|
-| DCC_TASK_BRIEF | TASK_BRIEF.md generated with context | File exists, >500 chars |
-| DIVINE_TRUTH | Divine Truth from NotebookLM | Contains 5 sections |
-| CACHE_BEHAVIOR | Tier 2 cache hit on repeat | `cache_hit: true` on 2nd run |
-| CONTEXT_INJECTION | Stage 0 context in agent prompts | Agents log "Stage 0: Shadow Context" |
-| HYBRID_RETRIEVAL | Memory + Code context combined | Both sections in TASK_BRIEF |
+| Checkpoint         | Description                           | Validation                           |
+| ------------------ | ------------------------------------- | ------------------------------------ |
+| DCC\_TASK\_BRIEF   | TASK\_BRIEF.md generated with context | File exists, >500 chars              |
+| DIVINE\_TRUTH      | Divine Truth from NotebookLM          | Contains 5 sections                  |
+| CACHE\_BEHAVIOR    | Tier 2 cache hit on repeat            | `cache_hit: true` on 2nd run         |
+| CONTEXT\_INJECTION | Stage 0 context in agent prompts      | Agents log "Stage 0: Shadow Context" |
+| HYBRID\_RETRIEVAL  | Memory + Code context combined        | Both sections in TASK\_BRIEF         |
 
 ### 2.2 Pipeline Stages to Validate
 
-1. **SPECIFY (Stage 1)**: Agents receive Divine Truth + TASK_BRIEF
+1. **SPECIFY (Stage 1)**: Agents receive Divine Truth + TASK\_BRIEF
 2. **TASKS (Stage 2)**: Task breakdown informed by historical context
 3. **IMPLEMENT (Stage 3)**: Code generation with architectural guardrails
 4. **VALIDATE (Stage 4)**: Tests pass, lint clean
 5. **AUDIT (Stage 5)**: Security/quality review
 6. **UNLOCK (Stage 6)**: Ready to merge
 
----
+***
 
 ## 3. Test Procedure
 
@@ -92,15 +92,15 @@ ls docs/ templates/ SPEC.md CLAUDE.md
 
 ### 3.4 Validation Checklist
 
-- [ ] Stage 0 runs before Stage 1
-- [ ] TASK_BRIEF.md written to evidence/
-- [ ] DIVINE_TRUTH.md written to evidence/
-- [ ] Agents receive combined_context_md()
-- [ ] All 6 stages complete successfully
-- [ ] Tests pass (cargo test)
-- [ ] Lints pass (cargo clippy)
+* [ ] Stage 0 runs before Stage 1
+* [ ] TASK\_BRIEF.md written to evidence/
+* [ ] DIVINE\_TRUTH.md written to evidence/
+* [ ] Agents receive combined\_context\_md()
+* [ ] All 6 stages complete successfully
+* [ ] Tests pass (cargo test)
+* [ ] Lints pass (cargo clippy)
 
----
+***
 
 ## 4. Expected Outputs
 
@@ -126,35 +126,69 @@ docs/SPEC-002-add-color-support/evidence/
 4. Risks & Open Questions - Terminal compatibility
 5. Suggested Causal Links - Related memories
 
----
+***
 
 ## 5. Success Criteria
 
-| Criterion | Required | Measured |
-|-----------|----------|----------|
-| Stage 0 completes | Yes | Logs show Stage0Complete |
-| Divine Truth generated | Yes | 5 sections present |
-| Cache hit on 2nd run | Yes | `cache_hit: true` |
-| All stages complete | Yes | UNLOCK_synthesis.md exists |
-| Tests pass | Yes | cargo test exit 0 |
-| No regressions | Yes | Existing tests still pass |
+| Criterion              | Required | Measured                    |
+| ---------------------- | -------- | --------------------------- |
+| Stage 0 completes      | Yes      | Logs show Stage0Complete    |
+| Divine Truth generated | Yes      | 5 sections present          |
+| Cache hit on 2nd run   | Yes      | `cache_hit: true`           |
+| All stages complete    | Yes      | UNLOCK\_synthesis.md exists |
+| Tests pass             | Yes      | cargo test exit 0           |
+| No regressions         | Yes      | Existing tests still pass   |
 
----
+***
 
 ## 6. Session Log
 
-| Session | Date | Status | Notes |
-|---------|------|--------|-------|
-| P87 | 2025-12-01 | IN-PROGRESS | Initial setup, verification of Stage 0 flow |
+| Session | Date       | Status      | Notes                                       |
+| ------- | ---------- | ----------- | ------------------------------------------- |
+| P87     | 2025-12-01 | IN-PROGRESS | Initial setup, verification of Stage 0 flow |
+| P88     | 2026-01-29 | BLOCKED     | Headless CLI validation - see notes below   |
 
----
+### P88 Session Notes (2026-01-29)
+
+**Objective**: Execute harness steps using headless CLI equivalents
+
+**Results**:
+
+| Step                | Status    | Evidence                                               |
+| ------------------- | --------- | ------------------------------------------------------ |
+| Benchmark scaffold  | ✅ PASS    | `/home/thetu/benchmark/ferris-clone/` created          |
+| Spec creation (CLI) | ✅ PASS    | SPEC-KIT-001 created via `code speckit new --headless` |
+| Pipeline execution  | ❌ BLOCKED | CLI stage commands are validation-only (dry-run)       |
+
+**Critical Blocker**: No headless CLI equivalent for `/speckit.auto`
+
+The `code speckit run --execute` and individual stage commands (`plan`, `tasks`, etc.) are validation-only. The help explicitly states: "Use --no-dry-run to actually trigger agent execution (TUI only)".
+
+**Verified CLI capabilities**:
+
+* `code speckit new --headless --answers <json>` - Works, creates spec + intake artifacts
+* `code speckit plan/tasks/etc --spec <ID>` - Validation only, no agent execution
+* `code speckit run --from --to --execute` - Validation only despite --execute flag
+
+**Smallest Fix Proposal**:
+Add `--execute` support to individual stage commands for headless agent execution, or create a `code speckit auto` command that chains all stages with actual execution.
+
+**Artifacts Created**:
+
+* `/home/thetu/benchmark/ferris-clone/docs/SPEC-KIT-001-add-color-support-to-ferris-says-output-using-ansi-escape/`
+  * `spec.md` (1644 bytes)
+  * `PRD.md` (777 bytes)
+  * `INTAKE.md` (913 bytes)
+* Capsule intake artifacts persisted (see capsule URIs in spec creation output)
+
+***
 
 ## 7. Related
 
-- **SPEC-KIT-102R**: Stage 0 implementation report (authoritative reference)
-- **SPEC-KIT-102**: Original NotebookLM integration spec
-- **docs/HANDOFF-P87.md**: Session context
+* **SPEC-KIT-102R**: Stage 0 implementation report (authoritative reference)
+* **SPEC-KIT-102**: Original NotebookLM integration spec
+* **docs/HANDOFF-P87.md**: Session context
 
----
+***
 
 *This spec serves as a reusable integration test harness for validating Stage 0 pipeline changes.*

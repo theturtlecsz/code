@@ -117,9 +117,9 @@ These invariants MUST NOT be violated:
 
 ### Blocked
 
-| Spec   | Blocker | Unblocks |
-| ------ | ------- | -------- |
-| (none) | -       | -        |
+| Spec         | Blocker                                                             | Unblocks           |
+| ------------ | ------------------------------------------------------------------- | ------------------ |
+| SPEC-KIT-900 | CLI stage commands are validation-only (TUI required for execution) | Stage 0 CI testing |
 
 ***
 
