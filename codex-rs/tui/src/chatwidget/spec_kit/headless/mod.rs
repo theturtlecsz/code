@@ -19,12 +19,18 @@
 //! - Maieutic input is mandatory (exit 10 if missing)
 //! - All decisions must be pre-supplied via maieutic answers
 
+mod backend;
 mod event_pump;
 pub mod output;
+mod prompt_builder;
 mod runner;
 
+#[cfg(test)]
+pub use backend::MockAgentBackend;
+pub use backend::{AgentBackend, DefaultAgentBackend};
 pub use event_pump::{HeadlessEventPump, wait_for_agents};
 pub use output::{HeadlessOutput, format_result_json};
+pub use prompt_builder::{build_headless_prompt, get_agents_for_stage};
 pub use runner::{
     HeadlessConfig, HeadlessError, HeadlessPipelineRunner, HeadlessResult, exit_codes,
 };

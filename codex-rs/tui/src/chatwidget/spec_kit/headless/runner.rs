@@ -10,19 +10,18 @@
 //! - 11: NEEDS_APPROVAL (checkpoint requires human)
 //! - 13: PROMPT_ATTEMPTED (any prompt attempt in headless mode)
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use codex_spec_kit::Stage;
-use serde::{Deserialize, Serialize};
 
-use super::event_pump::AgentResult;
+use super::backend::{AgentBackend, DefaultAgentBackend};
 use super::output::{HeadlessOutput, Stage0Info};
+use super::prompt_builder::{build_headless_prompt, get_agents_for_stage};
 use crate::chatwidget::spec_kit::maieutic::MaieuticSpec;
 use crate::chatwidget::spec_kit::stage0_integration::{
-    Stage0ExecutionConfig, Stage0ExecutionResult, Stage0Progress, spawn_stage0_async,
+    Stage0ExecutionConfig, Stage0ExecutionResult, spawn_stage0_async,
 };
 
 /// Exit codes for headless execution (D133)
@@ -217,6 +216,8 @@ pub struct HeadlessPipelineRunner {
     pub planner_config: codex_core::config::Config,
     /// Working directory
     pub cwd: PathBuf,
+    /// Agent execution backend (mockable for tests)
+    backend: Box<dyn AgentBackend>,
 
     // Internal state
     stages_completed: Vec<String>,
@@ -224,7 +225,11 @@ pub struct HeadlessPipelineRunner {
 }
 
 impl HeadlessPipelineRunner {
-    /// Create a new headless runner
+    /// Create a new headless runner with default backend
+    ///
+    /// Uses `DefaultAgentBackend` which currently returns an error for real
+    /// agent spawning (pending SPEC-KIT-930). For tests, use `new_with_backend()`
+    /// with a `MockAgentBackend`.
     pub fn new(
         spec_id: String,
         from_stage: Stage,
@@ -234,6 +239,32 @@ impl HeadlessPipelineRunner {
         planner_config: codex_core::config::Config,
         cwd: PathBuf,
     ) -> Self {
+        let backend = Box::new(DefaultAgentBackend::new(Vec::new()));
+        Self::new_with_backend(
+            spec_id,
+            from_stage,
+            to_stage,
+            maieutic_spec,
+            config,
+            planner_config,
+            cwd,
+            backend,
+        )
+    }
+
+    /// Create a new headless runner with custom backend
+    ///
+    /// Use this constructor for testing with a mock backend.
+    pub fn new_with_backend(
+        spec_id: String,
+        from_stage: Stage,
+        to_stage: Stage,
+        maieutic_spec: MaieuticSpec,
+        config: HeadlessConfig,
+        planner_config: codex_core::config::Config,
+        cwd: PathBuf,
+        backend: Box<dyn AgentBackend>,
+    ) -> Self {
         Self {
             spec_id,
             from_stage,
@@ -242,6 +273,7 @@ impl HeadlessPipelineRunner {
             config,
             planner_config,
             cwd,
+            backend,
             stages_completed: Vec::new(),
             stage0_result: None,
         }
@@ -389,17 +421,149 @@ impl HeadlessPipelineRunner {
 
     /// Execute a stage (spawn agents, wait for completion)
     fn execute_stage(&self, stage: &Stage) -> Result<(), HeadlessError> {
-        // ESCALATED: Agent spawning requires widget-independent infrastructure
-        // Return error to prevent false-green tests and status claims
-        // Tracked in SPEC-KIT-930 (ARB Pass 2)
-        tracing::warn!(
-            stage = %stage.as_str(),
-            "Stage execution not implemented (escalated to architect)"
+        let stage_name = stage.as_str();
+
+        // Get agents for this stage from prompts.json
+        let agents = get_agents_for_stage(&self.cwd, stage_name)?;
+
+        tracing::info!(
+            stage = %stage_name,
+            agents = ?agents,
+            "Executing stage with {} agents",
+            agents.len()
         );
-        Err(HeadlessError::InfraError(
-            "Agent spawning not implemented - requires architectural decision (SPEC-KIT-930)"
-                .to_string(),
-        ))
+
+        // Get Stage 0 context if available (combined Divine Truth + Task Brief)
+        let stage0_context_owned: Option<String> = self
+            .stage0_result
+            .as_ref()
+            .and_then(|r| r.result.as_ref())
+            .map(|s0| s0.combined_context_md());
+        let stage0_context = stage0_context_owned.as_deref();
+
+        // Execute each agent and collect outputs
+        let mut outputs: Vec<(String, String)> = Vec::new();
+        for agent_name in &agents {
+            // Build prompt for this agent
+            let prompt = build_headless_prompt(
+                &self.spec_id,
+                stage_name,
+                agent_name,
+                &self.cwd,
+                stage0_context,
+            )?;
+
+            tracing::info!(
+                agent = %agent_name,
+                prompt_len = prompt.len(),
+                "Running agent"
+            );
+
+            // Run agent via backend
+            let output = self.backend.run_stage_agent(
+                agent_name,
+                prompt,
+                &self.spec_id,
+                stage_name,
+                self.config.agent_timeout,
+            )?;
+
+            tracing::info!(
+                agent = %agent_name,
+                output_len = output.len(),
+                "Agent completed"
+            );
+
+            outputs.push((agent_name.clone(), output));
+        }
+
+        // Write stage output file
+        self.write_stage_output(stage, &outputs)?;
+
+        Ok(())
+    }
+
+    /// Write stage outputs to the spec directory
+    fn write_stage_output(
+        &self,
+        stage: &Stage,
+        outputs: &[(String, String)],
+    ) -> Result<(), HeadlessError> {
+        let stage_name = stage.as_str();
+
+        // Determine output filename
+        let filename = match stage {
+            Stage::Plan => "plan.md",
+            Stage::Tasks => "tasks.md",
+            Stage::Implement => "implement.md",
+            Stage::Validate => "validate.md",
+            Stage::Audit => "audit.md",
+            Stage::Unlock => "unlock.md",
+            _ => {
+                tracing::warn!(stage = %stage_name, "Unknown stage, skipping output write");
+                return Ok(());
+            }
+        };
+
+        // Find spec directory
+        let spec_dir = self.find_spec_dir()?;
+
+        // Format output as markdown
+        let content = format!(
+            "# {} Stage Output\n\n_Generated by headless pipeline execution_\n\n{}\n",
+            stage_name,
+            outputs
+                .iter()
+                .map(|(agent, output)| {
+                    format!("## Agent: {}\n\n```json\n{}\n```\n", agent, output)
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+
+        // Write output file
+        let output_path = spec_dir.join(filename);
+        std::fs::write(&output_path, &content).map_err(|e| {
+            HeadlessError::InfraError(format!("Failed to write {}: {}", output_path.display(), e))
+        })?;
+
+        tracing::info!(
+            path = %output_path.display(),
+            size = content.len(),
+            "Wrote stage output"
+        );
+
+        Ok(())
+    }
+
+    /// Find the spec directory
+    fn find_spec_dir(&self) -> Result<PathBuf, HeadlessError> {
+        // Try common patterns
+        let candidates = [
+            self.cwd.join("docs").join(&self.spec_id),
+            self.cwd.join(&self.spec_id),
+        ];
+
+        for candidate in &candidates {
+            if candidate.exists() && candidate.is_dir() {
+                return Ok(candidate.clone());
+            }
+        }
+
+        // Try fuzzy matching
+        if let Ok(entries) = std::fs::read_dir(self.cwd.join("docs")) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with(&self.spec_id) {
+                    return Ok(entry.path());
+                }
+            }
+        }
+
+        Err(HeadlessError::InfraError(format!(
+            "Could not find spec directory for {}",
+            self.spec_id
+        )))
     }
 
     /// Run quality gate for a stage
@@ -464,9 +628,11 @@ impl HeadlessPipelineRunner {
 
 #[cfg(test)]
 mod tests {
+    use super::super::backend::MockAgentBackend;
     use super::*;
     use crate::chatwidget::spec_kit::maieutic::{DelegationBounds, ElicitationMode};
-    use chrono::Utc;
+    use std::collections::HashMap;
+    use tempfile::TempDir;
 
     fn test_maieutic() -> MaieuticSpec {
         MaieuticSpec::new(
@@ -477,9 +643,50 @@ mod tests {
             vec!["Tests pass".to_string()],
             vec![],
             DelegationBounds::default(),
-            ElicitationMode::Headless,
+            ElicitationMode::PreSupplied,
             0,
         )
+    }
+
+    /// Setup test directory structure with spec and prompts.json
+    fn setup_test_spec(temp: &TempDir, spec_id: &str) {
+        // Create spec directory
+        let spec_dir = temp.path().join("docs").join(spec_id);
+        std::fs::create_dir_all(&spec_dir).unwrap();
+
+        // Create spec.md
+        std::fs::write(
+            spec_dir.join("spec.md"),
+            format!(
+                "# {}\n\n## Overview\n\nTest spec for headless execution.\n",
+                spec_id
+            ),
+        )
+        .unwrap();
+
+        // Create prompts.json
+        let prompts_dir = temp.path().join("docs/spec-kit");
+        std::fs::create_dir_all(&prompts_dir).unwrap();
+        std::fs::write(
+            prompts_dir.join("prompts.json"),
+            r#"{
+                "spec-plan": {
+                    "version": "test",
+                    "gemini": {
+                        "role": "Researcher",
+                        "prompt": "Research ${SPEC_ID}.\n\n${CONTEXT}"
+                    }
+                },
+                "spec-tasks": {
+                    "version": "test",
+                    "gemini": {
+                        "role": "Researcher",
+                        "prompt": "Research tasks for ${SPEC_ID}.\n\n${CONTEXT}"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -514,5 +721,126 @@ mod tests {
         );
         assert_eq!(result.exit_code, 10);
         assert!(result.error.is_some());
+    }
+
+    /// Create a minimal Config for testing purposes
+    fn create_test_config(codex_home: &std::path::Path) -> codex_core::config::Config {
+        use codex_core::config::{Config, ConfigOverrides};
+
+        // Create minimal config.toml
+        let config_path = codex_home.join("config.toml");
+        std::fs::write(&config_path, "").unwrap();
+
+        // Set CODEX_HOME env var temporarily and load config
+        // SAFETY: This is only used in tests and we're not running tests in parallel
+        // that would race on this env var
+        unsafe {
+            std::env::set_var("CODEX_HOME", codex_home);
+        }
+        Config::load_with_cli_overrides(vec![], ConfigOverrides::default())
+            .expect("Failed to load test config")
+    }
+
+    #[test]
+    fn test_execute_stage_with_mock_backend() {
+        // Setup test directory
+        let temp = TempDir::new().unwrap();
+        setup_test_spec(&temp, "TEST-001");
+
+        // Create a temp CODEX_HOME for config
+        let codex_home = TempDir::new().unwrap();
+        let planner_config = create_test_config(codex_home.path());
+
+        // Create mock backend with plan response
+        let mut responses = HashMap::new();
+        responses.insert(
+            "plan".to_string(),
+            r#"{"stage":"spec-plan","agent":"mock","research_summary":[]}"#.to_string(),
+        );
+        let backend = MockAgentBackend::with_responses(responses);
+
+        // Create runner with mock backend
+        let mut runner = HeadlessPipelineRunner::new_with_backend(
+            "TEST-001".to_string(),
+            Stage::Plan,
+            Stage::Plan,
+            test_maieutic(),
+            HeadlessConfig {
+                stage0_timeout: Duration::from_secs(1),
+                agent_timeout: Duration::from_secs(30),
+                quality_gates_enabled: false,
+                json_output: true,
+            },
+            planner_config,
+            temp.path().to_path_buf(),
+            Box::new(backend),
+        );
+
+        // Execute just the stage (skip Stage0 by manually calling execute_stage)
+        let stage = Stage::Plan;
+        let result = runner.execute_stage(&stage);
+
+        // Verify stage execution succeeded
+        assert!(
+            result.is_ok(),
+            "execute_stage failed: {:?}",
+            result.unwrap_err()
+        );
+
+        // Verify plan.md was created
+        let plan_md = temp.path().join("docs/TEST-001/plan.md");
+        assert!(
+            plan_md.exists(),
+            "plan.md should exist at {}",
+            plan_md.display()
+        );
+
+        // Verify plan.md contains agent output
+        let plan_content = std::fs::read_to_string(&plan_md).unwrap();
+        assert!(
+            plan_content.contains("spec-plan"),
+            "plan.md should contain agent output"
+        );
+        assert!(
+            plan_content.contains("gemini"),
+            "plan.md should contain agent name"
+        );
+    }
+
+    #[test]
+    fn test_execute_stage_returns_error_when_no_mock_response() {
+        // Setup test directory
+        let temp = TempDir::new().unwrap();
+        setup_test_spec(&temp, "TEST-002");
+
+        // Create a temp CODEX_HOME for config
+        let codex_home = TempDir::new().unwrap();
+        let planner_config = create_test_config(codex_home.path());
+
+        // Create mock backend WITHOUT plan response
+        let backend = MockAgentBackend::with_responses(HashMap::new());
+
+        let mut runner = HeadlessPipelineRunner::new_with_backend(
+            "TEST-002".to_string(),
+            Stage::Plan,
+            Stage::Plan,
+            test_maieutic(),
+            HeadlessConfig::default(),
+            planner_config,
+            temp.path().to_path_buf(),
+            Box::new(backend),
+        );
+
+        // Execute stage (should fail because no mock response)
+        let result = runner.execute_stage(&Stage::Plan);
+
+        // Verify it failed with InfraError
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, HeadlessError::InfraError(_)),
+            "Expected InfraError, got {:?}",
+            err
+        );
     }
 }

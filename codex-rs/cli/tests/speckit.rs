@@ -3535,7 +3535,7 @@ fn capsule_custom_path_works() -> Result<()> {
 // HEADLESS MODE TESTS (SPEC-KIT-920)
 // =============================================================================
 
-/// Create a SPEC directory with PRD.md
+/// Create a SPEC directory with PRD.md, spec.md, and prompts.json
 fn setup_spec_with_prd(repo_root: &Path, spec_id: &str) -> std::io::Result<std::path::PathBuf> {
     let spec_dir = repo_root.join("docs").join(spec_id);
     fs::create_dir_all(&spec_dir)?;
@@ -3543,6 +3543,31 @@ fn setup_spec_with_prd(repo_root: &Path, spec_id: &str) -> std::io::Result<std::
         spec_dir.join("PRD.md"),
         "# Test SPEC\n\n## Requirements\n\nTest requirements\n",
     )?;
+    fs::write(
+        spec_dir.join("spec.md"),
+        &format!(
+            "# {}\n\n## Overview\n\nTest spec for headless execution.\n",
+            spec_id
+        ),
+    )?;
+
+    // Create minimal prompts.json for headless tests
+    let prompts_dir = repo_root.join("docs/spec-kit");
+    fs::create_dir_all(&prompts_dir)?;
+    fs::write(
+        prompts_dir.join("prompts.json"),
+        r#"{
+            "spec-plan": {
+                "version": "test",
+                "gemini": {"role": "Test", "prompt": "Test ${SPEC_ID}\n\n${CONTEXT}"}
+            },
+            "spec-tasks": {
+                "version": "test",
+                "gemini": {"role": "Test", "prompt": "Test ${SPEC_ID}\n\n${CONTEXT}"}
+            }
+        }"#,
+    )?;
+
     Ok(spec_dir)
 }
 
@@ -3813,11 +3838,11 @@ fn test_run_with_execute_invokes_headless_runner() -> Result<()> {
         "Execute should return exit code 3 (INFRA_ERROR) until agent spawning is implemented"
     );
 
-    // Error should mention agent spawning
+    // Error should mention agent spawning or async context (SPEC-KIT-930)
     let error = json.get("error").and_then(|v| v.as_str()).unwrap_or("");
     assert!(
-        error.contains("Agent spawning not implemented"),
-        "Error should mention agent spawning not implemented, got: {}",
+        error.contains("SPEC-KIT-930") || error.contains("async context"),
+        "Error should reference SPEC-KIT-930 or async context, got: {}",
         error
     );
 

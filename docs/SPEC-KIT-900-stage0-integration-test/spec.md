@@ -178,8 +178,8 @@ docs/SPEC-002-add-color-support/evidence/
 
 3. Added input validation tests (maieutic parsing, JSON validation); no stage execution tests
 
-**Blocking Issue**: `execute_stage()` (lines 396-406 in runner.rs) is a stub returning `Ok(())`.
-Requires widget-independent agent spawning - tracked in SPEC-KIT-930.
+**Blocking Issue**: `execute_stage()` (lines 396-408 in runner.rs) returns `HeadlessError::InfraError`
+(exit code 3) to prevent false-green tests. Requires widget-independent agent spawning - tracked in SPEC-KIT-930.
 
 **Headless Pipeline Execution Command**:
 
