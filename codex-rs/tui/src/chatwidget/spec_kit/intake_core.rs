@@ -12,23 +12,23 @@ use std::path::Path;
 use chrono::{Local, Utc};
 
 use crate::memvid_adapter::{
-    CapsuleConfig, CapsuleHandle, IntakeCompletedPayload, IntakeKind, ObjectType,
-    DEFAULT_CAPSULE_RELATIVE_PATH, DEFAULT_WORKSPACE_ID,
+    CapsuleConfig, CapsuleHandle, DEFAULT_CAPSULE_RELATIVE_PATH, DEFAULT_WORKSPACE_ID,
+    IntakeCompletedPayload, IntakeKind, ObjectType,
 };
 
 use super::error::SpecKitError;
-use super::intake::{
-    build_ace_intake_frame_from_project, build_ace_intake_frame_from_spec,
-    format_design_doc, format_project_ops_baseline, format_project_threat_model,
-    format_rollout_plan, format_test_plan, format_threat_model, generate_architecture_mermaid,
-    generate_project_architecture_mermaid, parse_acceptance_criteria, sha256_hex,
-    split_semicolon_list, validate_integration_points, DeepArtifactResult, DeepDesignSections,
-    DesignBrief, IntakeAnswers, ProjectBrief, ProjectDeepArtifactResult, ProjectDeepSections,
-    ACE_INTAKE_FRAME_SCHEMA_VERSION, DEEP_ARTIFACT_SCHEMA_VERSION, DESIGN_BRIEF_SCHEMA_VERSION,
-    PROJECT_BRIEF_SCHEMA_VERSION, PROJECT_INTAKE_ANSWERS_SCHEMA_VERSION,
-    SPEC_INTAKE_ANSWERS_SCHEMA_VERSION,
-};
 use super::grounding::extract_artifact_name_from_uri;
+use super::intake::{
+    ACE_INTAKE_FRAME_SCHEMA_VERSION, DEEP_ARTIFACT_SCHEMA_VERSION, DESIGN_BRIEF_SCHEMA_VERSION,
+    DeepArtifactResult, DeepDesignSections, DesignBrief, IntakeAnswers,
+    PROJECT_BRIEF_SCHEMA_VERSION, PROJECT_INTAKE_ANSWERS_SCHEMA_VERSION, ProjectBrief,
+    ProjectDeepArtifactResult, ProjectDeepSections, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION,
+    build_ace_intake_frame_from_project, build_ace_intake_frame_from_spec, format_design_doc,
+    format_project_ops_baseline, format_project_threat_model, format_rollout_plan,
+    format_test_plan, format_threat_model, generate_architecture_mermaid,
+    generate_project_architecture_mermaid, parse_acceptance_criteria, sha256_hex,
+    split_semicolon_list, validate_integration_points,
+};
 use super::spec_id_generator::create_slug;
 
 // =============================================================================
@@ -110,31 +110,23 @@ pub fn validate_spec_answers(answers: &HashMap<String, String>, deep: bool) -> V
     // =========================================================================
 
     // Required: problem (non-empty)
-    if answers
-        .get("problem")
-        .map_or(true, |s| s.trim().is_empty())
-    {
+    if answers.get("problem").map_or(true, |s| s.trim().is_empty()) {
         errors.push("Problem statement is required.".to_string());
     }
 
     // Required: target_users >= 1
-    let target_users =
-        split_semicolon_list(answers.get("target_users").unwrap_or(&String::new()));
+    let target_users = split_semicolon_list(answers.get("target_users").unwrap_or(&String::new()));
     if target_users.is_empty() {
         errors.push("At least one target user is required.".to_string());
     }
 
     // Required: outcome (non-empty)
-    if answers
-        .get("outcome")
-        .map_or(true, |s| s.trim().is_empty())
-    {
+    if answers.get("outcome").map_or(true, |s| s.trim().is_empty()) {
         errors.push("Expected outcome is required.".to_string());
     }
 
     // Required: constraints >= 1
-    let constraints =
-        split_semicolon_list(answers.get("constraints").unwrap_or(&String::new()));
+    let constraints = split_semicolon_list(answers.get("constraints").unwrap_or(&String::new()));
     if constraints.is_empty() {
         errors.push("At least one constraint is required.".to_string());
     }
@@ -201,15 +193,21 @@ pub fn validate_spec_answers(answers: &HashMap<String, String>, deep: bool) -> V
         }
 
         // Deep requires architecture_components non-empty
-        let arch_components =
-            split_semicolon_list(answers.get("architecture_components").unwrap_or(&String::new()));
+        let arch_components = split_semicolon_list(
+            answers
+                .get("architecture_components")
+                .unwrap_or(&String::new()),
+        );
         if arch_components.is_empty() {
             errors.push("Deep mode requires architecture components.".to_string());
         }
 
         // Deep requires architecture_dataflows non-empty
-        let arch_dataflows =
-            split_semicolon_list(answers.get("architecture_dataflows").unwrap_or(&String::new()));
+        let arch_dataflows = split_semicolon_list(
+            answers
+                .get("architecture_dataflows")
+                .unwrap_or(&String::new()),
+        );
         if arch_dataflows.is_empty() {
             errors.push("Deep mode requires architecture dataflows.".to_string());
         }
@@ -222,8 +220,7 @@ pub fn validate_spec_answers(answers: &HashMap<String, String>, deep: bool) -> V
         }
 
         // Deep requires test_plan non-empty
-        let test_plan =
-            split_semicolon_list(answers.get("test_plan").unwrap_or(&String::new()));
+        let test_plan = split_semicolon_list(answers.get("test_plan").unwrap_or(&String::new()));
         if test_plan.is_empty() {
             errors.push("Deep mode requires test plan.".to_string());
         }
@@ -281,10 +278,7 @@ pub fn validate_project_answers(answers: &HashMap<String, String>, deep: bool) -
     }
 
     // Required: problem (non-empty)
-    if answers
-        .get("problem")
-        .map_or(true, |s| s.trim().is_empty())
-    {
+    if answers.get("problem").map_or(true, |s| s.trim().is_empty()) {
         errors.push("Problem statement is required.".to_string());
     }
 
@@ -405,7 +399,10 @@ pub fn build_spec_intake_answers(
             "spec_intake_baseline_v1".to_string()
         },
         deep,
-        answers: answers.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        answers: answers
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
         validation_warnings: warnings,
     }
 }
@@ -435,10 +432,14 @@ pub fn build_design_brief(
     let deep_sections = if deep {
         Some(DeepDesignSections {
             architecture_components: split_semicolon_list(
-                answers.get("architecture_components").unwrap_or(&String::new()),
+                answers
+                    .get("architecture_components")
+                    .unwrap_or(&String::new()),
             ),
             architecture_dataflows: split_semicolon_list(
-                answers.get("architecture_dataflows").unwrap_or(&String::new()),
+                answers
+                    .get("architecture_dataflows")
+                    .unwrap_or(&String::new()),
             ),
             integration_mapping: split_semicolon_list(
                 answers.get("integration_mapping").unwrap_or(&String::new()),
@@ -461,8 +462,7 @@ pub fn build_design_brief(
         None
     };
 
-    let assumptions =
-        split_semicolon_list(answers.get("assumptions").unwrap_or(&String::new()));
+    let assumptions = split_semicolon_list(answers.get("assumptions").unwrap_or(&String::new()));
 
     Ok(DesignBrief {
         schema_version: DESIGN_BRIEF_SCHEMA_VERSION.to_string(),
@@ -472,9 +472,7 @@ pub fn build_design_brief(
         created_via: created_via.to_string(),
         description_raw: description.to_string(),
         problem: answers.get("problem").cloned().unwrap_or_default(),
-        target_users: split_semicolon_list(
-            answers.get("target_users").unwrap_or(&String::new()),
-        ),
+        target_users: split_semicolon_list(answers.get("target_users").unwrap_or(&String::new())),
         outcome: answers.get("outcome").cloned().unwrap_or_default(),
         scope_in: split_semicolon_list(answers.get("scope_in").unwrap_or(&String::new())),
         non_goals: split_semicolon_list(answers.get("non_goals").unwrap_or(&String::new())),
@@ -582,11 +580,8 @@ pub fn persist_spec_intake_to_capsule(
     // =========================================================================
 
     // Build ACE intake frame (deterministic, no LLM)
-    let ace_frame = build_ace_intake_frame_from_spec(
-        design_brief,
-        answers_uri.as_str(),
-        brief_uri.as_str(),
-    );
+    let ace_frame =
+        build_ace_intake_frame_from_spec(design_brief, answers_uri.as_str(), brief_uri.as_str());
     let ace_frame_json = serde_json::to_vec_pretty(&ace_frame)
         .map_err(|e| format!("Failed to serialize ACE intake frame: {}", e))?;
     let ace_frame_sha256 = sha256_hex(&ace_frame_json);
@@ -1212,7 +1207,11 @@ pub fn update_spec_tracker(
             // End of backlog section
             break;
         }
-        if in_backlog && line.starts_with("| ") && !line.contains("SPEC-ID") && !line.contains("---") {
+        if in_backlog
+            && line.starts_with("| ")
+            && !line.contains("SPEC-ID")
+            && !line.contains("---")
+        {
             // Found a table row, insert before it
             insert_index = Some(i);
             break;
@@ -1337,7 +1336,10 @@ pub fn build_project_intake_answers(
             "project_intake_baseline_v1".to_string()
         },
         deep,
-        answers: answers.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        answers: answers
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
         validation_warnings: Vec::new(),
     }
 }
@@ -1361,8 +1363,14 @@ pub fn build_project_brief(
 ) -> ProjectBrief {
     let deep_sections = if deep {
         Some(ProjectDeepSections {
-            deployment_target: answers.get("deployment_target").cloned().unwrap_or_default(),
-            data_classification: answers.get("data_classification").cloned().unwrap_or_default(),
+            deployment_target: answers
+                .get("deployment_target")
+                .cloned()
+                .unwrap_or_default(),
+            data_classification: answers
+                .get("data_classification")
+                .cloned()
+                .unwrap_or_default(),
             nfr_budgets: answers.get("nfr_budgets").cloned().unwrap_or_default(),
             ops_baseline: answers.get("ops_baseline").cloned().unwrap_or_default(),
             security_posture: answers.get("security_posture").cloned().unwrap_or_default(),
@@ -1553,10 +1561,8 @@ pub fn persist_project_intake_to_capsule(
                 .map_err(|e| format!("Capsule put architecture_sketch failed: {}", e))?;
 
             // 2. Threat model (Markdown) - from security posture
-            let threat_md = format_project_threat_model(
-                &deep_sections.security_posture,
-                project_id,
-            );
+            let threat_md =
+                format_project_threat_model(&deep_sections.security_posture, project_id);
             let threat_bytes = threat_md.as_bytes().to_vec();
             let threat_sha256 = sha256_hex(&threat_bytes);
             let threat_meta = serde_json::json!({
@@ -1575,10 +1581,7 @@ pub fn persist_project_intake_to_capsule(
                 .map_err(|e| format!("Capsule put threat_model failed: {}", e))?;
 
             // 3. Ops baseline (Markdown) - from ops baseline
-            let ops_md = format_project_ops_baseline(
-                &deep_sections.ops_baseline,
-                project_id,
-            );
+            let ops_md = format_project_ops_baseline(&deep_sections.ops_baseline, project_id);
             let ops_bytes = ops_md.as_bytes().to_vec();
             let ops_sha256 = sha256_hex(&ops_bytes);
             let ops_meta = serde_json::json!({
@@ -1634,8 +1637,7 @@ pub fn create_project_filesystem_projection(
 ) -> Result<(), String> {
     // Ensure docs/ exists
     let docs_dir = cwd.join("docs");
-    fs::create_dir_all(&docs_dir)
-        .map_err(|e| format!("Failed to create docs directory: {}", e))?;
+    fs::create_dir_all(&docs_dir).map_err(|e| format!("Failed to create docs directory: {}", e))?;
 
     // Build PROJECT_BRIEF.md content
     let deep_indicator = if deep { "Yes" } else { "No" };
@@ -1843,7 +1845,8 @@ _This is a filesystem projection of the capsule SoR deep artifact._
 
 _This is a filesystem projection of the capsule SoR deep artifact._
 "#,
-                threat_model = format_project_threat_model(&deep_sections.security_posture, project_id),
+                threat_model =
+                    format_project_threat_model(&deep_sections.security_posture, project_id),
                 threat_uri = deep_artifacts.threat_model_uri,
                 threat_sha256 = deep_artifacts.threat_model_sha256,
                 schema_version = DEEP_ARTIFACT_SCHEMA_VERSION,
@@ -1875,7 +1878,8 @@ _This is a filesystem projection of the capsule SoR deep artifact._
 
 _This is a filesystem projection of the capsule SoR deep artifact._
 "#,
-                    ops_baseline = format_project_ops_baseline(&deep_sections.ops_baseline, project_id),
+                    ops_baseline =
+                        format_project_ops_baseline(&deep_sections.ops_baseline, project_id),
                     ops_uri = ops_uri,
                     ops_sha256 = ops_sha256,
                     schema_version = DEEP_ARTIFACT_SCHEMA_VERSION,

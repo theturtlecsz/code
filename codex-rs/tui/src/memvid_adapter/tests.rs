@@ -14,7 +14,6 @@ use super::*;
 use crate::memvid_adapter::capsule::{
     CapsuleConfig, CapsuleError, CapsuleHandle, DiagnosticResult,
 };
-use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams};
 use crate::memvid_adapter::types::{
     BranchId,
     CardFact,
@@ -40,6 +39,7 @@ use crate::memvid_adapter::types::{
     ToolCallPayload,
     ToolResultPayload,
 };
+use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams};
 use secrecy::SecretString;
 use tempfile::TempDir;
 
@@ -6431,7 +6431,7 @@ fn test_import_mv2e_wrong_passphrase() {
 #[test]
 fn test_gc_dry_run_no_delete() {
     use crate::memvid_adapter::capsule::GcConfig;
-    use filetime::{set_file_mtime, FileTime};
+    use filetime::{FileTime, set_file_mtime};
 
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join(".speckit/memvid/workspace.mv2");
@@ -6475,7 +6475,7 @@ fn test_gc_dry_run_no_delete() {
 #[test]
 fn test_gc_retention_deletes_old_preserves_new() {
     use crate::memvid_adapter::capsule::GcConfig;
-    use filetime::{set_file_mtime, FileTime};
+    use filetime::{FileTime, set_file_mtime};
 
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join(".speckit/memvid/workspace.mv2");
@@ -6515,14 +6515,17 @@ fn test_gc_retention_deletes_old_preserves_new() {
     // Old should be deleted, new should remain
     assert!(!old_export.exists(), "old export should be deleted");
     assert!(new_export.exists(), "new export should be preserved");
-    assert!(result.exports_deleted > 0, "should have deleted at least one export");
+    assert!(
+        result.exports_deleted > 0,
+        "should have deleted at least one export"
+    );
 }
 
 /// SPEC-KIT-974 AC#8: GC should preserve pinned exports even when old.
 #[test]
 fn test_gc_preserves_pinned() {
     use crate::memvid_adapter::capsule::GcConfig;
-    use filetime::{set_file_mtime, FileTime};
+    use filetime::{FileTime, set_file_mtime};
 
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join(".speckit/memvid/workspace.mv2");
@@ -6549,7 +6552,8 @@ fn test_gc_preserves_pinned() {
     // Set mtimes to 40 days ago (beyond retention)
     let old_time = std::time::SystemTime::now() - std::time::Duration::from_secs(40 * 86400);
     set_file_mtime(&pinned_export, FileTime::from_system_time(old_time)).expect("set pinned mtime");
-    set_file_mtime(&unpinned_export, FileTime::from_system_time(old_time)).expect("set unpinned mtime");
+    set_file_mtime(&unpinned_export, FileTime::from_system_time(old_time))
+        .expect("set unpinned mtime");
 
     let gc_config = GcConfig {
         retention_days: 30,
@@ -6562,16 +6566,25 @@ fn test_gc_preserves_pinned() {
 
     // Pinned file should be preserved, unpinned should be deleted
     assert!(pinned_export.exists(), "pinned export should be preserved");
-    assert!(!unpinned_export.exists(), "unpinned old export should be deleted");
-    assert!(result.exports_preserved > 0, "should have preserved pinned exports");
-    assert!(result.exports_deleted > 0, "should have deleted unpinned exports");
+    assert!(
+        !unpinned_export.exists(),
+        "unpinned old export should be deleted"
+    );
+    assert!(
+        result.exports_preserved > 0,
+        "should have preserved pinned exports"
+    );
+    assert!(
+        result.exports_deleted > 0,
+        "should have deleted unpinned exports"
+    );
 }
 
 /// SPEC-KIT-974 AC#8: GC audit event must be persisted (survives reopen).
 #[test]
 fn test_gc_audit_event_persisted() {
     use crate::memvid_adapter::capsule::GcConfig;
-    use filetime::{set_file_mtime, FileTime};
+    use filetime::{FileTime, set_file_mtime};
 
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join(".speckit/memvid/workspace.mv2");
@@ -7847,8 +7860,14 @@ async fn test_ingest_multimodal_unsupported_format() {
 
     // Should NOT extract (no extraction for .txt)
     assert!(!result.extracted, "should not extract .txt files");
-    assert!(result.extracted_uri.is_none(), "should have no extracted_uri");
-    assert!(result.extraction_meta.is_none(), "should have no extraction_meta");
+    assert!(
+        result.extracted_uri.is_none(),
+        "should have no extracted_uri"
+    );
+    assert!(
+        result.extraction_meta.is_none(),
+        "should have no extraction_meta"
+    );
 
     // Primary URI should be valid
     assert!(result.uri.is_valid());
@@ -7936,7 +7955,9 @@ async fn test_as_of_filtering_excludes_future_artifacts() {
     // SEMANTIC: Current search finds BOTH artifacts
     let current_ids: Vec<&str> = results_current.iter().map(|r| r.id.as_str()).collect();
     assert!(
-        current_ids.iter().any(|id| id.contains("before-checkpoint")),
+        current_ids
+            .iter()
+            .any(|id| id.contains("before-checkpoint")),
         "current search should find 'before-checkpoint', got: {:?}",
         current_ids
     );
@@ -7983,21 +8004,33 @@ async fn test_as_of_filtering_excludes_future_artifacts() {
 /// SPEC-KIT-980: Test extractor feature detection functions.
 #[test]
 fn test_extractor_feature_detection() {
-    use crate::memvid_adapter::extractor::{is_extraction_supported, feature_for_extension};
+    use crate::memvid_adapter::extractor::{feature_for_extension, is_extraction_supported};
 
     // Check feature detection for PDF
     let pdf_supported = is_extraction_supported("pdf");
     #[cfg(feature = "memvid-pdf")]
-    assert!(pdf_supported, "PDF should be supported when feature enabled");
+    assert!(
+        pdf_supported,
+        "PDF should be supported when feature enabled"
+    );
     #[cfg(not(feature = "memvid-pdf"))]
-    assert!(!pdf_supported, "PDF should not be supported when feature disabled");
+    assert!(
+        !pdf_supported,
+        "PDF should not be supported when feature disabled"
+    );
 
     // Check feature detection for DOCX
     let docx_supported = is_extraction_supported("docx");
     #[cfg(feature = "memvid-docx")]
-    assert!(docx_supported, "DOCX should be supported when feature enabled");
+    assert!(
+        docx_supported,
+        "DOCX should be supported when feature enabled"
+    );
     #[cfg(not(feature = "memvid-docx"))]
-    assert!(!docx_supported, "DOCX should not be supported when feature disabled");
+    assert!(
+        !docx_supported,
+        "DOCX should not be supported when feature disabled"
+    );
 
     // Check feature_for_extension
     assert_eq!(feature_for_extension("pdf"), Some("memvid-pdf"));

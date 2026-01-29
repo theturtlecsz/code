@@ -177,24 +177,7 @@ fn upsert_source_blocking(
     name: &str,
     content: &str,
 ) -> std::result::Result<String, String> {
-    use std::io::Write;
-
     let url = format!("{}/api/sources/upsert", base_url);
-
-    let trace_msg = format!(
-        "[{}] Tier2 UPSERT: name={}, notebook={}, content_len={}\n",
-        chrono::Utc::now().format("%H:%M:%S%.3f"),
-        name,
-        notebook,
-        content.len()
-    );
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/speckit-trace.log")
-    {
-        let _ = f.write_all(trace_msg.as_bytes());
-    }
 
     let body = json!({
         "notebook": notebook,
@@ -228,20 +211,6 @@ fn upsert_source_blocking(
         .map(|d| d.action)
         .unwrap_or_else(|| "unknown".to_string());
 
-    let trace_msg = format!(
-        "[{}] Tier2 UPSERT SUCCESS: name={}, action={}\n",
-        chrono::Utc::now().format("%H:%M:%S%.3f"),
-        name,
-        action
-    );
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/speckit-trace.log")
-    {
-        let _ = f.write_all(trace_msg.as_bytes());
-    }
-
     Ok(action)
 }
 
@@ -270,25 +239,6 @@ impl Tier2HttpAdapter {
         spec_content: &str,
         task_brief_md: &str,
     ) -> Result<Tier2Response> {
-        // FILE-BASED TRACE
-        {
-            use std::io::Write;
-            let trace_msg = format!(
-                "[{}] Tier2 FETCH BLOCKING: spec_id={}, url={}/api/ask, notebook={}\n",
-                chrono::Utc::now().format("%H:%M:%S%.3f"),
-                spec_id,
-                self.base_url,
-                self.notebook
-            );
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/speckit-trace.log")
-            {
-                let _ = f.write_all(trace_msg.as_bytes());
-            }
-        }
-
         let prompt = codex_stage0::build_tier2_prompt(spec_id, spec_content, task_brief_md);
         let url = format!("{}/api/ask", self.base_url);
 
@@ -302,68 +252,22 @@ impl Tier2HttpAdapter {
             "notebook": &self.notebook,
         });
 
-        let resp = client.post(&url).json(&body).send().map_err(|e| {
-            // FILE-BASED TRACE
-            {
-                use std::io::Write;
-                let trace_msg = format!(
-                    "[{}] Tier2 HTTP ERROR: {}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    e
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
-            }
-            Stage0Error::tier2(format!("NotebookLM HTTP request failed: {e}"))
-        })?;
+        let resp = client
+            .post(&url)
+            .json(&body)
+            .send()
+            .map_err(|e| Stage0Error::tier2(format!("NotebookLM HTTP request failed: {e}")))?;
 
         if !resp.status().is_success() {
-            // FILE-BASED TRACE
-            {
-                use std::io::Write;
-                let trace_msg = format!(
-                    "[{}] Tier2 HTTP STATUS ERROR: {}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    resp.status()
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
-            }
             return Err(Stage0Error::tier2(format!(
                 "NotebookLM HTTP error: {}",
                 resp.status()
             )));
         }
 
-        let parsed: NotebooklmAskResponse = resp.json().map_err(|e| {
-            // FILE-BASED TRACE
-            {
-                use std::io::Write;
-                let trace_msg = format!(
-                    "[{}] Tier2 JSON PARSE ERROR: {}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    e
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
-            }
-            Stage0Error::tier2(format!("Failed to parse NotebookLM response: {e}"))
-        })?;
+        let parsed: NotebooklmAskResponse = resp
+            .json()
+            .map_err(|e| Stage0Error::tier2(format!("Failed to parse NotebookLM response: {e}")))?;
 
         if !parsed.success {
             let error_msg = parsed
@@ -379,23 +283,6 @@ impl Tier2HttpAdapter {
             .data
             .map(|d| d.answer)
             .unwrap_or_else(|| "No answer received".to_string());
-
-        // FILE-BASED TRACE: Success
-        {
-            use std::io::Write;
-            let trace_msg = format!(
-                "[{}] Tier2 FETCH SUCCESS: answer_len={}\n",
-                chrono::Utc::now().format("%H:%M:%S%.3f"),
-                answer.len()
-            );
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/speckit-trace.log")
-            {
-                let _ = f.write_all(trace_msg.as_bytes());
-            }
-        }
 
         Ok(Tier2Response {
             divine_truth_md: answer,
@@ -455,25 +342,6 @@ impl Tier2Client for Tier2HttpAdapter {
         let task_brief_md = task_brief_md.to_string();
 
         let handle = std::thread::spawn(move || {
-            use std::io::Write;
-
-            // FILE-BASED TRACE
-            {
-                let trace_msg = format!(
-                    "[{}] Tier2 THREAD START (source-based): spec_id={}, notebook={}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    spec_id,
-                    notebook
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
-            }
-
             // Create HTTP client with longer timeout for source operations
             let client = match reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(300))
@@ -493,18 +361,6 @@ impl Tier2Client for Tier2HttpAdapter {
                 "CURRENT_SPEC",
                 &spec_source_content,
             ) {
-                let trace_msg = format!(
-                    "[{}] Tier2 UPSERT SPEC FAILED: {}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    e
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
                 // Continue anyway - we'll try with the query
             }
 
@@ -517,18 +373,6 @@ impl Tier2Client for Tier2HttpAdapter {
                 "CURRENT_TASK_BRIEF",
                 &brief_source_content,
             ) {
-                let trace_msg = format!(
-                    "[{}] Tier2 UPSERT BRIEF FAILED: {}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    e
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
                 // Continue anyway - we'll try with the query
             }
 
@@ -558,26 +402,6 @@ impl Tier2Client for Tier2HttpAdapter {
             let prompt = codex_stage0::build_tier2_prompt(&spec_id, &spec_content, &task_brief_md);
             let url = format!("{}/api/ask", base_url);
 
-            // FILE-BASED TRACE: Log prompt size for debugging
-            {
-                let preview: String = prompt.chars().take(500).collect();
-                let trace_msg = format!(
-                    "[{}] Tier2 PROMPT: len={} chars, preview=\"{}...\"\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    prompt.len(),
-                    preview.replace('\n', "\\n")
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
-                // Also write full prompt to separate file for inspection
-                let _ = std::fs::write("/tmp/tier2-prompt.txt", &prompt);
-            }
-
             let body = serde_json::json!({
                 "question": prompt,
                 "notebook": notebook,
@@ -586,53 +410,17 @@ impl Tier2Client for Tier2HttpAdapter {
             let resp = match client.post(&url).json(&body).send() {
                 Ok(r) => r,
                 Err(e) => {
-                    let trace_msg = format!(
-                        "[{}] Tier2 HTTP ERROR: {}\n",
-                        chrono::Utc::now().format("%H:%M:%S%.3f"),
-                        e
-                    );
-                    if let Ok(mut f) = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("/tmp/speckit-trace.log")
-                    {
-                        let _ = f.write_all(trace_msg.as_bytes());
-                    }
                     return Err(format!("NotebookLM HTTP request failed: {e}"));
                 }
             };
 
             if !resp.status().is_success() {
-                let trace_msg = format!(
-                    "[{}] Tier2 HTTP STATUS ERROR: {}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    resp.status()
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
                 return Err(format!("NotebookLM HTTP error: {}", resp.status()));
             }
 
             let parsed: NotebooklmAskResponse = match resp.json() {
                 Ok(p) => p,
                 Err(e) => {
-                    let trace_msg = format!(
-                        "[{}] Tier2 JSON PARSE ERROR: {}\n",
-                        chrono::Utc::now().format("%H:%M:%S%.3f"),
-                        e
-                    );
-                    if let Ok(mut f) = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("/tmp/speckit-trace.log")
-                    {
-                        let _ = f.write_all(trace_msg.as_bytes());
-                    }
                     return Err(format!("Failed to parse NotebookLM response: {e}"));
                 }
             };
@@ -648,22 +436,6 @@ impl Tier2Client for Tier2HttpAdapter {
                 .data
                 .map(|d| d.answer)
                 .unwrap_or_else(|| "No answer received".to_string());
-
-            // FILE-BASED TRACE: Success
-            {
-                let trace_msg = format!(
-                    "[{}] Tier2 THREAD SUCCESS: answer_len={}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    answer.len()
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
-            }
 
             Ok(Tier2Response {
                 divine_truth_md: answer,
@@ -1245,10 +1017,20 @@ impl ProductKnowledgeCurationAdapter {
             ];
 
             // Store using CLI remember
-            match local_memory_cli::remember_blocking(&content, &memory_type, 8, &tags, &self.domain)
-            {
+            match local_memory_cli::remember_blocking(
+                &content,
+                &memory_type,
+                8,
+                &tags,
+                &self.domain,
+            ) {
                 Ok(id) => {
-                    tracing::info!("Curated insight {} (type: {}) from {}", id, memory_type, spec_id);
+                    tracing::info!(
+                        "Curated insight {} (type: {}) from {}",
+                        id,
+                        memory_type,
+                        spec_id
+                    );
                     created_ids.push(id);
                 }
                 Err(e) => {
@@ -1337,8 +1119,7 @@ impl ProductKnowledgeCurationAdapter {
     fn format_insight_content(insight: &InsightCandidate) -> String {
         format!(
             "**WHAT**: {}\n\n**WHY**: Extracted from Tier2 synthesis ({})\n\n**EVIDENCE**: Divine Truth analysis\n\n**OUTCOME**: Curated for future reuse",
-            insight.what,
-            insight.source_section
+            insight.what, insight.source_section
         )
     }
 
@@ -1363,10 +1144,7 @@ impl ProductKnowledgeCurationAdapter {
             || text.contains("cannot")
         {
             "limitation".to_string()
-        } else if text.contains("discovery")
-            || text.contains("found")
-            || text.contains("learned")
-        {
+        } else if text.contains("discovery") || text.contains("found") || text.contains("learned") {
             "discovery".to_string()
         } else {
             // Default to pattern for general insights

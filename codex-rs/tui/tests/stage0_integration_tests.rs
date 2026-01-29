@@ -344,8 +344,14 @@ spec_id = "SPEC-974"
 enabled_stages = ["plan"]
 "#;
     let config: PipelineConfig = toml::from_str(toml_str).expect("should parse");
-    assert_eq!(config.capsule.export.mode, "risk", "default mode should be risk");
-    assert!(!config.capsule.export.high_risk, "default high_risk should be false");
+    assert_eq!(
+        config.capsule.export.mode, "risk",
+        "default mode should be risk"
+    );
+    assert!(
+        !config.capsule.export.high_risk,
+        "default high_risk should be false"
+    );
     assert!(
         !config.capsule.export.audit_handoff_required,
         "default audit_handoff_required should be false"

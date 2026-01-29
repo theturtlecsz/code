@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use super::super::super::ChatWidget;
 use super::super::command_registry::SpecKitCommand;
-use super::super::project_native::{create_project, ProjectType};
+use super::super::project_native::{ProjectType, create_project};
 
 // =============================================================================
 // State Machine for /speckit.projectnew multi-phase flow
@@ -79,7 +79,7 @@ impl SpecKitCommand for SpecKitProjectNewCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        use crate::history_cell::{new_error_event, HistoryCellType, PlainHistoryCell};
+        use crate::history_cell::{HistoryCellType, PlainHistoryCell, new_error_event};
         use ratatui::text::Line;
 
         // Parse arguments with shlex for proper quoted string handling

@@ -3,8 +3,8 @@
 //! These tests ensure deep mode validation cannot be weakened.
 //! CI should fail if any deep-required field check is removed.
 
+use crate::chatwidget::spec_kit::intake_core::{validate_project_answers, validate_spec_answers};
 use std::collections::HashMap;
-use crate::chatwidget::spec_kit::intake_core::{validate_spec_answers, validate_project_answers};
 
 /// Helper: Create minimal valid baseline spec answers
 fn minimal_spec_answers() -> HashMap<String, String> {
@@ -18,8 +18,10 @@ fn minimal_spec_answers() -> HashMap<String, String> {
     answers.insert("integration_points".into(), "API X".into());
     answers.insert("risks".into(), "Risk 1".into());
     answers.insert("open_questions".into(), "Q1".into());
-    answers.insert("acceptance_criteria".into(),
-        "AC1 (verify: manual); AC2 (verify: test)".into());
+    answers.insert(
+        "acceptance_criteria".into(),
+        "AC1 (verify: manual); AC2 (verify: test)".into(),
+    );
     answers
 }
 
@@ -28,7 +30,10 @@ fn add_deep_spec_fields(answers: &mut HashMap<String, String>) {
     // Need 5+ acceptance criteria for deep
     answers.insert("acceptance_criteria".into(),
         "AC1 (verify: manual); AC2 (verify: test); AC3 (verify: e2e); AC4 (verify: unit); AC5 (verify: integration)".into());
-    answers.insert("architecture_components".into(), "Component A; Component B".into());
+    answers.insert(
+        "architecture_components".into(),
+        "Component A; Component B".into(),
+    );
     answers.insert("architecture_dataflows".into(), "A -> B; B -> C".into());
     answers.insert("integration_mapping".into(), "Mapping 1".into());
     answers.insert("test_plan".into(), "Test plan content".into());
@@ -48,13 +53,21 @@ fn test_deep_spec_requires_5_acceptance_criteria() {
     let mut answers = minimal_spec_answers();
     add_deep_spec_fields(&mut answers);
     // Override with only 4 AC
-    answers.insert("acceptance_criteria".into(),
-        "AC1 (verify: manual); AC2 (verify: test); AC3 (verify: e2e); AC4 (verify: unit)".into());
+    answers.insert(
+        "acceptance_criteria".into(),
+        "AC1 (verify: manual); AC2 (verify: test); AC3 (verify: e2e); AC4 (verify: unit)".into(),
+    );
 
     let result = validate_spec_answers(&answers, true);
     assert!(!result.valid);
-    assert!(result.errors.iter().any(|e| e.to_lowercase().contains("acceptance") && e.contains("5")),
-        "Expected error about 5 acceptance criteria, got: {:?}", result.errors);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.to_lowercase().contains("acceptance") && e.contains("5")),
+        "Expected error about 5 acceptance criteria, got: {:?}",
+        result.errors
+    );
 }
 
 #[test]
@@ -65,8 +78,14 @@ fn test_deep_spec_requires_architecture_components() {
 
     let result = validate_spec_answers(&answers, true);
     assert!(!result.valid);
-    assert!(result.errors.iter().any(|e| e.to_lowercase().contains("architecture")),
-        "Expected error about architecture components, got: {:?}", result.errors);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.to_lowercase().contains("architecture")),
+        "Expected error about architecture components, got: {:?}",
+        result.errors
+    );
 }
 
 #[test]
@@ -77,8 +96,14 @@ fn test_deep_spec_requires_threat_model() {
 
     let result = validate_spec_answers(&answers, true);
     assert!(!result.valid);
-    assert!(result.errors.iter().any(|e| e.to_lowercase().contains("threat")),
-        "Expected error about threat model, got: {:?}", result.errors);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.to_lowercase().contains("threat")),
+        "Expected error about threat model, got: {:?}",
+        result.errors
+    );
 }
 
 #[test]
@@ -89,8 +114,14 @@ fn test_deep_spec_requires_rollout_plan() {
 
     let result = validate_spec_answers(&answers, true);
     assert!(!result.valid);
-    assert!(result.errors.iter().any(|e| e.to_lowercase().contains("rollout")),
-        "Expected error about rollout plan, got: {:?}", result.errors);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.to_lowercase().contains("rollout")),
+        "Expected error about rollout plan, got: {:?}",
+        result.errors
+    );
 }
 
 // --- Project validation tests ---
@@ -132,8 +163,14 @@ fn test_deep_project_requires_security_posture() {
 
     let result = validate_project_answers(&answers, true);
     assert!(!result.valid);
-    assert!(result.errors.iter().any(|e| e.to_lowercase().contains("security")),
-        "Expected error about security posture, got: {:?}", result.errors);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.to_lowercase().contains("security")),
+        "Expected error about security posture, got: {:?}",
+        result.errors
+    );
 }
 
 #[test]
@@ -144,8 +181,14 @@ fn test_deep_project_requires_release_rollout() {
 
     let result = validate_project_answers(&answers, true);
     assert!(!result.valid);
-    assert!(result.errors.iter().any(|e| e.to_lowercase().contains("rollout")),
-        "Expected error about release rollout, got: {:?}", result.errors);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.to_lowercase().contains("rollout")),
+        "Expected error about release rollout, got: {:?}",
+        result.errors
+    );
 }
 
 #[test]
@@ -156,6 +199,12 @@ fn test_deep_project_requires_ops_baseline() {
 
     let result = validate_project_answers(&answers, true);
     assert!(!result.valid);
-    assert!(result.errors.iter().any(|e| e.to_lowercase().contains("ops")),
-        "Expected error about ops baseline, got: {:?}", result.errors);
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| e.to_lowercase().contains("ops")),
+        "Expected error about ops baseline, got: {:?}",
+        result.errors
+    );
 }

@@ -32,14 +32,28 @@ pub mod vector;
 
 pub use config::{GateMode, MemoryBackend, Stage0Config, VectorIndexConfig};
 pub use dcc::{
-    CompileContextResult, DccContext, EnvCtx, ExplainScore, ExplainScores, Iqo, LocalMemoryClient,
-    LocalMemorySearchParams, LocalMemorySummary, MemoryCandidate, NoopVectorBackend,
-    // ADR-003: Product Knowledge types
-    ProductKnowledgeCandidate, ProductKnowledgeEvidencePack, ProductKnowledgeFilters,
-    ProductKnowledgeIntegrity, ProductKnowledgeItem, ProductKnowledgeQuery,
+    CompileContextResult,
+    DccContext,
+    EnvCtx,
+    ExplainScore,
+    ExplainScores,
+    Iqo,
+    LocalMemoryClient,
+    LocalMemorySearchParams,
+    LocalMemorySummary,
+    MemoryCandidate,
+    NoopVectorBackend,
     PRODUCT_KNOWLEDGE_CANONICAL_TYPES,
     // ADR-003 Prompt F: Pre-check types
-    PrecheckResult, precheck_product_knowledge,
+    PrecheckResult,
+    // ADR-003: Product Knowledge types
+    ProductKnowledgeCandidate,
+    ProductKnowledgeEvidencePack,
+    ProductKnowledgeFilters,
+    ProductKnowledgeIntegrity,
+    ProductKnowledgeItem,
+    ProductKnowledgeQuery,
+    precheck_product_knowledge,
 };
 pub use errors::{ErrorCategory, Result, Stage0Error};
 pub use eval::{
@@ -529,25 +543,6 @@ impl Stage0Engine {
             .db
             .get_tier2_cache_with_ttl(&input_hash, ttl_hours, now)?;
 
-        // FILE-BASED TRACE: Tier2 decision (SPEC-DOGFOOD-001 S30)
-        {
-            use std::io::Write;
-            let trace_msg = format!(
-                "[{}] Stage0 TIER2 DECISION: tier2_enabled={}, cache_hit={}, input_hash={}\n",
-                chrono::Utc::now().format("%H:%M:%S%.3f"),
-                self.cfg.tier2.enabled,
-                cached_entry.is_some(),
-                &input_hash[..16]
-            );
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/speckit-trace.log")
-            {
-                let _ = f.write_all(trace_msg.as_bytes());
-            }
-        }
-
         let (divine_truth, cache_hit, tier2_used) = if let Some(entry) = cached_entry {
             // Cache hit - parse cached result
             tracing::info!(
@@ -555,23 +550,6 @@ impl Stage0Engine {
                 hit_count = entry.hit_count,
                 "Tier 2 cache hit"
             );
-
-            // FILE-BASED TRACE: Cache hit
-            {
-                use std::io::Write;
-                let trace_msg = format!(
-                    "[{}] Stage0 CACHE HIT: hit_count={}\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f"),
-                    entry.hit_count
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
-            }
 
             let cached_links =
                 overlay_db::OverlayDb::parse_cached_links(entry.suggested_links.as_deref());
@@ -586,22 +564,6 @@ impl Stage0Engine {
                 // Tier 2 disabled - use fallback
                 tracing::info!("Tier 2 disabled, using fallback");
 
-                // FILE-BASED TRACE: Tier2 disabled
-                {
-                    use std::io::Write;
-                    let trace_msg = format!(
-                        "[{}] Stage0 TIER2 DISABLED: using fallback\n",
-                        chrono::Utc::now().format("%H:%M:%S%.3f")
-                    );
-                    if let Ok(mut f) = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("/tmp/speckit-trace.log")
-                    {
-                        let _ = f.write_all(trace_msg.as_bytes());
-                    }
-                }
-
                 let fallback = tier2::build_fallback_divine_truth(
                     spec_id,
                     spec_content,
@@ -614,22 +576,6 @@ impl Stage0Engine {
                     input_hash = &input_hash[..16],
                     "Tier 2 cache miss, calling NotebookLM"
                 );
-
-                // FILE-BASED TRACE: Calling Tier2
-                {
-                    use std::io::Write;
-                    let trace_msg = format!(
-                        "[{}] Stage0 TIER2 CALL: calling generate_divine_truth\n",
-                        chrono::Utc::now().format("%H:%M:%S%.3f")
-                    );
-                    if let Ok(mut f) = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("/tmp/speckit-trace.log")
-                    {
-                        let _ = f.write_all(trace_msg.as_bytes());
-                    }
-                }
 
                 match tier2
                     .generate_divine_truth(spec_id, spec_content, &dcc_result.task_brief_md)

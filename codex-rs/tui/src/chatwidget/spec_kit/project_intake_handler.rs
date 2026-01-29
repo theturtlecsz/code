@@ -19,14 +19,13 @@ use ratatui::text::Line;
 use uuid::Uuid;
 
 use crate::chatwidget::ChatWidget;
-use crate::history_cell::{new_error_event, HistoryCellType, PlainHistoryCell};
+use crate::history_cell::{HistoryCellType, PlainHistoryCell, new_error_event};
 
 use super::commands::projectnew::ProjectNewPhase;
 use super::grounding::capture_grounding_for_project_intake;
 use super::intake_core::{
-    build_project_brief, build_project_intake_answers,
-    create_project_filesystem_projection, persist_project_intake_to_capsule,
-    validate_project_answers,
+    build_project_brief, build_project_intake_answers, create_project_filesystem_projection,
+    persist_project_intake_to_capsule, validate_project_answers,
 };
 
 /// Handle project intake submission
@@ -143,16 +142,20 @@ pub fn on_project_intake_submitted(
 
     // Step 5: Check if we need to bootstrap a spec
     // Contract: bootstrap happens by default unless --no-bootstrap-spec is specified
-    let should_bootstrap = widget.pending_projectnew.as_ref().map_or(false, |p| {
-        !p.no_bootstrap_spec
-    });
+    let should_bootstrap = widget
+        .pending_projectnew
+        .as_ref()
+        .map_or(false, |p| !p.no_bootstrap_spec);
 
     if should_bootstrap {
         // Get bootstrap description and deep flag
         let (bootstrap_desc, inherit_deep) = {
             let pending = widget.pending_projectnew.as_ref().unwrap();
             (
-                pending.bootstrap_desc.clone().unwrap_or_else(|| "Initial setup".to_string()),
+                pending
+                    .bootstrap_desc
+                    .clone()
+                    .unwrap_or_else(|| "Initial setup".to_string()),
                 pending.deep,
             )
         };

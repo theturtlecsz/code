@@ -19,13 +19,13 @@ use ratatui::text::Line;
 use uuid::Uuid;
 
 use crate::chatwidget::ChatWidget;
-use crate::history_cell::{new_error_event, HistoryCellType, PlainHistoryCell};
+use crate::history_cell::{HistoryCellType, PlainHistoryCell, new_error_event};
 
 use super::grounding::capture_grounding_for_spec_intake;
 use super::intake_core::{
     build_design_brief, build_spec_intake_answers, capitalize_words,
-    create_spec_filesystem_projections, persist_spec_intake_to_capsule,
-    validate_spec_answers, write_intake_md_only,
+    create_spec_filesystem_projections, persist_spec_intake_to_capsule, validate_spec_answers,
+    write_intake_md_only,
 };
 use super::spec_id_generator::generate_next_spec_id;
 
@@ -162,12 +162,7 @@ pub fn on_spec_intake_submitted(
     // Step 6: Handle filesystem projections (different for backfill vs new spec)
     if is_backfill {
         // Backfill mode: Only write INTAKE.md to existing spec directory (using intake_core)
-        match write_intake_md_only(
-            &widget.config.cwd,
-            &spec_id,
-            &design_brief,
-            &capsule_result,
-        ) {
+        match write_intake_md_only(&widget.config.cwd, &spec_id, &design_brief, &capsule_result) {
             Ok(()) => {
                 widget.history_push(PlainHistoryCell::new(
                     vec![
@@ -182,10 +177,7 @@ pub fn on_spec_intake_submitted(
                 ));
             }
             Err(e) => {
-                widget.history_push(new_error_event(format!(
-                    "Failed to write INTAKE.md: {}",
-                    e
-                )));
+                widget.history_push(new_error_event(format!("Failed to write INTAKE.md: {}", e)));
                 widget.request_redraw();
                 return;
             }

@@ -501,7 +501,9 @@ mod tests {
         assert_eq!(args.keywords, vec!["query"]);
 
         // Full checkpoint ID (64-char hex)
-        let args2 = parse_search_args("--asof 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef test");
+        let args2 = parse_search_args(
+            "--asof 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef test",
+        );
         assert_eq!(
             args2.as_of,
             Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string())

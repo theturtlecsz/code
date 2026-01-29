@@ -42,14 +42,13 @@ pub mod git_integration; // SPEC-KIT-922: Auto-commit stage artifacts
 pub mod grounding; // Phase 3B: Deep grounding (Architect Harvest + Project Intel)
 pub mod guardrail;
 pub mod handler;
-pub mod isolation_validator; // SPEC-KIT-964 Phase 6: Hermetic isolation validation for multi-agent spawning
-pub mod json_extractor; // SPEC-KIT-927: Industrial-strength JSON extraction from LLM outputs
+pub mod headless; // SPEC-KIT-900: Headless pipeline execution for CLI automation
 pub mod intake; // Architect-in-a-box intake schemas + helpers
 pub mod intake_core; // UI-independent intake validation and persistence (CLI reuse)
+pub mod isolation_validator; // SPEC-KIT-964 Phase 6: Hermetic isolation validation for multi-agent spawning
+pub mod json_extractor; // SPEC-KIT-927: Industrial-strength JSON extraction from LLM outputs
 pub mod maieutic; // P93/D130: Maieutic elicitation types and questions
 pub mod maieutic_handler; // P93/D130: Maieutic elicitation event handlers
-pub mod spec_intake_handler; // Architect-in-a-box spec intake handlers (Phase 1)
-pub mod project_intake_handler; // /speckit.projectnew project intake handlers
 pub mod native_guardrail; // SPEC-KIT-066, SPEC-KIT-902: Native guardrail validation (replaces bash scripts)
 pub mod native_quality_gate_orchestrator; // SPEC-KIT-900, I-003: Native quality gate orchestration (eliminates LLM plumbing)
 pub mod new_native; // SPEC-KIT-072: Native SPEC creation (eliminates 2 agents, $0.15 → $0)
@@ -58,15 +57,17 @@ pub mod pipeline_configurator; // SPEC-947: Pipeline UI configurator - interacti
 pub mod pipeline_coordinator;
 pub mod prd_builder_handler; // SPEC-KIT-970: PRD builder modal event handlers
 pub mod project_detector; // SPEC-KIT-971: Project type detection for context-aware questions
+pub mod project_intake_handler; // /speckit.projectnew project intake handlers
 pub mod project_native; // SPEC-KIT-960: Native project scaffolding
+pub mod rebuild_projections;
 pub mod spec_directory;
+pub mod spec_intake_handler; // Architect-in-a-box spec intake handlers (Phase 1)
 pub mod stage0_integration; // SPEC-KIT-102: Stage 0 context injection for /speckit.auto
 pub mod stage0_seeding;
 pub mod stage_details; // SPEC-947 Phase 3: Stage details widget (right pane)
 pub mod stage_selector;
 pub mod vision_builder_handler; // P93/SPEC-KIT-105: Vision builder modal event handlers // SPEC-947 Phase 3: Stage selector widget (checkbox list) // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs) // SPEC-KIT-102: Shadow Notebook Seeder for NotebookLM
-pub mod vision_core; // CLI headless vision persistence (extracted from vision_builder_handler)
-pub mod rebuild_projections; // WP-A: Projection rebuild from capsule/OverlayDb SoR
+pub mod vision_core; // CLI headless vision persistence (extracted from vision_builder_handler) // WP-A: Projection rebuild from capsule/OverlayDb SoR
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
 // Replaced by native MCP integration in consensus.rs
 pub mod bakeoff_runner; // SPEC-KIT-978: Bakeoff runner for reflex vs cloud comparison

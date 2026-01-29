@@ -1,6 +1,6 @@
-# Spec-Kit Reference (v1.0.0)
+# Spec-Kit Reference (v1.0.1)
 
-**Last Updated**: 2026-01-22
+**Last Updated**: 2026-01-29
 **Status**: Canonical (consolidated from SPEC-KIT-QUALITY-GATES.md, SPEC-KIT-CLI.md, SPEC-KIT-ARCHITECTURE.md)
 
 ***
@@ -62,6 +62,7 @@ Spec-kit provides single-owner multi-agent development automation for feature sp
 | **Quality gates before commit** | No code changes without passing constitution checks and gates     |
 | **Hermetic isolation**          | Agents operate in controlled, reproducible environments           |
 | **Evidence-driven**             | All decisions logged with metadata for audit                      |
+| **Tiered parity (D113/D133)**   | Tier 1 automation semantics match across TUI/CLI/headless (artifacts, gating, exit codes); visualization may be TUI-first |
 
 ### Surfaces
 
@@ -70,6 +71,8 @@ Spec-kit provides single-owner multi-agent development automation for feature sp
 | **TUI** | `/speckit.*` commands | Interactive spec-kit in terminal UI         |
 | **CLI** | `code speckit`        | Headless automation, CI/CD integration      |
 | **MCP** | Native integration    | 5.3x faster than subprocess (8.7ms typical) |
+
+> Parity note: per D113/D133, Tier 1 automation features are required to work with full parity across TUI/CLI/headless.
 
 ***
 
@@ -467,6 +470,7 @@ code speckit run --spec <SPEC-ID> --from <STAGE> --to <STAGE> [--json]
 
 | Version | Date       | Changes                                                                                                            |
 | ------- | ---------- | ------------------------------------------------------------------------------------------------------------------ |
+| v1.0.1  | 2026-01-29 | Document Tier 1 multi-surface parity requirement (D113/D133)                                                       |
 | v1.0.0  | 2026-01-22 | Initial canonical version (consolidated from SPEC-KIT-QUALITY-GATES.md, SPEC-KIT-CLI.md, SPEC-KIT-ARCHITECTURE.md) |
 
 ***

@@ -187,7 +187,9 @@ mod tests {
     #[cfg(not(feature = "memvid-pdf"))]
     fn test_pdf_feature_gate_error() {
         let result = extract_pdf(b"fake pdf data");
-        assert!(matches!(result, Err(ExtractionError::FeatureDisabled(ref f)) if f == "memvid-pdf"));
+        assert!(
+            matches!(result, Err(ExtractionError::FeatureDisabled(ref f)) if f == "memvid-pdf")
+        );
     }
 
     #[test]
