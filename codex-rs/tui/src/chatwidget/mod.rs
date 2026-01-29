@@ -2067,23 +2067,6 @@ impl ChatWidget<'_> {
         match pending.result_rx.try_recv() {
             Ok(result) => {
                 // S33: Trace result received
-                {
-                    use std::io::Write;
-                    let trace_msg = format!(
-                        "[{}] Stage0 POLL RECEIVED: tier2={}, has_result={}, calling process_stage0_result\n",
-                        chrono::Utc::now().format("%H:%M:%S%.3f"),
-                        result.tier2_used,
-                        result.result.is_some(),
-                    );
-                    if let Ok(mut f) = std::fs::OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open("/tmp/speckit-trace.log")
-                    {
-                        let _ = f.write_all(trace_msg.as_bytes());
-                    }
-                }
-
                 // Take ownership and clear pending
                 let pending = self.stage0_pending.take().unwrap();
                 let spec_id = pending.spec_id.clone();

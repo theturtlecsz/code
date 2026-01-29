@@ -6,6 +6,9 @@
 
 use std::time::Duration;
 
+use codex_core::agent_tool::{AgentStatus, AGENT_MANAGER};
+use codex_core::config_types::AgentConfig;
+
 use super::runner::HeadlessError;
 
 /// Trait for agent execution backends (mockable for tests)
@@ -36,20 +39,32 @@ pub trait AgentBackend: Send + Sync {
     ) -> Result<String, HeadlessError>;
 }
 
+/// Map user-facing agent names to config names
+///
+/// This mapping mirrors the one in agent_orchestrator.rs for consistency.
+fn map_agent_name_to_config(agent_name: &str) -> String {
+    match agent_name {
+        "gemini" => "gemini_flash".to_string(),
+        "claude" => "claude_haiku".to_string(),
+        "gpt_pro" => "gpt_pro".to_string(),
+        "gpt_codex" => "gpt_codex".to_string(),
+        _ => agent_name.to_string(), // fallback to raw name for custom configs
+    }
+}
+
 /// Real backend using codex_core::agent_tool::AGENT_MANAGER
 ///
-/// This implementation is a placeholder that returns an error because:
-/// - AGENT_MANAGER uses async locks requiring tokio runtime
-/// - Agent configs need to be loaded from ChatWidget context
-///
-/// For production use, this needs proper async integration (SPEC-KIT-930).
-/// For tests, use MockAgentBackend instead.
-pub struct DefaultAgentBackend;
+/// This implementation spawns real agents via AGENT_MANAGER and polls
+/// for completion using a dedicated tokio runtime.
+pub struct DefaultAgentBackend {
+    /// Agent configurations loaded from config.toml
+    agent_configs: Vec<AgentConfig>,
+}
 
 impl DefaultAgentBackend {
-    /// Create a new backend (placeholder)
-    pub fn new(_agent_configs: Vec<codex_core::config_types::AgentConfig>) -> Self {
-        Self
+    /// Create a new backend with agent configurations
+    pub fn new(agent_configs: Vec<AgentConfig>) -> Self {
+        Self { agent_configs }
     }
 }
 
@@ -57,26 +72,126 @@ impl AgentBackend for DefaultAgentBackend {
     fn run_stage_agent(
         &self,
         agent_name: &str,
-        _prompt: String,
+        prompt: String,
         spec_id: &str,
         stage: &str,
-        _timeout: Duration,
+        timeout: Duration,
     ) -> Result<String, HeadlessError> {
-        // ESCALATED: Real agent spawning requires async context and proper integration
-        // with AGENT_MANAGER's tokio-based RwLock.
-        //
-        // For now, return error to prevent false-green tests.
-        // Tracked in SPEC-KIT-930 (widget-independent infrastructure).
-        tracing::warn!(
+        let config_name = map_agent_name_to_config(agent_name);
+        let batch_id = format!("headless-{}-{}", spec_id, stage);
+        let agent_configs = self.agent_configs.clone();
+
+        tracing::info!(
             agent = %agent_name,
+            config_name = %config_name.as_str(),
             spec_id = %spec_id,
             stage = %stage,
-            "DefaultAgentBackend: real agent spawning not implemented"
+            "DefaultAgentBackend: spawning real agent"
         );
-        Err(HeadlessError::InfraError(
-            "Real agent spawning requires async context - use MockAgentBackend for tests (SPEC-KIT-930)"
-                .to_string(),
-        ))
+
+        // Execute the async agent creation and polling
+        // Handle both cases: inside an existing runtime (CLI) or outside (tests)
+        let async_block = async {
+            // Step 1: Create the agent via AGENT_MANAGER
+            let agent_id = {
+                let mut manager = AGENT_MANAGER.write().await;
+                manager
+                    .create_agent_from_config_name(
+                        &config_name,
+                        &agent_configs,
+                        prompt,
+                        false, // read_only
+                        Some(batch_id),
+                    )
+                    .await
+                    .map_err(|e| HeadlessError::InfraError(e))?
+            };
+
+            tracing::info!(
+                agent_id = %agent_id,
+                agent = %agent_name,
+                "Agent created, polling for completion"
+            );
+
+            // Step 2: Poll until terminal status
+            let start = std::time::Instant::now();
+            let poll_interval = Duration::from_millis(500);
+
+            loop {
+                if start.elapsed() > timeout {
+                    tracing::warn!(
+                        agent_id = %agent_id,
+                        elapsed_ms = start.elapsed().as_millis(),
+                        "Agent timeout"
+                    );
+                    return Err(HeadlessError::Timeout {
+                        expected: 1,
+                        completed: 0,
+                        elapsed_ms: start.elapsed().as_millis() as u64,
+                    });
+                }
+
+                let manager = AGENT_MANAGER.read().await;
+                if let Some(agent) = manager.get_agent(&agent_id) {
+                    match agent.status {
+                        AgentStatus::Completed => {
+                            tracing::info!(
+                                agent_id = %agent_id,
+                                elapsed_ms = start.elapsed().as_millis(),
+                                "Agent completed successfully"
+                            );
+                            return agent.result.clone().ok_or_else(|| {
+                                HeadlessError::InfraError(
+                                    "Agent completed but no result available".to_string(),
+                                )
+                            });
+                        }
+                        AgentStatus::Failed => {
+                            let error_msg = agent
+                                .error
+                                .clone()
+                                .unwrap_or_else(|| "Unknown agent error".to_string());
+                            tracing::error!(
+                                agent_id = %agent_id,
+                                error = %error_msg,
+                                "Agent failed"
+                            );
+                            return Err(HeadlessError::AgentFailed {
+                                agent: agent_name.to_string(),
+                                reason: error_msg,
+                            });
+                        }
+                        AgentStatus::Cancelled => {
+                            tracing::warn!(agent_id = %agent_id, "Agent cancelled");
+                            return Err(HeadlessError::AgentFailed {
+                                agent: agent_name.to_string(),
+                                reason: "cancelled".to_string(),
+                            });
+                        }
+                        AgentStatus::Pending | AgentStatus::Running => {
+                            // Still in progress, continue polling
+                        }
+                    }
+                }
+                drop(manager);
+
+                tokio::time::sleep(poll_interval).await;
+            }
+        };
+
+        // Execute the async block, handling both runtime contexts
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            // We're inside an existing tokio runtime (e.g., CLI)
+            // Use block_in_place to allow blocking within the async context
+            tokio::task::block_in_place(|| handle.block_on(async_block))
+        } else {
+            // No existing runtime (e.g., synchronous test context)
+            // Create a new runtime
+            let rt = tokio::runtime::Runtime::new().map_err(|e| {
+                HeadlessError::InfraError(format!("Failed to create tokio runtime: {}", e))
+            })?;
+            rt.block_on(async_block)
+        }
     }
 }
 

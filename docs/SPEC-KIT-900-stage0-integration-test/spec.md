@@ -1,8 +1,9 @@
 # SPEC-KIT-900: Stage 0 Integration Test Harness
 
-**Status**: ACTIVE (headless runner scaffolded; execution not wired)
+**Status**: COMPLETED
 **Created**: 2025-12-01
-**Session**: P89
+**Completed**: 2026-01-29
+**Session**: P90
 **Type**: Integration Test / Validation
 
 ***

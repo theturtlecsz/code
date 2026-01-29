@@ -120,23 +120,6 @@ pub fn handle_spec_auto(
     stage0_config: super::stage0_integration::Stage0ExecutionConfig, // SPEC-KIT-102: Stage 0 config
 ) {
     // FILE-BASED TRACE: handle_spec_auto entry (SPEC-DOGFOOD-001 S29)
-    {
-        use std::io::Write;
-        let trace_msg = format!(
-            "[{}] handle_spec_auto ENTRY: spec_id={}, stage0_disabled={}\n",
-            chrono::Utc::now().format("%H:%M:%S%.3f"),
-            spec_id,
-            stage0_config.disabled
-        );
-        if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("/tmp/speckit-trace.log")
-        {
-            let _ = f.write_all(trace_msg.as_bytes());
-        }
-    }
-
     // SPEC-DOGFOOD-001: Re-entry guard - prevent duplicate pipeline execution
     if let Some(existing_state) = widget.spec_auto_state.as_ref() {
         tracing::warn!(
@@ -352,45 +335,10 @@ pub fn handle_spec_auto(
 
     // SPEC-KIT-102: Run Stage 0 context injection before pipeline starts
     // FILE-BASED TRACE: Stage0 decision (SPEC-DOGFOOD-001 S29)
-    {
-        use std::io::Write;
-        let trace_msg = format!(
-            "[{}] Stage0 CHECK: disabled={}, will_execute={}\n",
-            chrono::Utc::now().format("%H:%M:%S%.3f"),
-            stage0_config.disabled,
-            !stage0_config.disabled
-        );
-        if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("/tmp/speckit-trace.log")
-        {
-            let _ = f.write_all(trace_msg.as_bytes());
-        }
-    }
-
     if !stage0_config.disabled {
         // Load spec content
         let spec_path = widget.config.cwd.join(format!("docs/{}/spec.md", spec_id));
         let spec_content = std::fs::read_to_string(&spec_path).unwrap_or_default();
-
-        // FILE-BASED TRACE: Spec loaded (SPEC-DOGFOOD-001 S29)
-        {
-            use std::io::Write;
-            let trace_msg = format!(
-                "[{}] Stage0 SPEC LOADED: path={:?}, len={}\n",
-                chrono::Utc::now().format("%H:%M:%S%.3f"),
-                spec_path,
-                spec_content.len()
-            );
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/speckit-trace.log")
-            {
-                let _ = f.write_all(trace_msg.as_bytes());
-            }
-        }
 
         if !spec_content.is_empty() {
             // Log Stage0Start event
@@ -417,22 +365,6 @@ pub fn handle_spec_auto(
                         timestamp: super::execution_logger::ExecutionEvent::now(),
                     },
                 );
-            }
-
-            // FILE-BASED TRACE: Before Stage0 execution (SPEC-DOGFOOD-001 S29)
-            {
-                use std::io::Write;
-                let trace_msg = format!(
-                    "[{}] Stage0 EXECUTING: calling run_stage0_for_spec...\n",
-                    chrono::Utc::now().format("%H:%M:%S%.3f")
-                );
-                if let Ok(mut f) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open("/tmp/speckit-trace.log")
-                {
-                    let _ = f.write_all(trace_msg.as_bytes());
-                }
             }
 
             // SPEC-DOGFOOD-001 S31: Spawn Stage0 async - TUI remains responsive
@@ -573,23 +505,6 @@ pub fn process_stage0_result(
     widget
         .app_event_tx
         .send(crate::app_event::AppEvent::StopCommitAnimation);
-
-    // FILE-BASED TRACE: After Stage0 execution
-    {
-        use std::io::Write;
-        let trace_msg = format!(
-            "[{}] Stage0 RETURNED: result.is_ok={}\n",
-            chrono::Utc::now().format("%H:%M:%S%.3f"),
-            result.result.is_some()
-        );
-        if let Ok(mut f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("/tmp/speckit-trace.log")
-        {
-            let _ = f.write_all(trace_msg.as_bytes());
-        }
-    }
 
     // Check state exists
     if widget.spec_auto_state.is_none() {
@@ -783,24 +698,6 @@ pub fn process_stage0_result(
             emit_tier2_degraded_events_if_needed(&widget.config.cwd, &spec_id, run_id, trace);
         }
 
-        // S33: Trace evidence writing
-        {
-            use std::io::Write;
-            let trace_msg = format!(
-                "[{}] Stage0 WRITING EVIDENCE: divine_truth_len={}, task_brief_len={}\n",
-                chrono::Utc::now().format("%H:%M:%S%.3f"),
-                stage0_result.divine_truth.raw_markdown.len(),
-                stage0_result.task_brief_md.len(),
-            );
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/speckit-trace.log")
-            {
-                let _ = f.write_all(trace_msg.as_bytes());
-            }
-        }
-
         // Write TASK_BRIEF.md to evidence directory (uses potentially stripped task_brief_md)
         let task_brief_path = super::stage0_integration::write_task_brief_to_evidence(
             &spec_id,
@@ -821,24 +718,6 @@ pub fn process_stage0_result(
         );
         if let Err(ref e) = divine_truth_path {
             tracing::warn!("Failed to write DIVINE_TRUTH.md: {}", e);
-        }
-
-        // S33: Trace after evidence write
-        {
-            use std::io::Write;
-            let trace_msg = format!(
-                "[{}] Stage0 EVIDENCE WRITTEN: task_brief={}, divine_truth={}\n",
-                chrono::Utc::now().format("%H:%M:%S%.3f"),
-                task_brief_written,
-                divine_truth_path.is_ok(),
-            );
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/speckit-trace.log")
-            {
-                let _ = f.write_all(trace_msg.as_bytes());
-            }
         }
 
         // Store system pointer memory (best-effort, non-blocking)

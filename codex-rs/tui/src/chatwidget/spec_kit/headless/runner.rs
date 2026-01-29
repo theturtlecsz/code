@@ -5,7 +5,8 @@
 //! ## Exit Codes (D133)
 //!
 //! - 0: SUCCESS
-//! - 3: INFRA_ERROR
+//! - 2: HARD_FAIL (validation failed, agent failed, stage blocked)
+//! - 3: INFRA_ERROR (infrastructure/system errors)
 //! - 10: NEEDS_INPUT (missing maieutic)
 //! - 11: NEEDS_APPROVAL (checkpoint requires human)
 //! - 13: PROMPT_ATTEMPTED (any prompt attempt in headless mode)
@@ -27,6 +28,8 @@ use crate::chatwidget::spec_kit::stage0_integration::{
 /// Exit codes for headless execution (D133)
 pub mod exit_codes {
     pub const SUCCESS: i32 = 0;
+    /// Hard fail: validation failed, agent failed, or stage blocked
+    pub const HARD_FAIL: i32 = 2;
     pub const INFRA_ERROR: i32 = 3;
     pub const NEEDS_INPUT: i32 = 10;
     pub const NEEDS_APPROVAL: i32 = 11;
@@ -35,6 +38,7 @@ pub mod exit_codes {
     pub fn reason(code: i32) -> &'static str {
         match code {
             SUCCESS => "success",
+            HARD_FAIL => "hard_fail",
             INFRA_ERROR => "infra_error",
             NEEDS_INPUT => "needs_input",
             NEEDS_APPROVAL => "needs_approval",
@@ -59,10 +63,14 @@ pub enum HeadlessError {
         completed: usize,
         elapsed_ms: u64,
     },
-    /// Infrastructure/system error
+    /// Infrastructure/system error (config issues, runtime creation, etc.)
     InfraError(String),
-    /// Stage validation failed
+    /// Stage validation failed (exit code 2: hard fail)
     ValidationFailed { stage: String, reason: String },
+    /// Agent execution failed (exit code 2: hard fail)
+    AgentFailed { agent: String, reason: String },
+    /// Stage is blocked and cannot proceed (exit code 2: hard fail)
+    StageBlocked { stage: String, reason: String },
 }
 
 impl std::fmt::Display for HeadlessError {
@@ -88,6 +96,12 @@ impl std::fmt::Display for HeadlessError {
             Self::ValidationFailed { stage, reason } => {
                 write!(f, "Validation failed for {}: {}", stage, reason)
             }
+            Self::AgentFailed { agent, reason } => {
+                write!(f, "Agent {} failed: {}", agent, reason)
+            }
+            Self::StageBlocked { stage, reason } => {
+                write!(f, "Stage {} blocked: {}", stage, reason)
+            }
         }
     }
 }
@@ -101,7 +115,10 @@ impl HeadlessError {
             Self::PromptAttempted => exit_codes::PROMPT_ATTEMPTED,
             Self::Timeout { .. } => exit_codes::INFRA_ERROR,
             Self::InfraError(_) => exit_codes::INFRA_ERROR,
-            Self::ValidationFailed { .. } => exit_codes::INFRA_ERROR,
+            // Hard failures (exit code 2): validation, agent, and blocked errors
+            Self::ValidationFailed { .. } => exit_codes::HARD_FAIL,
+            Self::AgentFailed { .. } => exit_codes::HARD_FAIL,
+            Self::StageBlocked { .. } => exit_codes::HARD_FAIL,
         }
     }
 }
@@ -227,9 +244,8 @@ pub struct HeadlessPipelineRunner {
 impl HeadlessPipelineRunner {
     /// Create a new headless runner with default backend
     ///
-    /// Uses `DefaultAgentBackend` which currently returns an error for real
-    /// agent spawning (pending SPEC-KIT-930). For tests, use `new_with_backend()`
-    /// with a `MockAgentBackend`.
+    /// Uses `DefaultAgentBackend` with real agent spawning via AGENT_MANAGER.
+    /// For tests, use `new_with_backend()` with a `MockAgentBackend`.
     pub fn new(
         spec_id: String,
         from_stage: Stage,
@@ -239,7 +255,8 @@ impl HeadlessPipelineRunner {
         planner_config: codex_core::config::Config,
         cwd: PathBuf,
     ) -> Self {
-        let backend = Box::new(DefaultAgentBackend::new(Vec::new()));
+        // Pass agent configs to enable real agent spawning (SPEC-KIT-900)
+        let backend = Box::new(DefaultAgentBackend::new(planner_config.agents.clone()));
         Self::new_with_backend(
             spec_id,
             from_stage,
@@ -721,6 +738,54 @@ mod tests {
         );
         assert_eq!(result.exit_code, 10);
         assert!(result.error.is_some());
+    }
+
+    #[test]
+    fn test_validation_failed_exit_code_is_hard_fail() {
+        let error = HeadlessError::ValidationFailed {
+            stage: "plan".to_string(),
+            reason: "test".to_string(),
+        };
+        assert_eq!(error.exit_code(), exit_codes::HARD_FAIL);
+        assert_eq!(error.exit_code(), 2);
+    }
+
+    #[test]
+    fn test_agent_failed_exit_code_is_hard_fail() {
+        let error = HeadlessError::AgentFailed {
+            agent: "gemini".to_string(),
+            reason: "test".to_string(),
+        };
+        assert_eq!(error.exit_code(), exit_codes::HARD_FAIL);
+        assert_eq!(error.exit_code(), 2);
+    }
+
+    #[test]
+    fn test_stage_blocked_exit_code_is_hard_fail() {
+        let error = HeadlessError::StageBlocked {
+            stage: "implement".to_string(),
+            reason: "missing dependency".to_string(),
+        };
+        assert_eq!(error.exit_code(), exit_codes::HARD_FAIL);
+        assert_eq!(error.exit_code(), 2);
+    }
+
+    #[test]
+    fn test_infra_error_exit_code_is_infra() {
+        let error = HeadlessError::InfraError("test".to_string());
+        assert_eq!(error.exit_code(), exit_codes::INFRA_ERROR);
+        assert_eq!(error.exit_code(), 3);
+    }
+
+    #[test]
+    fn test_timeout_exit_code_is_infra() {
+        let error = HeadlessError::Timeout {
+            expected: 2,
+            completed: 1,
+            elapsed_ms: 30000,
+        };
+        assert_eq!(error.exit_code(), exit_codes::INFRA_ERROR);
+        assert_eq!(error.exit_code(), 3);
     }
 
     /// Create a minimal Config for testing purposes
