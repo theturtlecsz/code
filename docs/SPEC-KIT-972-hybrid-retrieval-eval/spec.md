@@ -1,8 +1,11 @@
 # SPEC-KIT-972 — Hybrid Retrieval + Explainability + Evaluation Harness
 
 **Date:** 2026-01-10\
-**Status:** DRAFT\
+**Status:** COMPLETED\
+**Completed:** 2026-01-12\
 **Owner (role):** Search/Eval Eng
+
+> **Implementation status:** Canonical completion tracker: `codex-rs/SPEC.md` Completed (Recent).
 
 ## Summary
 

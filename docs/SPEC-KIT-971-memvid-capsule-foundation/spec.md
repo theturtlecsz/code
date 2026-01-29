@@ -1,8 +1,11 @@
 # SPEC-KIT-971 — Memvid Capsule Foundation + Single-Writer Adapter
 
 **Date:** 2026-01-10\
-**Status:** DRAFT\
+**Status:** COMPLETED\
+**Completed:** 2026-01-17\
 **Owner (role):** Platform Eng
+
+> **Implementation status:** Canonical completion tracker: `codex-rs/SPEC.md` Completed (Recent).
 
 ## Summary
 

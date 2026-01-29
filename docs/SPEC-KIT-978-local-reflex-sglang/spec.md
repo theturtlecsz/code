@@ -1,8 +1,11 @@
 # SPEC-KIT-978 — Implementer.Reflex Mode via SGLang (RTX 5090) + Bakeoff
 
 **Date:** 2026-01-18
-**Status:** COMPLETE
+**Status:** COMPLETED
+**Completed:** 2026-01-18
 **Owner (role):** Infra/LLM Eng
+
+> **Implementation status:** Canonical completion tracker: `codex-rs/SPEC.md` Completed (Recent).
 
 ## Summary
 
