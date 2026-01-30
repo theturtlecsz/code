@@ -21,9 +21,11 @@ use super::backend::{AgentBackend, DefaultAgentBackend};
 use super::output::{HeadlessOutput, Stage0Info};
 use super::prompt_builder::{build_headless_prompt, get_agents_for_stage};
 use crate::chatwidget::spec_kit::maieutic::MaieuticSpec;
+use crate::chatwidget::spec_kit::native_guardrail::run_native_guardrail;
 use crate::chatwidget::spec_kit::stage0_integration::{
     Stage0ExecutionConfig, Stage0ExecutionResult, spawn_stage0_async,
 };
+use crate::spec_prompts::SpecStage;
 
 /// Exit codes for headless execution (D133)
 pub mod exit_codes {
@@ -430,10 +432,61 @@ impl HeadlessPipelineRunner {
 
     /// Check guardrails for a stage
     fn check_guardrails(&self, stage: &Stage) -> Result<(), HeadlessError> {
-        // TODO: Implement actual guardrail checking
-        // For now, always pass (stub)
-        tracing::debug!(stage = %stage.as_str(), "Guardrail check passed (stub)");
-        Ok(())
+        // Specify stage has no guardrails (no SpecStage equivalent)
+        let Some(spec_stage) = stage_to_spec_stage(stage) else {
+            tracing::debug!(stage = %stage.as_str(), "No guardrails for stage");
+            return Ok(());
+        };
+
+        let result = run_native_guardrail(
+            &self.cwd,
+            &self.spec_id,
+            spec_stage,
+            false, // allow_dirty=false - enforces clean tree in headless mode
+        );
+
+        if result.success {
+            tracing::debug!(
+                stage = %stage.as_str(),
+                checks = result.checks_run.len(),
+                "Guardrail checks passed"
+            );
+            Ok(())
+        } else {
+            // Build detailed reason from failed checks
+            let failed_checks: Vec<String> = result
+                .checks_run
+                .iter()
+                .filter(|c| c.status == crate::chatwidget::spec_kit::native_guardrail::CheckStatus::Failed)
+                .map(|c| {
+                    format!(
+                        "{}: {}",
+                        c.name,
+                        c.message.as_deref().unwrap_or("no details")
+                    )
+                })
+                .collect();
+
+            let reason = if !result.errors.is_empty() {
+                result.errors.join("; ")
+            } else if !failed_checks.is_empty() {
+                failed_checks.join("; ")
+            } else {
+                "Guardrail validation failed (unknown reason)".to_string()
+            };
+
+            tracing::warn!(
+                stage = %stage.as_str(),
+                errors = ?result.errors,
+                warnings = ?result.warnings,
+                failed_checks = ?failed_checks,
+                "Guardrail checks failed"
+            );
+            Err(HeadlessError::ValidationFailed {
+                stage: stage.as_str().to_string(),
+                reason,
+            })
+        }
     }
 
     /// Execute a stage (spawn agents, wait for completion)
@@ -640,6 +693,21 @@ impl HeadlessPipelineRunner {
                 key
             ))),
         }
+    }
+}
+
+/// Convert codex_spec_kit::Stage to SpecStage for guardrail validation
+///
+/// Returns None for stages without a SpecStage equivalent (e.g., Specify).
+fn stage_to_spec_stage(stage: &Stage) -> Option<SpecStage> {
+    match stage {
+        Stage::Plan => Some(SpecStage::Plan),
+        Stage::Tasks => Some(SpecStage::Tasks),
+        Stage::Implement => Some(SpecStage::Implement),
+        Stage::Validate => Some(SpecStage::Validate),
+        Stage::Audit => Some(SpecStage::Audit),
+        Stage::Unlock => Some(SpecStage::Unlock),
+        Stage::Specify => None, // No guardrails for Specify stage
     }
 }
 
@@ -907,5 +975,95 @@ mod tests {
             "Expected InfraError, got {:?}",
             err
         );
+    }
+
+    #[test]
+    fn test_check_guardrails_fails_without_spec_file() {
+        // Setup temp directory WITHOUT spec files
+        let temp = TempDir::new().unwrap();
+        let spec_id = "SPEC-TEST-GUARDRAIL";
+
+        // Don't create spec directory/files - guardrail should fail
+
+        let codex_home = TempDir::new().unwrap();
+        let planner_config = create_test_config(codex_home.path());
+
+        let backend = MockAgentBackend::with_default_responses();
+        let runner = HeadlessPipelineRunner::new_with_backend(
+            spec_id.to_string(),
+            Stage::Plan,
+            Stage::Tasks,
+            test_maieutic(),
+            HeadlessConfig::default(),
+            planner_config,
+            temp.path().to_path_buf(),
+            Box::new(backend),
+        );
+
+        // Guardrail should fail - no spec.md exists
+        let result = runner.check_guardrails(&Stage::Plan);
+        assert!(result.is_err(), "Expected guardrail to fail without spec.md");
+
+        let err = result.unwrap_err();
+        assert_eq!(
+            err.exit_code(),
+            exit_codes::HARD_FAIL,
+            "Expected exit code 2 (HARD_FAIL)"
+        );
+
+        // Verify error is ValidationFailed
+        match err {
+            HeadlessError::ValidationFailed { stage, reason: _ } => {
+                assert_eq!(stage, "plan");
+            }
+            _ => panic!("Expected ValidationFailed, got {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_check_guardrails_passes_with_valid_spec() {
+        // Setup temp directory WITH spec files
+        let temp = TempDir::new().unwrap();
+        let spec_id = "SPEC-TEST-GUARDRAIL-PASS";
+        setup_test_spec(&temp, spec_id);
+
+        let codex_home = TempDir::new().unwrap();
+        let planner_config = create_test_config(codex_home.path());
+
+        let backend = MockAgentBackend::with_default_responses();
+        let runner = HeadlessPipelineRunner::new_with_backend(
+            spec_id.to_string(),
+            Stage::Plan,
+            Stage::Tasks,
+            test_maieutic(),
+            HeadlessConfig::default(),
+            planner_config,
+            temp.path().to_path_buf(),
+            Box::new(backend),
+        );
+
+        // Guardrail should pass with valid spec.md
+        let result = runner.check_guardrails(&Stage::Plan);
+        assert!(
+            result.is_ok(),
+            "Expected guardrail to pass with valid spec: {:?}",
+            result.unwrap_err()
+        );
+    }
+
+    #[test]
+    fn test_stage_to_spec_stage_mapping() {
+        use super::stage_to_spec_stage;
+
+        // Regular stages should map
+        assert!(stage_to_spec_stage(&Stage::Plan).is_some());
+        assert!(stage_to_spec_stage(&Stage::Tasks).is_some());
+        assert!(stage_to_spec_stage(&Stage::Implement).is_some());
+        assert!(stage_to_spec_stage(&Stage::Validate).is_some());
+        assert!(stage_to_spec_stage(&Stage::Audit).is_some());
+        assert!(stage_to_spec_stage(&Stage::Unlock).is_some());
+
+        // Specify stage should return None (no guardrails)
+        assert!(stage_to_spec_stage(&Stage::Specify).is_none());
     }
 }

@@ -144,11 +144,12 @@ docs/SPEC-002-add-color-support/evidence/
 
 ## 6. Session Log
 
-| Session | Date       | Status      | Notes                                                           |
-| ------- | ---------- | ----------- | --------------------------------------------------------------- |
-| P87     | 2025-12-01 | IN-PROGRESS | Initial setup, verification of Stage 0 flow                     |
-| P88     | 2026-01-29 | BLOCKED     | Headless CLI validation blocked                                 |
-| P89     | 2026-01-29 | PARTIAL     | Headless runner scaffolded; stage execution stub (SPEC-KIT-930) |
+| Session | Date       | Status      | Notes                                                                      |
+| ------- | ---------- | ----------- | -------------------------------------------------------------------------- |
+| P87     | 2025-12-01 | IN-PROGRESS | Initial setup, verification of Stage 0 flow                                |
+| P88     | 2026-01-29 | BLOCKED     | Headless CLI validation blocked                                            |
+| P89     | 2026-01-29 | PARTIAL     | Headless runner scaffolded; stage execution stub (SPEC-KIT-930)            |
+| P90     | 2026-01-29 | COMPLETED   | Headless execution operational; agents via AgentBackend; guardrails active |
 
 ### P88 Session Notes (2026-01-29)
 
@@ -164,7 +165,10 @@ docs/SPEC-002-add-color-support/evidence/
 
 **Critical Blocker**: No headless CLI equivalent for `/speckit.auto`
 
-### P89 Session Notes (2026-01-29) - PARTIAL
+### P89 Session Notes (2026-01-29) - SUPERSEDED BY P90
+
+> **SUPERSEDED**: The blocking issue below was resolved in P90. `execute_stage()` is now fully
+> operational with real agent spawning via the `AgentBackend` trait.
 
 **Resolution**: Scaffolded `HeadlessPipelineRunner`; stage execution deferred (TODO stub).
 
@@ -198,19 +202,20 @@ code speckit run \
 
 **Exit Codes**:
 
-| Code | Meaning           | Resolution                                   |
-| ---- | ----------------- | -------------------------------------------- |
-| 0    | SUCCESS           | Pipeline completed                           |
-| 3    | INFRA\_ERROR      | Check logs, verify config                    |
-| 10   | NEEDS\_INPUT      | Provide `--maieutic-answers` or `--maieutic` |
-| 11   | NEEDS\_APPROVAL   | Pre-supply approval answers                  |
-| 13   | PROMPT\_ATTEMPTED | Bug - headless should never prompt           |
+| Code | Meaning           | Resolution                                           |
+| ---- | ----------------- | ---------------------------------------------------- |
+| 0    | SUCCESS           | Pipeline completed                                   |
+| 2    | HARD\_FAIL        | Guardrail/validation/agent failure (non-recoverable) |
+| 3    | INFRA\_ERROR      | Check logs, verify config, infrastructure issue      |
+| 10   | NEEDS\_INPUT      | Provide `--maieutic-answers` or `--maieutic`         |
+| 11   | NEEDS\_APPROVAL   | Pre-supply approval answers                          |
+| 13   | PROMPT\_ATTEMPTED | Bug - headless should never prompt                   |
 
 **Verified CLI capabilities** (updated):
 
-* `code speckit new --headless --answers <json>` - Works, creates spec + intake artifacts
+* `code speckit new --headless --answers <json>` - Works, creates spec + intake artifacts ✅
 * `code speckit run --from --to` - Validation only (dry-run) ✅
-* `code speckit run --from --to --execute --headless --maieutic-answers <json>` - Scaffolded (stub execution) ❌
+* `code speckit run --from --to --execute --headless --maieutic-answers <json>` - Fully operational ✅
 
 **Artifacts Created**:
 
@@ -219,6 +224,46 @@ code speckit run \
   * `PRD.md` (777 bytes)
   * `INTAKE.md` (913 bytes)
 * Capsule intake artifacts persisted (see capsule URIs in spec creation output)
+
+### P90 Session Notes (2026-01-29) - COMPLETED
+
+**Objective**: Complete headless CLI execution parity (D113/D133)
+
+**Resolution**: Headless execution is fully operational with real agent spawning via `AgentBackend` trait.
+
+**Changes Made**:
+
+1. **Real Guardrails** (runner.rs):
+   * Replaced `check_guardrails()` stub with call to `run_native_guardrail()`
+   * Stage-to-SpecStage mapping via `stage_to_spec_stage()` helper
+   * GuardrailResult failures return `HeadlessError::ValidationFailed` (exit code 2)
+   * Specify stage skipped (no SpecStage equivalent)
+
+2. **Agent Execution** (already present from prior work):
+   * `execute_stage()` is fully implemented (not a stub)
+   * Agents spawn via `DefaultAgentBackend` → AGENT\_MANAGER
+   * Stage outputs written to `docs/{spec_id}/{stage}.md`
+
+3. **Exit Code Contract** (D113/D133 compliant):
+   * Exit 0: SUCCESS - pipeline completed
+   * Exit 2: HARD\_FAIL - guardrail/validation/agent failure
+   * Exit 3: INFRA\_ERROR - infrastructure/timeout
+   * Exit 10: NEEDS\_INPUT - missing maieutic
+   * Exit 11: NEEDS\_APPROVAL - checkpoint blocked
+   * Exit 13: PROMPT\_ATTEMPTED - invariant violation
+
+**Key Implementation Details**:
+
+* No `/tmp/speckit-trace.log` writes (agents run via AGENT\_MANAGER)
+* Guardrails enforce `allow_dirty=false` by default in headless mode
+* Stage0 "no result" is soft-fail; Stage0 infra failures are hard errors
+* Headless never prompts (D133 invariant enforced via `guard_prompt()`)
+
+**Test Coverage**:
+
+* `test_check_guardrails_fails_without_spec_file` - verifies exit code 2
+* `test_check_guardrails_passes_with_valid_spec` - verifies happy path
+* `test_stage_to_spec_stage_mapping` - verifies Specify returns None
 
 ***
 

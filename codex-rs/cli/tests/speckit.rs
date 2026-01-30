@@ -3965,3 +3965,240 @@ fn test_shared_executor_same_core_artifacts() {
     // See: codex-rs/tui/src/chatwidget/spec_kit/arb_pass2_enforcement.rs
     todo!("test_shared_executor_same_core_artifacts - requires mock agent infrastructure")
 }
+
+// =============================================================================
+// SPEC-KIT-900 P0: DETERMINISTIC HEADLESS HAPPY-PATH TEST
+// =============================================================================
+// This test proves headless execution works deterministically without network/LLMs.
+//
+// IMPLEMENTATION: Uses a "gemini shim" approach to keep the test hermetic:
+// - Creates a fake `gemini` executable (shell script) that outputs valid JSON
+// - Prepends the shim's directory to PATH so it's found before any real gemini CLI
+// - AgentManager validates agent names (claude|gemini|qwen|codex) but not the
+//   actual command behavior, so our shim passes validation
+// - The shim outputs >=500 bytes of JSON (agent_tool.rs requires this minimum)
+//
+// This approach avoids network calls, real LLM APIs, and external dependencies
+// while exercising the full headless execution path including guardrails,
+// stage execution, and artifact generation.
+
+#[test]
+fn test_run_headless_execute_deterministic_happy_path() -> Result<()> {
+    // SPEC-KIT-900 P0: Prove headless execution succeeds deterministically
+    //
+    // This test creates a mock gemini executable that:
+    // 1. Consumes stdin (prevents hanging on large prompts)
+    // 2. Outputs deterministic JSON content (>=500 bytes for AgentManager validation)
+    // 3. Works without network/LLM
+    //
+    // The "gemini shim" approach works because AgentManager only validates
+    // that the agent name is in the allowed list (claude|gemini|qwen|codex),
+    // not what the actual command does.
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let spec_id = "SPEC-TEST-HAPPY-PATH";
+    setup_spec_with_prd(repo_root.path(), spec_id)?;
+
+    // Initialize a git repo (required by agent backend for non-read-only agents)
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git init should succeed");
+
+    // Configure git user for the repo (needed for any commits)
+    std::process::Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git config email should succeed");
+    std::process::Command::new("git")
+        .args(["config", "user.name", "Test User"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git config name should succeed");
+
+    // Stage the initial files so git status shows a clean tree
+    std::process::Command::new("git")
+        .args(["add", "."])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git add should succeed");
+    std::process::Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git commit should succeed");
+
+    // Create gemini shim executable in bin/ directory
+    // This shim:
+    // - Reads stdin to EOF (handles large prompt piping)
+    // - Outputs valid JSON with >=500 bytes (AgentManager validation requires this)
+    // - Contains "ok":true marker for assertion checking
+    let bin_dir = codex_home.path().join("bin");
+    fs::create_dir_all(&bin_dir)?;
+    let gemini_shim = bin_dir.join("gemini");
+    fs::write(
+        &gemini_shim,
+        r##"#!/bin/bash
+cat >/dev/null || true
+cat <<'EOF'
+{
+  "ok": true,
+  "result": "# Plan Stage Output\n\nThis is deterministic test content from the mock gemini agent.\n\n## Goals\n\n- Implement the test feature\n- Validate the implementation\n\n## Steps\n\n1. First step of the plan\n2. Second step of the plan\n3. Third step of the plan\n\n## Acceptance Criteria\n\n- All tests pass\n- Documentation updated\n\n## Constraints\n\n- Must be deterministic\n- Must not require network\n\n## Notes\n\nThis mock output is >= 500 bytes to satisfy AgentManager validation requirements. Adding more content here to ensure we exceed the threshold with comfortable margin for the deterministic headless test.",
+  "agent": "gemini-mock",
+  "timestamp": "2026-01-30T00:00:00Z"
+}
+EOF
+"##,
+    )?;
+    // Make the shim executable
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&gemini_shim)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&gemini_shim, perms)?;
+    }
+
+    // Create config.toml with gemini agent pointing to our shim
+    let config_path = codex_home.path().join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+[[agents]]
+name = "gemini"
+command = "gemini"
+args = []
+enabled = true
+"#,
+    )?;
+
+    // Create stage0.toml to disable Tier2 and pointer storage (hermetic test)
+    let stage0_config = codex_home.path().join("stage0.toml");
+    fs::write(
+        &stage0_config,
+        r#"
+store_system_pointers = false
+
+[tier2]
+enabled = false
+"#,
+    )?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    // Prepend bin/ to PATH so our gemini shim is found (portable across platforms)
+    let current_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths: Vec<_> = std::iter::once(bin_dir.clone())
+        .chain(std::env::split_paths(&current_path))
+        .collect();
+    let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
+    cmd.env("PATH", new_path);
+    // Isolate HOME so Stage0 doesn't touch real user home
+    cmd.env("HOME", codex_home.path());
+    // Point to our stage0 config to disable tier2/pointers
+    cmd.env("CODE_STAGE0_CONFIG", &stage0_config);
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            spec_id,
+            "--from",
+            "plan",
+            "--to",
+            "tasks",
+            "--execute",
+            "--headless",
+            "--maieutic-answers",
+            r#"{"goal":"Deterministic test","constraints":[],"acceptance":["Pass"],"delegation":"B"}"#,
+            "--json",
+        ])
+        .output()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_str(&stdout).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to parse JSON: {}\nstdout: {}\nstderr: {}",
+            e,
+            stdout,
+            stderr
+        )
+    })?;
+
+    // Verify execution mode
+    assert_eq!(
+        json.get("mode").and_then(|v| v.as_str()),
+        Some("execute"),
+        "Expected mode=execute, got: {}",
+        serde_json::to_string_pretty(&json).unwrap_or_default()
+    );
+
+    // Verify exit code 0 (success)
+    assert_eq!(
+        json.get("exit_code").and_then(|v| v.as_i64()),
+        Some(0),
+        "Expected exit_code=0, got: {}\nstderr: {}",
+        serde_json::to_string_pretty(&json).unwrap_or_default(),
+        stderr
+    );
+
+    // Verify stages completed includes plan and tasks
+    let stages = json
+        .get("stages_completed")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| anyhow::anyhow!("stages_completed should be array"))?;
+
+    let stage_names: Vec<&str> = stages
+        .iter()
+        .filter_map(|s| s.as_str())
+        .collect();
+
+    assert!(
+        stage_names.contains(&"plan"),
+        "stages_completed should include 'plan', got: {:?}",
+        stage_names
+    );
+    assert!(
+        stage_names.contains(&"tasks"),
+        "stages_completed should include 'tasks', got: {:?}",
+        stage_names
+    );
+
+    // Verify artifacts were created
+    let plan_path = repo_root.path().join(format!("docs/{}/plan.md", spec_id));
+    let tasks_path = repo_root.path().join(format!("docs/{}/tasks.md", spec_id));
+
+    assert!(
+        plan_path.exists(),
+        "plan.md should exist at {}",
+        plan_path.display()
+    );
+    assert!(
+        tasks_path.exists(),
+        "tasks.md should exist at {}",
+        tasks_path.display()
+    );
+
+    // Verify artifacts are non-empty
+    let plan_len = fs::metadata(&plan_path)?.len();
+    let tasks_len = fs::metadata(&tasks_path)?.len();
+
+    assert!(plan_len > 0, "plan.md should be non-empty");
+    assert!(tasks_len > 0, "tasks.md should be non-empty");
+
+    // Verify artifacts contain expected content (from gemini shim)
+    // The shim outputs JSON with "ok":true marker that should appear in the plan
+    let plan_content = fs::read_to_string(&plan_path)?;
+    assert!(
+        plan_content.contains("ok") || plan_content.contains("gemini-mock") || plan_content.contains("Plan Stage Output"),
+        "plan.md should contain gemini shim output marker, got: {}",
+        plan_content
+    );
+
+    Ok(())
+}

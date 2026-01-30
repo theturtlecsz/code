@@ -231,6 +231,13 @@ fn validate_clean_tree(cwd: &Path) -> GuardrailCheck {
             {
                 return false;
             }
+            // Allow .speckit/ directory (auto-generated for capsule/memvid storage)
+            // Git porcelain format: "XY path" where XY is 2 status chars + space
+            // Extract the path component and check if it starts with .speckit/
+            let path = if line.len() > 3 { &line[3..] } else { line };
+            if path.starts_with(".speckit/") || path.starts_with(".speckit\\") || path == ".speckit" {
+                return false;
+            }
             true
         })
         .collect();
