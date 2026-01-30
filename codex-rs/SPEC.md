@@ -100,9 +100,9 @@ These invariants MUST NOT be violated:
 
 ### In Progress
 
-| Spec   | Status | Owner | Next Action |
-| ------ | ------ | ----- | ----------- |
-| (none) | -      | -     | -           |
+| Spec         | Status      | Owner  | Next Action                                       |
+| ------------ | ----------- | ------ | ------------------------------------------------- |
+| SPEC-KIT-905 | In Progress | @thetu | CLI stage subcommand execution parity (D113/D133) |
 
 ### Completed (Recent)
 

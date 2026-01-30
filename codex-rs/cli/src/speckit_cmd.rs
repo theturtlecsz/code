@@ -303,53 +303,53 @@ pub enum SpeckitSubcommand {
     /// This is the first stage of the SPEC lifecycle.
     Specify(SpecifyArgs),
 
-    /// Validate SPEC prerequisites and execute plan stage (dry-run by default)
+    /// Validate SPEC prerequisites and execute plan stage
     ///
-    /// SPEC-KIT-921 P3-B: CLI plan command for CI validation.
-    /// Validates SPEC exists, checks prerequisites, runs guardrails.
-    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    /// D113/D133: Full execution parity across CLI/TUI/headless.
+    /// Without --execute: validation-only (dry-run).
+    /// With --execute --headless: requires --maieutic or --maieutic-answers.
     Plan(PlanArgs),
 
-    /// Validate SPEC prerequisites and execute tasks stage (dry-run by default)
+    /// Validate SPEC prerequisites and execute tasks stage
     ///
-    /// SPEC-KIT-921 P4-C: CLI tasks command for CI validation.
-    /// Validates SPEC exists, checks that plan.md exists, runs guardrails.
-    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    /// D113/D133: Full execution parity across CLI/TUI/headless.
+    /// Without --execute: validation-only (dry-run).
+    /// With --execute --headless: requires --maieutic or --maieutic-answers.
     Tasks(TasksArgs),
 
-    /// Validate SPEC prerequisites and execute implement stage (dry-run by default)
+    /// Validate SPEC prerequisites and execute implement stage
     ///
-    /// SPEC-KIT-921 P5-A: CLI implement command for CI validation.
-    /// Validates SPEC exists, checks that tasks.md exists, runs guardrails.
-    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    /// D113/D133: Full execution parity across CLI/TUI/headless.
+    /// Without --execute: validation-only (dry-run).
+    /// With --execute --headless: requires --maieutic or --maieutic-answers.
     Implement(ImplementArgs),
 
-    /// Validate SPEC prerequisites and execute validate stage (dry-run by default)
+    /// Validate SPEC prerequisites and execute validate stage
     ///
-    /// SPEC-KIT-921 P5-B: CLI validate command for CI validation.
-    /// Validates SPEC exists, checks implementation artifacts, runs guardrails.
-    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    /// D113/D133: Full execution parity across CLI/TUI/headless.
+    /// Without --execute: validation-only (dry-run).
+    /// With --execute --headless: requires --maieutic or --maieutic-answers.
     Validate(ValidateStageArgs),
 
-    /// Validate SPEC prerequisites and execute audit stage (dry-run by default)
+    /// Validate SPEC prerequisites and execute audit stage
     ///
-    /// SPEC-KIT-921 P5-B: CLI audit command for CI validation.
-    /// Validates SPEC exists, checks validation artifacts, runs guardrails.
-    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    /// D113/D133: Full execution parity across CLI/TUI/headless.
+    /// Without --execute: validation-only (dry-run).
+    /// With --execute --headless: requires --maieutic or --maieutic-answers.
     Audit(AuditArgs),
 
-    /// Validate SPEC prerequisites and execute unlock stage (dry-run by default)
+    /// Validate SPEC prerequisites and execute unlock stage
     ///
-    /// SPEC-KIT-921 P5-B: CLI unlock command for CI validation.
-    /// Validates SPEC exists, checks audit artifacts, runs guardrails.
-    /// Use --no-dry-run to actually trigger agent execution (TUI only).
+    /// D113/D133: Full execution parity across CLI/TUI/headless.
+    /// Without --execute: validation-only (dry-run).
+    /// With --execute --headless: requires --maieutic or --maieutic-answers.
     Unlock(UnlockArgs),
 
     /// Validate or execute stages in a batch
     ///
-    /// SPEC-KIT-921 P7-A: Run command validates stages from --from to --to.
+    /// D113/D133: Batch execution across stage range.
     /// Without --execute: validation-only (readiness check for CI).
-    /// With --execute + --maieutic-answers: triggers headless pipeline (agent spawning WIP).
+    /// With --execute --headless: triggers headless pipeline via HeadlessRunner.
     /// Maieutic input required for headless execution.
     Run(RunArgs),
 
@@ -498,16 +498,16 @@ pub struct SpecifyArgs {
 
 /// Arguments for `speckit plan` command
 ///
-/// SPEC-KIT-921 P4-A: Plan command is locked to plan stage.
+/// D113/D133: Plan command with full execution parity.
 /// Use `speckit tasks` for tasks stage, `speckit implement` for implement, etc.
 #[derive(Debug, Parser)]
 pub struct PlanArgs {
-    /// SPEC identifier (e.g., SPEC-KIT-921)
+    /// SPEC identifier (e.g., SPEC-KIT-905)
     #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
     pub spec_id: String,
 
-    /// Dry-run mode: validate only, don't trigger agent execution
-    /// This is the default for CLI (model-free CI)
+    /// Dry-run mode: validate only, don't execute
+    /// Default when --execute is not set. Use --execute for actual stage execution.
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
 
@@ -520,19 +520,49 @@ pub struct PlanArgs {
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
+
+    // === SPEC-KIT-905: Execution flags for CLI parity ===
+
+    /// Actually execute the stage (not just validate)
+    ///
+    /// Requires maieutic input in headless mode via --maieutic or --maieutic-answers.
+    /// Without this flag, the command only validates stage prerequisites (dry-run).
+    #[arg(long = "execute")]
+    pub execute: bool,
+
+    /// Headless mode: error on any prompt attempt
+    ///
+    /// Implied when stdin is not a TTY. Any code path that would prompt the user
+    /// will instead exit with code 13 (PROMPT_ATTEMPTED).
+    #[arg(long = "headless")]
+    pub headless: bool,
+
+    /// Path to maieutic spec file (JSON)
+    ///
+    /// Required when --execute is used in headless mode.
+    /// If both --maieutic and --maieutic-answers are provided, --maieutic-answers takes precedence.
+    #[arg(long = "maieutic", value_name = "PATH")]
+    pub maieutic_path: Option<PathBuf>,
+
+    /// Inline maieutic answers as JSON
+    ///
+    /// Takes precedence over --maieutic if both are provided.
+    /// Format: {"goal":"...", "constraints":["..."], "acceptance":["..."], "delegation":"B"}
+    #[arg(long = "maieutic-answers", value_name = "JSON")]
+    pub maieutic_answers: Option<String>,
 }
 
 /// Arguments for `speckit tasks` command
 ///
-/// SPEC-KIT-921 P4-C: Tasks command is locked to tasks stage.
+/// D113/D133: Tasks command with full execution parity.
 #[derive(Debug, Parser)]
 pub struct TasksArgs {
-    /// SPEC identifier (e.g., SPEC-KIT-921)
+    /// SPEC identifier (e.g., SPEC-KIT-905)
     #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
     pub spec_id: String,
 
-    /// Dry-run mode: validate only, don't trigger agent execution
-    /// This is the default for CLI (model-free CI)
+    /// Dry-run mode: validate only, don't execute
+    /// Default when --execute is not set.
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
 
@@ -543,19 +573,37 @@ pub struct TasksArgs {
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
+
+    // === SPEC-KIT-905: Execution flags for CLI parity ===
+
+    /// Actually execute the stage (not just validate)
+    #[arg(long = "execute")]
+    pub execute: bool,
+
+    /// Headless mode: error on any prompt attempt
+    #[arg(long = "headless")]
+    pub headless: bool,
+
+    /// Path to maieutic spec file (JSON)
+    #[arg(long = "maieutic", value_name = "PATH")]
+    pub maieutic_path: Option<PathBuf>,
+
+    /// Inline maieutic answers as JSON
+    #[arg(long = "maieutic-answers", value_name = "JSON")]
+    pub maieutic_answers: Option<String>,
 }
 
 /// Arguments for `speckit implement` command
 ///
-/// SPEC-KIT-921 P5-A: Implement command is locked to implement stage.
+/// D113/D133: Implement command with full execution parity.
 #[derive(Debug, Parser)]
 pub struct ImplementArgs {
-    /// SPEC identifier (e.g., SPEC-KIT-921)
+    /// SPEC identifier (e.g., SPEC-KIT-905)
     #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
     pub spec_id: String,
 
-    /// Dry-run mode: validate only, don't trigger agent execution
-    /// This is the default for CLI (model-free CI)
+    /// Dry-run mode: validate only, don't execute
+    /// Default when --execute is not set.
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
 
@@ -566,20 +614,38 @@ pub struct ImplementArgs {
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
+
+    // === SPEC-KIT-905: Execution flags for CLI parity ===
+
+    /// Actually execute the stage (not just validate)
+    #[arg(long = "execute")]
+    pub execute: bool,
+
+    /// Headless mode: error on any prompt attempt
+    #[arg(long = "headless")]
+    pub headless: bool,
+
+    /// Path to maieutic spec file (JSON)
+    #[arg(long = "maieutic", value_name = "PATH")]
+    pub maieutic_path: Option<PathBuf>,
+
+    /// Inline maieutic answers as JSON
+    #[arg(long = "maieutic-answers", value_name = "JSON")]
+    pub maieutic_answers: Option<String>,
 }
 
 /// Arguments for `speckit validate` command
 ///
-/// SPEC-KIT-921 P5-B: Validate command is locked to validate stage.
+/// D113/D133: Validate command with full execution parity.
 /// Note: Named ValidateStageArgs to avoid conflict with other validation concepts.
 #[derive(Debug, Parser)]
 pub struct ValidateStageArgs {
-    /// SPEC identifier (e.g., SPEC-KIT-921)
+    /// SPEC identifier (e.g., SPEC-KIT-905)
     #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
     pub spec_id: String,
 
-    /// Dry-run mode: validate only, don't trigger agent execution
-    /// This is the default for CLI (model-free CI)
+    /// Dry-run mode: validate only, don't execute
+    /// Default when --execute is not set.
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
 
@@ -590,19 +656,37 @@ pub struct ValidateStageArgs {
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
+
+    // === SPEC-KIT-905: Execution flags for CLI parity ===
+
+    /// Actually execute the stage (not just validate)
+    #[arg(long = "execute")]
+    pub execute: bool,
+
+    /// Headless mode: error on any prompt attempt
+    #[arg(long = "headless")]
+    pub headless: bool,
+
+    /// Path to maieutic spec file (JSON)
+    #[arg(long = "maieutic", value_name = "PATH")]
+    pub maieutic_path: Option<PathBuf>,
+
+    /// Inline maieutic answers as JSON
+    #[arg(long = "maieutic-answers", value_name = "JSON")]
+    pub maieutic_answers: Option<String>,
 }
 
 /// Arguments for `speckit audit` command
 ///
-/// SPEC-KIT-921 P5-B: Audit command is locked to audit stage.
+/// D113/D133: Audit command with full execution parity.
 #[derive(Debug, Parser)]
 pub struct AuditArgs {
-    /// SPEC identifier (e.g., SPEC-KIT-921)
+    /// SPEC identifier (e.g., SPEC-KIT-905)
     #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
     pub spec_id: String,
 
-    /// Dry-run mode: validate only, don't trigger agent execution
-    /// This is the default for CLI (model-free CI)
+    /// Dry-run mode: validate only, don't execute
+    /// Default when --execute is not set.
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
 
@@ -613,19 +697,37 @@ pub struct AuditArgs {
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
+
+    // === SPEC-KIT-905: Execution flags for CLI parity ===
+
+    /// Actually execute the stage (not just validate)
+    #[arg(long = "execute")]
+    pub execute: bool,
+
+    /// Headless mode: error on any prompt attempt
+    #[arg(long = "headless")]
+    pub headless: bool,
+
+    /// Path to maieutic spec file (JSON)
+    #[arg(long = "maieutic", value_name = "PATH")]
+    pub maieutic_path: Option<PathBuf>,
+
+    /// Inline maieutic answers as JSON
+    #[arg(long = "maieutic-answers", value_name = "JSON")]
+    pub maieutic_answers: Option<String>,
 }
 
 /// Arguments for `speckit unlock` command
 ///
-/// SPEC-KIT-921 P5-B: Unlock command is locked to unlock stage.
+/// D113/D133: Unlock command with full execution parity.
 #[derive(Debug, Parser)]
 pub struct UnlockArgs {
-    /// SPEC identifier (e.g., SPEC-KIT-921)
+    /// SPEC identifier (e.g., SPEC-KIT-905)
     #[arg(long = "spec", short = 's', value_name = "SPEC-ID")]
     pub spec_id: String,
 
-    /// Dry-run mode: validate only, don't trigger agent execution
-    /// This is the default for CLI (model-free CI)
+    /// Dry-run mode: validate only, don't execute
+    /// Default when --execute is not set.
     #[arg(long = "dry-run", default_value = "true")]
     pub dry_run: bool,
 
@@ -636,6 +738,24 @@ pub struct UnlockArgs {
     /// Output as JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
+
+    // === SPEC-KIT-905: Execution flags for CLI parity ===
+
+    /// Actually execute the stage (not just validate)
+    #[arg(long = "execute")]
+    pub execute: bool,
+
+    /// Headless mode: error on any prompt attempt
+    #[arg(long = "headless")]
+    pub headless: bool,
+
+    /// Path to maieutic spec file (JSON)
+    #[arg(long = "maieutic", value_name = "PATH")]
+    pub maieutic_path: Option<PathBuf>,
+
+    /// Inline maieutic answers as JSON
+    #[arg(long = "maieutic-answers", value_name = "JSON")]
+    pub maieutic_answers: Option<String>,
 }
 
 /// Arguments for `speckit run` command
@@ -1692,12 +1812,13 @@ impl SpeckitCli {
             SpeckitSubcommand::Status(args) => run_status(executor, args),
             SpeckitSubcommand::Review(args) => run_review(executor, args),
             SpeckitSubcommand::Specify(args) => run_specify(executor, args),
-            SpeckitSubcommand::Plan(args) => run_plan(executor, args),
-            SpeckitSubcommand::Tasks(args) => run_tasks(executor, args),
-            SpeckitSubcommand::Implement(args) => run_implement(executor, args),
-            SpeckitSubcommand::Validate(args) => run_validate(executor, args),
-            SpeckitSubcommand::Audit(args) => run_audit(executor, args),
-            SpeckitSubcommand::Unlock(args) => run_unlock(executor, args),
+            // SPEC-KIT-905: Pass repo_root to stage commands for headless execution
+            SpeckitSubcommand::Plan(args) => run_plan(executor, args, repo_root.clone()),
+            SpeckitSubcommand::Tasks(args) => run_tasks(executor, args, repo_root.clone()),
+            SpeckitSubcommand::Implement(args) => run_implement(executor, args, repo_root.clone()),
+            SpeckitSubcommand::Validate(args) => run_validate(executor, args, repo_root.clone()),
+            SpeckitSubcommand::Audit(args) => run_audit(executor, args, repo_root.clone()),
+            SpeckitSubcommand::Unlock(args) => run_unlock(executor, args, repo_root.clone()),
             SpeckitSubcommand::Run(args) => run_run(executor, args, repo_root.clone()),
             SpeckitSubcommand::Migrate(args) => run_migrate(executor, args),
             SpeckitSubcommand::Capsule(_) => unreachable!("Capsule handled above"),
@@ -2088,13 +2209,39 @@ fn run_specify(executor: SpeckitExecutor, args: SpecifyArgs) -> anyhow::Result<(
 
 /// Run the plan command
 ///
-/// SPEC-KIT-921 P4-A: Plan command is locked to Stage::Plan.
-/// Validates SPEC prerequisites and guardrails.
+/// D113/D133: Plan command with full execution parity.
+/// Validates SPEC prerequisites and guardrails, or executes the stage.
 /// Returns exit 0 on success, exit 2 on validation failure.
-fn run_plan(executor: SpeckitExecutor, args: PlanArgs) -> anyhow::Result<()> {
-    // P4-A: Plan command always uses Stage::Plan
+fn run_plan(executor: SpeckitExecutor, args: PlanArgs, cwd: PathBuf) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+
     let stage = Stage::Plan;
 
+    // SPEC-KIT-905: Detect headless mode
+    let headless = args.headless || !std::io::stdin().is_terminal();
+
+    // SPEC-KIT-905: Route to headless execution when --execute is set
+    if args.execute {
+        // Validate maieutic input requirement in headless mode
+        if headless {
+            let has_maieutic = args.maieutic_answers.is_some() || args.maieutic_path.is_some();
+            if !has_maieutic {
+                emit_needs_input_error(args.json);
+            }
+        }
+
+        return run_stage_headless(
+            args.spec_id,
+            stage,
+            args.maieutic_path,
+            args.maieutic_answers,
+            args.json,
+            headless,
+            cwd,
+        );
+    }
+
+    // Validation-only path (existing behavior when --execute is not set)
     let command = SpeckitCommand::ValidateStage {
         spec_id: args.spec_id.clone(),
         stage,
@@ -2196,13 +2343,38 @@ fn run_plan(executor: SpeckitExecutor, args: PlanArgs) -> anyhow::Result<()> {
 
 /// Run the tasks command
 ///
-/// SPEC-KIT-921 P4-C: Tasks command is locked to Stage::Tasks.
-/// Validates SPEC prerequisites and guardrails for tasks stage.
+/// D113/D133: Tasks command with full execution parity.
+/// Validates SPEC prerequisites and guardrails, or executes the stage.
 /// Returns exit 0 on success, exit 2 on validation failure.
-fn run_tasks(executor: SpeckitExecutor, args: TasksArgs) -> anyhow::Result<()> {
-    // P4-C: Tasks command always uses Stage::Tasks
+fn run_tasks(executor: SpeckitExecutor, args: TasksArgs, cwd: PathBuf) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+
     let stage = Stage::Tasks;
 
+    // SPEC-KIT-905: Detect headless mode
+    let headless = args.headless || !std::io::stdin().is_terminal();
+
+    // SPEC-KIT-905: Route to headless execution when --execute is set
+    if args.execute {
+        if headless {
+            let has_maieutic = args.maieutic_answers.is_some() || args.maieutic_path.is_some();
+            if !has_maieutic {
+                emit_needs_input_error(args.json);
+            }
+        }
+
+        return run_stage_headless(
+            args.spec_id,
+            stage,
+            args.maieutic_path,
+            args.maieutic_answers,
+            args.json,
+            headless,
+            cwd,
+        );
+    }
+
+    // Validation-only path (existing behavior when --execute is not set)
     let command = SpeckitCommand::ValidateStage {
         spec_id: args.spec_id.clone(),
         stage,
@@ -2304,13 +2476,38 @@ fn run_tasks(executor: SpeckitExecutor, args: TasksArgs) -> anyhow::Result<()> {
 
 /// Run the implement command
 ///
-/// SPEC-KIT-921 P5-A: Implement command is locked to Stage::Implement.
-/// Validates SPEC prerequisites and guardrails for implement stage.
+/// D113/D133: Implement command with full execution parity.
+/// Validates SPEC prerequisites and guardrails, or executes the stage.
 /// Returns exit 0 on success, exit 2 on validation failure.
-fn run_implement(executor: SpeckitExecutor, args: ImplementArgs) -> anyhow::Result<()> {
-    // P5-A: Implement command always uses Stage::Implement
+fn run_implement(executor: SpeckitExecutor, args: ImplementArgs, cwd: PathBuf) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+
     let stage = Stage::Implement;
 
+    // SPEC-KIT-905: Detect headless mode
+    let headless = args.headless || !std::io::stdin().is_terminal();
+
+    // SPEC-KIT-905: Route to headless execution when --execute is set
+    if args.execute {
+        if headless {
+            let has_maieutic = args.maieutic_answers.is_some() || args.maieutic_path.is_some();
+            if !has_maieutic {
+                emit_needs_input_error(args.json);
+            }
+        }
+
+        return run_stage_headless(
+            args.spec_id,
+            stage,
+            args.maieutic_path,
+            args.maieutic_answers,
+            args.json,
+            headless,
+            cwd,
+        );
+    }
+
+    // Validation-only path (existing behavior when --execute is not set)
     let command = SpeckitCommand::ValidateStage {
         spec_id: args.spec_id.clone(),
         stage,
@@ -2412,13 +2609,38 @@ fn run_implement(executor: SpeckitExecutor, args: ImplementArgs) -> anyhow::Resu
 
 /// Run the validate command
 ///
-/// SPEC-KIT-921 P5-B: Validate command is locked to Stage::Validate.
-/// Validates SPEC prerequisites and guardrails for validate stage.
+/// D113/D133: Validate command with full execution parity.
+/// Validates SPEC prerequisites and guardrails, or executes the stage.
 /// Returns exit 0 on success, exit 2 on validation failure.
-fn run_validate(executor: SpeckitExecutor, args: ValidateStageArgs) -> anyhow::Result<()> {
-    // P5-B: Validate command always uses Stage::Validate
+fn run_validate(executor: SpeckitExecutor, args: ValidateStageArgs, cwd: PathBuf) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+
     let stage = Stage::Validate;
 
+    // SPEC-KIT-905: Detect headless mode
+    let headless = args.headless || !std::io::stdin().is_terminal();
+
+    // SPEC-KIT-905: Route to headless execution when --execute is set
+    if args.execute {
+        if headless {
+            let has_maieutic = args.maieutic_answers.is_some() || args.maieutic_path.is_some();
+            if !has_maieutic {
+                emit_needs_input_error(args.json);
+            }
+        }
+
+        return run_stage_headless(
+            args.spec_id,
+            stage,
+            args.maieutic_path,
+            args.maieutic_answers,
+            args.json,
+            headless,
+            cwd,
+        );
+    }
+
+    // Validation-only path (existing behavior when --execute is not set)
     let command = SpeckitCommand::ValidateStage {
         spec_id: args.spec_id.clone(),
         stage,
@@ -2520,13 +2742,38 @@ fn run_validate(executor: SpeckitExecutor, args: ValidateStageArgs) -> anyhow::R
 
 /// Run the audit command
 ///
-/// SPEC-KIT-921 P5-B: Audit command is locked to Stage::Audit.
-/// Validates SPEC prerequisites and guardrails for audit stage.
+/// D113/D133: Audit command with full execution parity.
+/// Validates SPEC prerequisites and guardrails, or executes the stage.
 /// Returns exit 0 on success, exit 2 on validation failure.
-fn run_audit(executor: SpeckitExecutor, args: AuditArgs) -> anyhow::Result<()> {
-    // P5-B: Audit command always uses Stage::Audit
+fn run_audit(executor: SpeckitExecutor, args: AuditArgs, cwd: PathBuf) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+
     let stage = Stage::Audit;
 
+    // SPEC-KIT-905: Detect headless mode
+    let headless = args.headless || !std::io::stdin().is_terminal();
+
+    // SPEC-KIT-905: Route to headless execution when --execute is set
+    if args.execute {
+        if headless {
+            let has_maieutic = args.maieutic_answers.is_some() || args.maieutic_path.is_some();
+            if !has_maieutic {
+                emit_needs_input_error(args.json);
+            }
+        }
+
+        return run_stage_headless(
+            args.spec_id,
+            stage,
+            args.maieutic_path,
+            args.maieutic_answers,
+            args.json,
+            headless,
+            cwd,
+        );
+    }
+
+    // Validation-only path (existing behavior when --execute is not set)
     let command = SpeckitCommand::ValidateStage {
         spec_id: args.spec_id.clone(),
         stage,
@@ -2628,13 +2875,38 @@ fn run_audit(executor: SpeckitExecutor, args: AuditArgs) -> anyhow::Result<()> {
 
 /// Run the unlock command
 ///
-/// SPEC-KIT-921 P5-B: Unlock command is locked to Stage::Unlock.
-/// Validates SPEC prerequisites and guardrails for unlock stage.
+/// D113/D133: Unlock command with full execution parity.
+/// Validates SPEC prerequisites and guardrails, or executes the stage.
 /// Returns exit 0 on success, exit 2 on validation failure.
-fn run_unlock(executor: SpeckitExecutor, args: UnlockArgs) -> anyhow::Result<()> {
-    // P5-B: Unlock command always uses Stage::Unlock
+fn run_unlock(executor: SpeckitExecutor, args: UnlockArgs, cwd: PathBuf) -> anyhow::Result<()> {
+    use std::io::IsTerminal;
+
     let stage = Stage::Unlock;
 
+    // SPEC-KIT-905: Detect headless mode
+    let headless = args.headless || !std::io::stdin().is_terminal();
+
+    // SPEC-KIT-905: Route to headless execution when --execute is set
+    if args.execute {
+        if headless {
+            let has_maieutic = args.maieutic_answers.is_some() || args.maieutic_path.is_some();
+            if !has_maieutic {
+                emit_needs_input_error(args.json);
+            }
+        }
+
+        return run_stage_headless(
+            args.spec_id,
+            stage,
+            args.maieutic_path,
+            args.maieutic_answers,
+            args.json,
+            headless,
+            cwd,
+        );
+    }
+
+    // Validation-only path (existing behavior when --execute is not set)
     let command = SpeckitCommand::ValidateStage {
         spec_id: args.spec_id.clone(),
         stage,
@@ -3071,9 +3343,11 @@ fn run_run(executor: SpeckitExecutor, args: RunArgs, cwd: PathBuf) -> anyhow::Re
 /// This is the execute path, invoked when --execute is set.
 /// Unlike the validation-only path, this actually runs the pipeline.
 ///
-/// Exit codes:
+/// Exit codes per D133:
 /// - 0: SUCCESS
-/// - 3: INFRA_ERROR
+/// - 1: SOFT_FAIL (warnings in strict mode)
+/// - 2: HARD_FAIL (validation/agent failure)
+/// - 3: INFRA_ERROR (infrastructure error)
 /// - 10: NEEDS_INPUT (missing maieutic)
 /// - 11: NEEDS_APPROVAL (checkpoint requires human)
 /// - 13: PROMPT_ATTEMPTED (any prompt attempt)
@@ -3253,9 +3527,64 @@ fn run_headless_pipeline(
     std::process::exit(result.exit_code);
 }
 
+/// Shared execution logic for single-stage headless execution (SPEC-KIT-905)
+///
+/// Reuses run_headless_pipeline by setting from_stage == to_stage.
+/// This enables individual stage commands (plan, tasks, etc.) to execute headlessly.
+///
+/// Exit codes match D133:
+/// - 0: SUCCESS
+/// - 2: HARD_FAIL (validation/agent failure)
+/// - 3: INFRA_ERROR (infrastructure error)
+/// - 10: NEEDS_INPUT (missing maieutic in headless)
+/// - 11: NEEDS_APPROVAL (checkpoint requires human)
+/// - 13: PROMPT_ATTEMPTED (invariant violation)
+fn run_stage_headless(
+    spec_id: String,
+    stage: Stage,
+    maieutic_path: Option<PathBuf>,
+    maieutic_answers: Option<String>,
+    json: bool,
+    headless: bool,
+    cwd: PathBuf,
+) -> anyhow::Result<()> {
+    // Create a synthetic RunArgs for the single stage
+    let args = RunArgs {
+        spec_id,
+        from_stage: stage.as_str().to_string(),
+        to_stage: stage.as_str().to_string(),
+        json,
+        maieutic_path,
+        maieutic_answers,
+        execute: true, // Always true for this execution path
+        headless,
+    };
+
+    run_headless_pipeline(args, headless, stage, stage, cwd)
+}
+
+/// Helper to emit NEEDS_INPUT error consistently across stage commands (SPEC-KIT-905)
+fn emit_needs_input_error(json: bool) -> ! {
+    if json {
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "tool_version": tool_version(),
+            "exit_code": headless_exit::NEEDS_INPUT,
+            "exit_reason": headless_exit::exit_reason(headless_exit::NEEDS_INPUT),
+            "error": "Headless execution requires maieutic input",
+            "resolution": "Provide --maieutic <path> or --maieutic-answers <json>",
+        });
+        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+    } else {
+        eprintln!("Error: Headless execution requires maieutic input");
+        eprintln!("  Provide --maieutic <path> or --maieutic-answers <json>");
+    }
+    std::process::exit(headless_exit::NEEDS_INPUT);
+}
+
 /// Run the migrate command
 ///
-/// SPEC-KIT-921 P7-B: Migrate legacy spec.md to PRD.md
+/// D113/D133: Migrate legacy spec.md to PRD.md
 fn run_migrate(executor: SpeckitExecutor, args: MigrateArgs) -> anyhow::Result<()> {
     let command = SpeckitCommand::Migrate {
         spec_id: args.spec_id.clone(),
