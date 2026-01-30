@@ -4202,3 +4202,331 @@ enabled = false
 
     Ok(())
 }
+
+// =============================================================================
+// SPEC-KIT-905: Stage Subcommand Execution Parity Tests
+// =============================================================================
+//
+// These tests verify that individual stage subcommands (plan, tasks, etc.)
+// can execute headlessly with the same parity as `speckit run`.
+
+#[test]
+fn test_speckit_plan_execute_headless_happy_path() -> Result<()> {
+    // SPEC-KIT-905: Verify `speckit plan --execute --headless` produces plan.md
+    //
+    // This test exercises the single-stage execution path (vs multi-stage `run`).
+    // Uses the same gemini shim technique for determinism.
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let spec_id = "SPEC-TEST-PLAN-EXECUTE";
+    setup_spec_with_prd(repo_root.path(), spec_id)?;
+
+    // Initialize git repo (required by guardrails)
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git init should succeed");
+    std::process::Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git config email should succeed");
+    std::process::Command::new("git")
+        .args(["config", "user.name", "Test User"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git config name should succeed");
+    std::process::Command::new("git")
+        .args(["add", "."])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git add should succeed");
+    std::process::Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git commit should succeed");
+
+    // Create gemini shim
+    let bin_dir = codex_home.path().join("bin");
+    fs::create_dir_all(&bin_dir)?;
+    let gemini_shim = bin_dir.join("gemini");
+    fs::write(
+        &gemini_shim,
+        r##"#!/bin/bash
+cat >/dev/null || true
+cat <<'EOF'
+{
+  "ok": true,
+  "result": "# Plan Stage Output\n\nThis is deterministic test content from the mock gemini agent.\n\n## Goals\n\n- Implement the test feature\n- Validate the implementation\n\n## Steps\n\n1. First step of the plan\n2. Second step of the plan\n3. Third step of the plan\n\n## Acceptance Criteria\n\n- All tests pass\n- Documentation updated\n\n## Constraints\n\n- Must be deterministic\n- Must not require network\n\n## Notes\n\nThis mock output is >= 500 bytes to satisfy AgentManager validation requirements. Adding more content here to ensure we exceed the threshold with comfortable margin for the deterministic headless test.",
+  "agent": "gemini-mock",
+  "timestamp": "2026-01-30T00:00:00Z"
+}
+EOF
+"##,
+    )?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&gemini_shim)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&gemini_shim, perms)?;
+    }
+
+    // Create config.toml with gemini agent
+    let config_path = codex_home.path().join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+[[agents]]
+name = "gemini"
+command = "gemini"
+args = []
+enabled = true
+"#,
+    )?;
+
+    // Create stage0.toml to disable Tier2
+    let stage0_config = codex_home.path().join("stage0.toml");
+    fs::write(
+        &stage0_config,
+        r#"
+store_system_pointers = false
+
+[tier2]
+enabled = false
+"#,
+    )?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let current_path = std::env::var_os("PATH").unwrap_or_default();
+    let paths: Vec<_> = std::iter::once(bin_dir.clone())
+        .chain(std::env::split_paths(&current_path))
+        .collect();
+    let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
+    cmd.env("PATH", new_path);
+    cmd.env("HOME", codex_home.path());
+    cmd.env("CODE_STAGE0_CONFIG", &stage0_config);
+    let output = cmd
+        .args([
+            "speckit",
+            "plan",  // Using individual stage subcommand, not `run`
+            "--spec",
+            spec_id,
+            "--execute",
+            "--headless",
+            "--maieutic-answers",
+            r#"{"goal":"Deterministic test","constraints":[],"acceptance":["Pass"],"delegation":"B"}"#,
+            "--json",
+        ])
+        .output()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_str(&stdout).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to parse JSON: {}\nstdout: {}\nstderr: {}",
+            e,
+            stdout,
+            stderr
+        )
+    })?;
+
+    // Verify execution mode
+    assert_eq!(
+        json.get("mode").and_then(|v| v.as_str()),
+        Some("execute"),
+        "Expected mode=execute, got: {}",
+        serde_json::to_string_pretty(&json).unwrap_or_default()
+    );
+
+    // Verify exit code 0 (success)
+    assert_eq!(
+        json.get("exit_code").and_then(|v| v.as_i64()),
+        Some(0),
+        "Expected exit_code=0 for plan --execute, got: {}\nstderr: {}",
+        serde_json::to_string_pretty(&json).unwrap_or_default(),
+        stderr
+    );
+
+    // Verify stages completed includes plan
+    let stages = json
+        .get("stages_completed")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| anyhow::anyhow!("stages_completed should be array"))?;
+
+    let stage_names: Vec<&str> = stages
+        .iter()
+        .filter_map(|s| s.as_str())
+        .collect();
+
+    assert!(
+        stage_names.contains(&"plan"),
+        "stages_completed should include 'plan', got: {:?}",
+        stage_names
+    );
+
+    // Verify plan.md was created
+    let plan_path = repo_root.path().join(format!("docs/{}/plan.md", spec_id));
+    assert!(
+        plan_path.exists(),
+        "plan.md should exist at {}",
+        plan_path.display()
+    );
+
+    // Verify plan.md is non-empty
+    let plan_len = fs::metadata(&plan_path)?.len();
+    assert!(plan_len > 0, "plan.md should be non-empty");
+
+    Ok(())
+}
+
+#[test]
+fn test_speckit_plan_validation_only_no_artifacts() -> Result<()> {
+    // SPEC-KIT-905: Verify `speckit plan` without `--execute` remains validation-only
+    //
+    // This test ensures backwards compatibility: running without --execute
+    // should NOT create any artifacts (plan.md, etc.).
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let spec_id = "SPEC-TEST-PLAN-VALIDATE";
+    setup_spec_with_prd(repo_root.path(), spec_id)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "plan",
+            "--spec",
+            spec_id,
+            "--json",
+            // Note: NO --execute flag
+        ])
+        .output()?;
+
+    // Validation-only path should succeed (exit 0 or 2 for prereq issues)
+    // but should NOT create plan.md
+    let plan_path = repo_root.path().join(format!("docs/{}/plan.md", spec_id));
+    assert!(
+        !plan_path.exists(),
+        "plan.md should NOT exist in validation-only mode, but found at {}",
+        plan_path.display()
+    );
+
+    // Verify output is validation format (not execute format)
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if let Ok(json) = serde_json::from_str::<JsonValue>(&stdout) {
+        // Should have status or resolution field (validation output), not mode=execute
+        let mode = json.get("mode").and_then(|v| v.as_str());
+        assert_ne!(
+            mode,
+            Some("execute"),
+            "Validation-only should NOT have mode=execute"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_speckit_plan_headless_requires_maieutic() -> Result<()> {
+    // SPEC-KIT-905: Verify `speckit plan --execute --headless` without maieutic exits 10
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let spec_id = "SPEC-TEST-PLAN-NEEDS-INPUT";
+    setup_spec_with_prd(repo_root.path(), spec_id)?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "plan",
+            "--spec",
+            spec_id,
+            "--execute",
+            "--headless",
+            // Note: NO --maieutic-answers flag
+            "--json",
+        ])
+        .output()?;
+
+    // Should exit with code 10 (NEEDS_INPUT)
+    assert_eq!(
+        output.status.code(),
+        Some(10),
+        "Expected exit code 10 (NEEDS_INPUT) when headless+execute without maieutic, got {:?}",
+        output.status.code()
+    );
+
+    // Verify JSON contains NEEDS_INPUT exit reason
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if let Ok(json) = serde_json::from_str::<JsonValue>(&stdout) {
+        let exit_code = json.get("exit_code").and_then(|v| v.as_i64());
+        assert_eq!(
+            exit_code,
+            Some(10),
+            "JSON exit_code should be 10, got: {:?}",
+            exit_code
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_all_stages_headless_require_maieutic() -> Result<()> {
+    // SPEC-KIT-905: Verify all stage commands enforce D133 needs-input
+    //
+    // Table-driven test: each of the 6 stage subcommands must exit with code 10
+    // when run with --execute --headless but without maieutic input.
+    let stages = ["plan", "tasks", "implement", "validate", "audit", "unlock"];
+
+    for stage in &stages {
+        let codex_home = TempDir::new()?;
+        let repo_root = TempDir::new()?;
+
+        let spec_id = format!("SPEC-TEST-{}-NEEDS-INPUT", stage.to_uppercase());
+        setup_spec_with_prd(repo_root.path(), &spec_id)?;
+
+        let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+        let output = cmd
+            .args([
+                "speckit",
+                stage,
+                "--spec",
+                &spec_id,
+                "--execute",
+                "--headless",
+                "--json",
+            ])
+            .output()?;
+
+        // Process exit code should be 10 (NEEDS_INPUT)
+        assert_eq!(
+            output.status.code(),
+            Some(10),
+            "Stage '{}': expected exit code 10 (NEEDS_INPUT), got {:?}",
+            stage,
+            output.status.code()
+        );
+
+        // JSON output should also contain exit_code: 10
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if let Ok(json) = serde_json::from_str::<JsonValue>(&stdout) {
+            assert_eq!(
+                json.get("exit_code").and_then(|v| v.as_i64()),
+                Some(10),
+                "Stage '{}': JSON exit_code should be 10",
+                stage
+            );
+        }
+    }
+
+    Ok(())
+}
