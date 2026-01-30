@@ -100,14 +100,15 @@ These invariants MUST NOT be violated:
 
 ### In Progress
 
-| Spec         | Status      | Owner  | Next Action                                       |
-| ------------ | ----------- | ------ | ------------------------------------------------- |
-| SPEC-KIT-905 | In Progress | @thetu | CLI stage subcommand execution parity (D113/D133) |
+| Spec | Status | Owner | Next Action |
+| ---- | ------ | ----- | ----------- |
+|      |        |       |             |
 
 ### Completed (Recent)
 
 | Spec                | Completion Date | Key Deliverables                                                                              |
 | ------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| SPEC-KIT-905        | 2026-01-30      | CLI stage parity: ID rename, docstring fixes, table-driven test, D113/D133 alignment          |
 | SPEC-KIT-900        | 2026-01-29      | Headless CLI execution parity, real agent spawning via AGENT\_MANAGER, exit codes (D113/D133) |
 | SPEC-KIT-980        | 2026-01-28      | PDF/DOCX ingest with feature gates, text extraction, searchable capsule persistence           |
 | SPEC-KIT-974        | 2026-01-27      | Export/import, encryption, safe export, risk auto-export, GC enhancements                     |
