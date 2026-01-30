@@ -24,6 +24,7 @@ use crate::chatwidget::spec_kit::maieutic::MaieuticSpec;
 use crate::chatwidget::spec_kit::native_guardrail::run_native_guardrail;
 use crate::chatwidget::spec_kit::stage0_integration::{
     Stage0ExecutionConfig, Stage0ExecutionResult, spawn_stage0_async,
+    write_task_brief_to_evidence, write_divine_truth_to_evidence,
 };
 use crate::spec_prompts::SpecStage;
 
@@ -318,6 +319,36 @@ impl HeadlessPipelineRunner {
         // Step 1: Run Stage0 context injection
         match self.run_stage0() {
             Ok(result) => {
+                // SPEC-KIT-900: Persist Stage0 evidence files if result is available
+                if let Some(ref stage0_res) = result.result {
+                    // Write TASK_BRIEF.md
+                    if let Err(e) = write_task_brief_to_evidence(
+                        &self.spec_id,
+                        &self.cwd,
+                        &stage0_res.task_brief_md,
+                    ) {
+                        tracing::warn!(
+                            error = %e,
+                            "Failed to write TASK_BRIEF.md to evidence (non-fatal)"
+                        );
+                    } else {
+                        tracing::info!("Wrote TASK_BRIEF.md to evidence directory");
+                    }
+
+                    // Write DIVINE_TRUTH.md
+                    if let Err(e) = write_divine_truth_to_evidence(
+                        &self.spec_id,
+                        &self.cwd,
+                        &stage0_res.divine_truth.raw_markdown,
+                    ) {
+                        tracing::warn!(
+                            error = %e,
+                            "Failed to write DIVINE_TRUTH.md to evidence (non-fatal)"
+                        );
+                    } else {
+                        tracing::info!("Wrote DIVINE_TRUTH.md to evidence directory");
+                    }
+                }
                 self.stage0_result = Some(result);
             }
             Err(e) => {
@@ -1065,5 +1096,156 @@ mod tests {
 
         // Specify stage should return None (no guardrails)
         assert!(stage_to_spec_stage(&Stage::Specify).is_none());
+    }
+
+    /// Test that Stage0 evidence files can be written correctly (SPEC-KIT-900)
+    ///
+    /// Verifies:
+    /// - TASK_BRIEF.md is written to evidence directory
+    /// - DIVINE_TRUTH.md is written to evidence directory
+    /// - Files have expected minimum length
+    /// - Guardrail clean-tree passes with evidence/ directory present
+    #[test]
+    fn test_stage0_evidence_file_persistence() {
+        use super::{write_divine_truth_to_evidence, write_task_brief_to_evidence};
+        use std::process::Command;
+
+        // Setup temp directory as a git repo (for guardrail clean-tree check)
+        let temp = TempDir::new().unwrap();
+        let spec_id = "SPEC-EVIDENCE-TEST";
+        setup_test_spec(&temp, spec_id);
+
+        // Initialize git repo
+        Command::new("git")
+            .args(["init"])
+            .current_dir(temp.path())
+            .output()
+            .expect("Failed to init git repo");
+
+        // Add and commit initial files
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(temp.path())
+            .output()
+            .expect("Failed to git add");
+
+        Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(temp.path())
+            .output()
+            .expect("Failed to git commit");
+
+        // Create test content exceeding 500 bytes
+        let task_brief_content = format!(
+            "# Task Brief: {}\n\n\
+            ## Section 0: Constitution Context\n\n\
+            The project constitution defines core principles and guardrails.\n\n\
+            ## Section 1: Spec Overview\n\n\
+            This spec implements a test feature for validation purposes.\n\n\
+            ## Section 2: Historical Context\n\n\
+            Previous work on similar features established key patterns.\n\n\
+            ## Section 3: Code Context\n\n\
+            Relevant code sections include the main module and test suite.\n\n\
+            ## Section 4: Local Memory Insights\n\n\
+            Historical decisions and patterns from local-memory are included here.\n\n\
+            Additional padding to ensure we exceed 500 bytes for validation.\n",
+            spec_id
+        );
+
+        let divine_truth_content = format!(
+            "# Divine Truth Brief: {}\n\n\
+            ## 1. Executive Summary\n\n\
+            This feature adds important functionality to the system.\n\n\
+            ## 2. Constitution Alignment\n\n\
+            **Aligned with:** Core architectural principles\n\
+            **Potential conflicts:** None identified\n\n\
+            ## 3. Architectural Guardrails\n\n\
+            - Maintain backward compatibility\n\
+            - Follow existing patterns\n\
+            - Add comprehensive tests\n\n\
+            ## 4. Historical Context & Lessons\n\n\
+            Previous implementations have established clear patterns.\n\n\
+            ## 5. Risks & Open Questions\n\n\
+            - Risk: Integration complexity\n\
+            - Open: Performance implications\n\n\
+            ## 6. Suggested Causal Links\n\n\
+            ```json\n[]\n```\n",
+            spec_id
+        );
+
+        // Write TASK_BRIEF.md
+        let task_brief_path = write_task_brief_to_evidence(
+            spec_id,
+            temp.path(),
+            &task_brief_content,
+        )
+        .expect("Failed to write TASK_BRIEF.md");
+
+        // Verify TASK_BRIEF.md exists and has correct length
+        assert!(task_brief_path.exists(), "TASK_BRIEF.md should exist");
+        let task_brief_len = std::fs::read_to_string(&task_brief_path)
+            .expect("Failed to read TASK_BRIEF.md")
+            .len();
+        assert!(
+            task_brief_len > 500,
+            "TASK_BRIEF.md should be > 500 bytes, got {}",
+            task_brief_len
+        );
+
+        // Write DIVINE_TRUTH.md
+        let divine_truth_path = write_divine_truth_to_evidence(
+            spec_id,
+            temp.path(),
+            &divine_truth_content,
+        )
+        .expect("Failed to write DIVINE_TRUTH.md");
+
+        // Verify DIVINE_TRUTH.md exists and has correct length
+        assert!(divine_truth_path.exists(), "DIVINE_TRUTH.md should exist");
+        let divine_truth_len = std::fs::read_to_string(&divine_truth_path)
+            .expect("Failed to read DIVINE_TRUTH.md")
+            .len();
+        assert!(
+            divine_truth_len > 500,
+            "DIVINE_TRUTH.md should be > 500 bytes, got {}",
+            divine_truth_len
+        );
+
+        // Verify evidence directory structure
+        let evidence_dir = temp.path().join("docs").join(spec_id).join("evidence");
+        assert!(evidence_dir.exists(), "evidence/ directory should exist");
+        assert!(
+            evidence_dir.join("TASK_BRIEF.md").exists(),
+            "TASK_BRIEF.md should be in evidence/"
+        );
+        assert!(
+            evidence_dir.join("DIVINE_TRUTH.md").exists(),
+            "DIVINE_TRUTH.md should be in evidence/"
+        );
+
+        // Verify guardrail clean-tree check passes with evidence/ present
+        // The evidence directory should be excluded from dirty-tree checks
+        let codex_home = TempDir::new().unwrap();
+        let planner_config = create_test_config(codex_home.path());
+
+        let backend = MockAgentBackend::with_default_responses();
+        let runner = HeadlessPipelineRunner::new_with_backend(
+            spec_id.to_string(),
+            Stage::Plan,
+            Stage::Tasks,
+            test_maieutic(),
+            HeadlessConfig::default(),
+            planner_config,
+            temp.path().to_path_buf(),
+            Box::new(backend),
+        );
+
+        // Guardrail should pass - evidence files are in evidence/ which is excluded
+        let result = runner.check_guardrails(&Stage::Plan);
+        assert!(
+            result.is_ok(),
+            "Guardrail should pass with evidence/ directory: {:?}",
+            result.unwrap_err()
+        );
     }
 }

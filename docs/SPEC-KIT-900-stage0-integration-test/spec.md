@@ -150,6 +150,7 @@ docs/SPEC-002-add-color-support/evidence/
 | P88     | 2026-01-29 | BLOCKED     | Headless CLI validation blocked                                            |
 | P89     | 2026-01-29 | PARTIAL     | Headless runner scaffolded; stage execution stub (SPEC-KIT-930)            |
 | P90     | 2026-01-29 | COMPLETED   | Headless execution operational; agents via AgentBackend; guardrails active |
+| P91     | 2026-01-30 | COMPLETED   | Headless CLI plan→unlock (exit 0), Stage0 evidence files persisted         |
 
 ### P88 Session Notes (2026-01-29)
 
@@ -264,6 +265,73 @@ code speckit run \
 * `test_check_guardrails_fails_without_spec_file` - verifies exit code 2
 * `test_check_guardrails_passes_with_valid_spec` - verifies happy path
 * `test_stage_to_spec_stage_mapping` - verifies Specify returns None
+
+### P91 Session Notes (2026-01-30) - COMPLETED
+
+**Objective**: Validate headless CLI execution parity (D113/D133) with Stage0 evidence persistence
+
+**Implementation Changes**:
+
+1. Extended `prompts.json` with missing stage keys (spec-implement, spec-validate, spec-audit, spec-unlock)
+2. Added Stage0 evidence file persistence in `headless/runner.rs` (TASK\_BRIEF.md, DIVINE\_TRUTH.md)
+3. Added unit test `test_stage0_evidence_file_persistence`
+
+**Final Harness Command**:
+
+```bash
+cd /home/thetu/benchmark/ferris-clone
+code speckit run \
+  --spec "SPEC-KIT-001-add-color-support-to-ferris-says-output-using-ansi-escape" \
+  --from plan --to unlock --execute --headless \
+  --maieutic-answers '{"goal":"SPEC-KIT-900 harness run","constraints":["Backward compat","No deps"],"acceptance":["All stages succeed","Artifacts written"],"delegation":"B"}' \
+  --json
+```
+
+**Final Results**:
+
+| Step                 | Exit Code | Status | Evidence                                |
+| -------------------- | --------- | ------ | --------------------------------------- |
+| Plan stage           | 0         | ✅ PASS | `plan.md` (2037 bytes)                  |
+| Tasks stage          | 0         | ✅ PASS | `tasks.md` (1319 bytes)                 |
+| Implement stage      | 0         | ✅ PASS | `implement.md` (4343 bytes)             |
+| Validate stage       | 0         | ✅ PASS | `validate.md` (2640 bytes)              |
+| Audit stage          | 0         | ✅ PASS | `audit.md` (6151 bytes)                 |
+| Unlock stage         | 0         | ✅ PASS | `unlock.md` (1371 bytes)                |
+| Stage0 TASK\_BRIEF   | -         | ✅ PASS | `evidence/TASK_BRIEF.md` (1901 bytes)   |
+| Stage0 DIVINE\_TRUTH | -         | ✅ PASS | `evidence/DIVINE_TRUTH.md` (4159 bytes) |
+
+**JSON Output**:
+
+```json
+{
+  "schema_version": 1,
+  "tool_version": "0.0.0",
+  "mode": "execute",
+  "spec_id": "SPEC-KIT-001-add-color-support-to-ferris-says-output-using-ansi-escape",
+  "from_stage": "plan",
+  "to_stage": "unlock",
+  "exit_code": 0,
+  "exit_reason": "success",
+  "stages_completed": ["plan", "tasks", "implement", "validate", "audit", "unlock"],
+  "stage0": {"completed": true, "duration_ms": 12, "tier2_used": true}
+}
+```
+
+**Agent Binary**: Real Gemini agent via AGENT\_MANAGER (not shim)
+
+**Validation Checklist** (all pass):
+
+* [x] Exit code 0 (SUCCESS)
+* [x] All 6 stage outputs exist (plan→unlock)
+* [x] Stage0 TASK\_BRIEF.md >500 bytes (1901)
+* [x] Stage0 DIVINE\_TRUTH.md >500 bytes (4159)
+* [x] tier2\_used: true (NotebookLM queried)
+* [x] Guardrail clean-tree passes
+
+**Files Modified**:
+
+1. `/home/thetu/benchmark/ferris-clone/docs/spec-kit/prompts.json` - Added 4 stage prompts
+2. `codex-rs/tui/src/chatwidget/spec_kit/headless/runner.rs` - Stage0 evidence persistence + test
 
 ***
 
