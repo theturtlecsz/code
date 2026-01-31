@@ -133,169 +133,30 @@ async fn build_individual_agent_prompt(
     // Find SPEC directory using ACID-compliant resolver
     let spec_dir = super::spec_directory::find_spec_directory(cwd, spec_id)?;
 
-    // Read SPEC files
-    let spec_md = spec_dir.join("spec.md");
-    let spec_content =
-        std::fs::read_to_string(&spec_md).map_err(|e| format!("Failed to read spec.md: {}", e))?;
-
-    // Build context (include prior stage outputs with size limits)
-    // OS argument limit is ~2MB, but prior stage outputs can contain nested mega-bundles
-    // Must be very conservative to prevent exponential growth
-    // Total budget: ~100KB for all files combined
-    const MAX_FILE_SIZE: usize = 20_000; // ~20KB per file (very conservative)
-
-    let mut context = format!("SPEC: {}\n\n", spec_id);
-
-    // SPEC-KIT-102: Add Stage 0 context (combined Divine Truth + Task Brief)
-    // Prefer passed stage0_context (from combined_context_md()) over file fallback
-    if let Some(stage0_ctx) = stage0_context {
-        context.push_str("## Stage 0: Shadow Context (Divine Truth + Task Brief)\n\n");
-        // Truncate if too large (use half the budget for Stage0)
-        if stage0_ctx.len() > MAX_FILE_SIZE / 2 {
-            context.push_str(
-                &stage0_ctx
-                    .chars()
-                    .take(MAX_FILE_SIZE / 2)
-                    .collect::<String>(),
-            );
-            context.push_str("\n\n[...Stage 0 context truncated...]\n\n");
-        } else {
-            context.push_str(stage0_ctx);
-            context.push_str("\n\n");
-        }
-        tracing::info!(
-            "  📚 Stage 0: Injected {} chars from combined_context_md()",
-            stage0_ctx.len()
-        );
-    } else {
-        // Fallback: Read from TASK_BRIEF.md file if passed context is unavailable
-        let task_brief_path = spec_dir.join("evidence").join("TASK_BRIEF.md");
-        if let Ok(task_brief) = std::fs::read_to_string(&task_brief_path) {
-            context.push_str("## Stage 0: Task Context Brief\n\n");
-            // Truncate task brief if too large (use half the budget for Stage0)
-            if task_brief.len() > MAX_FILE_SIZE / 2 {
-                context.push_str(
-                    &task_brief
-                        .chars()
-                        .take(MAX_FILE_SIZE / 2)
-                        .collect::<String>(),
-                );
-                context.push_str("\n\n[...Stage 0 context truncated...]\n\n");
-            } else {
-                context.push_str(&task_brief);
-                context.push_str("\n\n");
-            }
-            tracing::info!(
-                "  📚 Stage 0: Injected {} chars from TASK_BRIEF.md (fallback)",
-                task_brief.len()
-            );
-        }
-    }
-
-    context.push_str("## spec.md\n");
-
-    // Add spec.md (truncate if too large)
-    if spec_content.len() > MAX_FILE_SIZE {
-        tracing::warn!(
-            "  Truncating spec.md: {} → {} chars",
-            spec_content.len(),
-            MAX_FILE_SIZE
-        );
-        context.push_str(&spec_content.chars().take(MAX_FILE_SIZE).collect::<String>());
-        context.push_str(&format!(
-            "\n\n[...truncated {} chars...]\n\n",
-            spec_content.len() - MAX_FILE_SIZE
-        ));
-    } else {
-        context.push_str(&spec_content);
-        context.push_str("\n\n");
-    }
-
-    // Add plan.md if available (for Tasks, Implement, Validate, etc.)
-    // INTELLIGENT EXTRACTION: Skip debug sections and mega-bundles
-    if stage != crate::spec_prompts::SpecStage::Plan {
-        let plan_md = spec_dir.join("plan.md");
-        if let Ok(plan_content) = std::fs::read_to_string(&plan_md) {
-            context.push_str("## plan.md (summary)\n");
-
-            // Extract only useful sections (skip debug output and embedded mega-bundles)
-            let useful_content = extract_useful_content_from_stage_file(&plan_content);
-
-            if useful_content.len() > MAX_FILE_SIZE {
-                tracing::warn!(
-                    "  📄 plan.md: {} total → {} useful → {} final (truncated)",
-                    plan_content.len(),
-                    useful_content.len(),
-                    MAX_FILE_SIZE
-                );
-                context.push_str(
-                    &useful_content
-                        .chars()
-                        .take(MAX_FILE_SIZE)
-                        .collect::<String>(),
-                );
-                context.push_str("\n\n[...truncated...]\n\n");
-            } else {
-                tracing::info!(
-                    "  📄 plan.md: {} total → {} useful ({}% reduction)",
-                    plan_content.len(),
-                    useful_content.len(),
-                    100 - (useful_content.len() * 100 / plan_content.len().max(1))
-                );
-                context.push_str(&useful_content);
-                context.push_str("\n\n");
-            }
-        }
-    }
-
-    // Add tasks.md if available (for Implement, Validate, etc.)
-    // INTELLIGENT EXTRACTION: Same filtering as plan.md
-    if matches!(
+    // SPEC-KIT-982: Use unified prompt context builder for TUI/headless parity
+    // This provides deterministic section order, budget enforcement, and ACE/maieutic support
+    let prompt_context = super::prompt_vars::build_prompt_context(
+        spec_id,
         stage,
-        crate::spec_prompts::SpecStage::Implement
-            | crate::spec_prompts::SpecStage::Validate
-            | crate::spec_prompts::SpecStage::Audit
-            | crate::spec_prompts::SpecStage::Unlock
-    ) {
-        let tasks_md = spec_dir.join("tasks.md");
-        if let Ok(tasks_content) = std::fs::read_to_string(&tasks_md) {
-            context.push_str("## tasks.md (summary)\n");
+        &spec_dir,
+        stage0_context,
+        None, // maieutic_spec (future: pass from caller)
+        None, // ace_bullets (future: pass from caller)
+    )?;
 
-            let useful_content = extract_useful_content_from_stage_file(&tasks_content);
-
-            if useful_content.len() > MAX_FILE_SIZE {
-                tracing::warn!(
-                    "  📄 tasks.md: {} total → {} useful → {} final (truncated)",
-                    tasks_content.len(),
-                    useful_content.len(),
-                    MAX_FILE_SIZE
-                );
-                context.push_str(
-                    &useful_content
-                        .chars()
-                        .take(MAX_FILE_SIZE)
-                        .collect::<String>(),
-                );
-                context.push_str("\n\n[...truncated...]\n\n");
-            } else {
-                tracing::info!(
-                    "  📄 tasks.md: {} total → {} useful ({}% reduction)",
-                    tasks_content.len(),
-                    useful_content.len(),
-                    100 - (useful_content.len() * 100 / tasks_content.len().max(1))
-                );
-                context.push_str(&useful_content);
-                context.push_str("\n\n");
-            }
-        }
-    }
+    // Log context stats for debugging
+    tracing::debug!(
+        "prompt_vars: context {} chars, {} ACE bullets used",
+        prompt_context.context.len(),
+        prompt_context.ace_bullet_ids_used.len()
+    );
 
     // D113/D133: Use unified render_prompt_text() for all substitutions
     // This ensures ${TEMPLATE:*} expansion and consistent variable handling
     let prompt = crate::spec_prompts::render_prompt_text(
         &prompt_template,
         &prompt_version,
-        &[("SPEC_ID", spec_id), ("CONTEXT", &context)],
+        &[("SPEC_ID", spec_id), ("CONTEXT", &prompt_context.context)],
         stage,
         spec_agent,
     );
@@ -507,16 +368,6 @@ async fn spawn_regular_stage_agents_sequential(
     let mut agent_outputs: Vec<(String, String)> = Vec::new(); // (agent_name, output)
     let batch_id = uuid::Uuid::new_v4().to_string();
 
-    let agent_config_map: std::collections::HashMap<&str, &str> = [
-        ("gemini", "gemini_flash"),
-        ("claude", "claude_haiku"),
-        ("gpt_pro", "gpt_pro"),
-        ("gpt_codex", "gpt_codex"),
-    ]
-    .iter()
-    .copied()
-    .collect();
-
     // Spawn agents SEQUENTIALLY, each can use previous outputs
     for (idx, agent_name) in expected_agents.iter().enumerate() {
         tracing::warn!(
@@ -527,9 +378,9 @@ async fn spawn_regular_stage_agents_sequential(
             agent_name
         );
 
-        let config_name = agent_config_map
-            .get(agent_name.as_str())
-            .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?;
+        // SPEC-KIT-981: Use shared resolver for TUI/headless parity
+        let config_name =
+            super::agent_resolver::resolve_agent_config_name(agent_name, agent_configs)?;
 
         // Build prompt for THIS agent with previous agent outputs injected
         let mut prompt =
@@ -592,7 +443,7 @@ async fn spawn_regular_stage_agents_sequential(
         // Spawn and WAIT for this agent to complete
         let (agent_id, agent_output) = spawn_and_wait_for_agent(
             agent_name,
-            config_name,
+            &config_name,
             prompt,
             agent_configs,
             &batch_id,
@@ -610,7 +461,7 @@ async fn spawn_regular_stage_agents_sequential(
         spawn_infos.push(AgentSpawnInfo {
             agent_id,
             agent_name: agent_name.clone(),
-            model_name: config_name.to_string(),
+            model_name: config_name.clone(),
             result: Some(agent_output), // Store result for direct access
         });
     }
@@ -846,16 +697,6 @@ async fn spawn_regular_stage_agents_parallel(
 
     let batch_id = uuid::Uuid::new_v4().to_string();
 
-    let agent_config_map: std::collections::HashMap<&str, &str> = [
-        ("gemini", "gemini_flash"),
-        ("claude", "claude_haiku"),
-        ("gpt_pro", "gpt_pro"),
-        ("gpt_codex", "gpt_codex"),
-    ]
-    .iter()
-    .copied()
-    .collect();
-
     // SPEC-933 Component 3: Use JoinSet for TRUE parallel spawning
     let mut join_set = JoinSet::new();
     let mut individual_durations = Vec::new();
@@ -869,13 +710,12 @@ async fn spawn_regular_stage_agents_parallel(
         let run_id = run_id.clone();
         let branch_id = branch_id.clone();
         let batch_id = batch_id.clone();
-        let agent_configs = agent_configs.to_vec();
+        let agent_configs_cloned = agent_configs.to_vec();
         let stage0_ctx = stage0_context.clone(); // SPEC-KIT-102: Clone for async move
 
-        let config_name = agent_config_map
-            .get(agent_name.as_str())
-            .ok_or_else(|| format!("No config mapping for agent {}", agent_name))?
-            .to_string();
+        // SPEC-KIT-981: Use shared resolver for TUI/headless parity
+        let config_name =
+            super::agent_resolver::resolve_agent_config_name(&agent_name, agent_configs)?;
 
         // Spawn concurrent task
         join_set.spawn(async move {
@@ -898,7 +738,7 @@ async fn spawn_regular_stage_agents_parallel(
                 manager
                     .create_agent_from_config_name(
                         &config_name,
-                        &agent_configs,
+                        &agent_configs_cloned,
                         prompt,
                         false,
                         Some(batch_id.clone()),

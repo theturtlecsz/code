@@ -60,123 +60,31 @@ pub fn build_headless_prompt(
     // Find SPEC directory
     let spec_dir = find_spec_directory(cwd, spec_id)?;
 
-    // Read SPEC files
-    let spec_md_path = spec_dir.join("spec.md");
-    let spec_content = std::fs::read_to_string(&spec_md_path)
-        .map_err(|e| HeadlessError::InfraError(format!("Failed to read spec.md: {}", e)))?;
+    // SPEC-KIT-982: Use unified prompt context builder for TUI/headless parity
+    // This provides deterministic section order, budget enforcement, and ACE/maieutic support
+    let prompt_context = crate::chatwidget::spec_kit::prompt_vars::build_prompt_context(
+        spec_id,
+        spec_stage,
+        &spec_dir,
+        stage0_context,
+        None, // maieutic_spec (future: pass from caller)
+        None, // ace_bullets (future: pass from caller)
+    )
+    .map_err(HeadlessError::InfraError)?;
 
-    // Build context
-    let mut context = format!("SPEC: {}\n\n", spec_id);
-
-    // Add Stage 0 context (combined Divine Truth + Task Brief)
-    if let Some(stage0_ctx) = stage0_context {
-        context.push_str("## Stage 0: Shadow Context (Divine Truth + Task Brief)\n\n");
-        if stage0_ctx.len() > MAX_FILE_SIZE / 2 {
-            context.push_str(
-                &stage0_ctx
-                    .chars()
-                    .take(MAX_FILE_SIZE / 2)
-                    .collect::<String>(),
-            );
-            context.push_str("\n\n[...Stage 0 context truncated...]\n\n");
-        } else {
-            context.push_str(stage0_ctx);
-            context.push_str("\n\n");
-        }
-        tracing::info!(
-            "  Stage 0: Injected {} chars from combined_context_md()",
-            stage0_ctx.len()
-        );
-    } else {
-        // Fallback: Read from TASK_BRIEF.md file
-        let task_brief_path = spec_dir.join("evidence").join("TASK_BRIEF.md");
-        if let Ok(task_brief) = std::fs::read_to_string(&task_brief_path) {
-            context.push_str("## Stage 0: Task Context Brief\n\n");
-            if task_brief.len() > MAX_FILE_SIZE / 2 {
-                context.push_str(
-                    &task_brief
-                        .chars()
-                        .take(MAX_FILE_SIZE / 2)
-                        .collect::<String>(),
-                );
-                context.push_str("\n\n[...Stage 0 context truncated...]\n\n");
-            } else {
-                context.push_str(&task_brief);
-                context.push_str("\n\n");
-            }
-            tracing::info!(
-                "  Stage 0: Injected {} chars from TASK_BRIEF.md (fallback)",
-                task_brief.len()
-            );
-        }
-    }
-
-    // Add spec.md content
-    context.push_str("## spec.md\n");
-    if spec_content.len() > MAX_FILE_SIZE {
-        tracing::warn!(
-            "  Truncating spec.md: {} -> {} chars",
-            spec_content.len(),
-            MAX_FILE_SIZE
-        );
-        context.push_str(&spec_content.chars().take(MAX_FILE_SIZE).collect::<String>());
-        context.push_str(&format!(
-            "\n\n[...truncated {} chars...]\n\n",
-            spec_content.len() - MAX_FILE_SIZE
-        ));
-    } else {
-        context.push_str(&spec_content);
-        context.push_str("\n\n");
-    }
-
-    // Add plan.md if available (for Tasks, Implement, Validate, etc.)
-    if stage != "plan" {
-        let plan_md = spec_dir.join("plan.md");
-        if let Ok(plan_content) = std::fs::read_to_string(&plan_md) {
-            context.push_str("## plan.md (summary)\n");
-            let useful_content = extract_useful_content(&plan_content);
-            if useful_content.len() > MAX_FILE_SIZE {
-                context.push_str(
-                    &useful_content
-                        .chars()
-                        .take(MAX_FILE_SIZE)
-                        .collect::<String>(),
-                );
-                context.push_str("\n\n[...truncated...]\n\n");
-            } else {
-                context.push_str(&useful_content);
-                context.push_str("\n\n");
-            }
-        }
-    }
-
-    // Add tasks.md if available (for Implement, Validate, etc.)
-    if matches!(stage, "implement" | "validate" | "audit" | "unlock") {
-        let tasks_md = spec_dir.join("tasks.md");
-        if let Ok(tasks_content) = std::fs::read_to_string(&tasks_md) {
-            context.push_str("## tasks.md (summary)\n");
-            let useful_content = extract_useful_content(&tasks_content);
-            if useful_content.len() > MAX_FILE_SIZE {
-                context.push_str(
-                    &useful_content
-                        .chars()
-                        .take(MAX_FILE_SIZE)
-                        .collect::<String>(),
-                );
-                context.push_str("\n\n[...truncated...]\n\n");
-            } else {
-                context.push_str(&useful_content);
-                context.push_str("\n\n");
-            }
-        }
-    }
+    // Log context stats for debugging
+    tracing::debug!(
+        "prompt_vars: context {} chars, {} ACE bullets used",
+        prompt_context.context.len(),
+        prompt_context.ace_bullet_ids_used.len()
+    );
 
     // D113/D133: Use unified render_prompt_text() for all substitutions
     // This ensures ${TEMPLATE:*} expansion, real model metadata, and consistent handling
     let prompt = render_prompt_text(
         &prompt_template,
         &prompt_version,
-        &[("SPEC_ID", spec_id), ("CONTEXT", &context)],
+        &[("SPEC_ID", spec_id), ("CONTEXT", &prompt_context.context)],
         spec_stage,
         spec_agent,
     );
@@ -323,23 +231,27 @@ mod tests {
     #[test]
     fn test_get_agents_for_stage_single_agent() {
         // D113/D133: Headless now returns single preferred agent matching TUI
+        // SPEC-KIT-981: Defaults changed to GPT (gpt_pro for most, gpt_codex for implement)
         let temp = TempDir::new().unwrap();
         setup_test_spec(&temp, "TEST-001");
 
-        // Plan stage should return Gemini (architect role)
+        // Plan stage should return GptPro
         let agents = get_agents_for_stage(temp.path(), "plan").unwrap();
         assert_eq!(agents.len(), 1, "Should return exactly one agent");
-        assert_eq!(agents[0], "gemini", "Plan stage should prefer Gemini");
+        assert_eq!(agents[0], "gpt_pro", "Plan stage should prefer GptPro");
 
-        // Tasks stage should return Claude (implementer role)
+        // Tasks stage should return GptPro
         let agents = get_agents_for_stage(temp.path(), "tasks").unwrap();
         assert_eq!(agents.len(), 1);
-        assert_eq!(agents[0], "claude", "Tasks stage should prefer Claude");
+        assert_eq!(agents[0], "gpt_pro", "Tasks stage should prefer GptPro");
 
-        // Implement stage should return Claude
+        // Implement stage should return GptCodex
         let agents = get_agents_for_stage(temp.path(), "implement").unwrap();
         assert_eq!(agents.len(), 1);
-        assert_eq!(agents[0], "claude", "Implement stage should prefer Claude");
+        assert_eq!(
+            agents[0], "gpt_codex",
+            "Implement stage should prefer GptCodex"
+        );
     }
 
     #[test]

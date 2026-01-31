@@ -41,23 +41,12 @@ pub trait AgentBackend: Send + Sync {
 
 /// Resolve a user-facing agent name (from prompts.json) to a configured agent name.
 ///
-/// Resolution order:
-/// 1) Exact match on `AgentConfig.name`
-/// 2) Match on `AgentConfig.canonical_name` (preferred for portability)
-/// 3) Fallback to the requested name (lets downstream produce a clear error)
+/// SPEC-KIT-981: Uses shared resolver for TUI/headless parity.
+/// Falls back to agent_name if resolution fails (lets downstream produce a clear error).
 fn resolve_agent_config_name(agent_name: &str, agent_configs: &[AgentConfig]) -> String {
-    if agent_configs.iter().any(|cfg| cfg.name == agent_name) {
-        return agent_name.to_string();
-    }
-
-    if let Some(cfg) = agent_configs
-        .iter()
-        .find(|cfg| cfg.canonical_name.as_deref() == Some(agent_name))
-    {
-        return cfg.name.clone();
-    }
-
-    agent_name.to_string()
+    // SPEC-KIT-981: Use shared resolver, fall back to agent_name on error
+    super::super::agent_resolver::resolve_agent_config_name(agent_name, agent_configs)
+        .unwrap_or_else(|_| agent_name.to_string())
 }
 
 /// Real backend using codex_core::agent_tool::AGENT_MANAGER

@@ -15,7 +15,10 @@ pub mod ace_prompt_injector; // ACE prompt injection logic
 pub mod ace_reflector; // ACE Reflector - Deep outcome analysis
 pub mod ace_route_selector; // ACE route selection for complex tasks
 pub mod agent_orchestrator; // Agent orchestration functions (extracted from handler.rs)
+pub mod agent_resolver; // SPEC-KIT-981: Shared agent config resolution for TUI/headless parity
 pub mod agent_retry; // SPEC-938: Agent spawn retry logic with exponential backoff
+// SPEC-KIT-982: Unified prompt context builder for TUI/headless parity
+// pub(crate) for headless access via crate::chatwidget::spec_kit::prompt_vars
 pub mod analyze_native; // Native consistency checking (zero agents, zero cost)
 pub mod arb_pass2_enforcement; // ARB Pass 2 enforcement test registry (D130-D134)
 pub mod checklist_native; // Native quality scoring (zero agents, zero cost)
@@ -59,6 +62,7 @@ pub mod prd_builder_handler; // SPEC-KIT-970: PRD builder modal event handlers
 pub mod project_detector; // SPEC-KIT-971: Project type detection for context-aware questions
 pub mod project_intake_handler; // /speckit.projectnew project intake handlers
 pub mod project_native; // SPEC-KIT-960: Native project scaffolding
+pub(crate) mod prompt_vars;
 pub mod rebuild_projections;
 pub mod spec_directory;
 pub mod spec_intake_handler; // Architect-in-a-box spec intake handlers (Phase 1)

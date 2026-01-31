@@ -967,8 +967,9 @@ mod tests {
             plan_content.contains("spec-plan"),
             "plan.md should contain agent output"
         );
+        // SPEC-KIT-981: Default agent changed from gemini to gpt_pro
         assert!(
-            plan_content.contains("gemini"),
+            plan_content.contains("gpt_pro"),
             "plan.md should contain agent name"
         );
     }

@@ -1,7 +1,7 @@
 # SPEC.md - Codex-RS / Spec-Kit Task Tracking
 
 **Version:** V6 Docs Contract
-**Last Updated:** 2026-01-29
+**Last Updated:** 2026-01-31
 
 ***
 
@@ -100,9 +100,16 @@ These invariants MUST NOT be violated:
 
 ### In Progress
 
-| Spec | Status | Owner | Next Action |
-| ---- | ------ | ----- | ----------- |
-|      |        |       |             |
+| Spec         | Status      | Owner | Next Action                                           |
+| ------------ | ----------- | ----- | ----------------------------------------------------- |
+| SPEC-KIT-981 | In Progress | -     | Config-driven stage→agent mapping (GPT default)       |
+| SPEC-KIT-982 | In Progress | -     | ACE + maieutic in per-agent prompts (unified builder) |
+
+### Planned
+
+| Spec         | Description                                         |
+| ------------ | --------------------------------------------------- |
+| SPEC-KIT-983 | TUI UI for stage→agent defaults (separate Q/A spec) |
 
 ### Completed (Recent)
 

@@ -1,212 +1,194 @@
-# HANDOFF: Prompt E Implementation Progress
+# HANDOFF: SPEC-KIT-981/982 Implementation Progress
 
-**Generated:** 2026-01-26
-**Audience:** Next session (proceed to Prompt F)
-**Scope:** `codex-rs` / Spec‑Kit + product‑knowledge layer (`local-memory` domain `codex-product`)
+**Generated:** 2026-01-31
+**Audience:** Next session
+**Scope:** `codex-rs` / Spec-Kit config-driven agent mapping + unified prompt builder
 
 ***
 
 ## TL;DR (Current State)
 
-**Prompt E Implementation: 100% Complete**
+**SPEC-KIT-981: Config-Driven Stage→Agent Mapping - 100% COMPLETE**
 
-Core implementation of Product Knowledge Lane is done and builds successfully:
+All 7 tasks finished:
 
-* Config surface added (default OFF)
-* Evidence pack types defined per ADR-003
-* Retrieval + filtering logic implemented
-* Lane assembly with truncation
-* TASK\_BRIEF integration
-* Capsule snapshotting helper function
-* **Unit tests added (9 tests, all passing)**
+* Config surface added (`[speckit.stage_agents]`)
+* Defaults changed to GPT (gpt\_pro/gpt\_codex)
+* GPT prompts added for clarify/analyze/checklist
+* TUI/headless parity bug fixed (shared agent\_resolver)
+* Guard test added
 
-**Remaining work:**
+**SPEC-KIT-982: Unified Prompt-Vars Builder - 80% COMPLETE**
 
-* Integration testing with actual `codex-product` domain data (optional)
-* Proceed to Prompt F: NotebookLM pre-check + post-curation
+Core builder created with tests. Wiring into TUI/headless pending.
 
-***
-
-## What Was Implemented (Prompt E)
-
-### 1. Configuration (`codex-rs/stage0/src/config.rs`)
-
-Added `ProductKnowledgeConfig` with:
-
-* `enabled: bool` — default OFF
-* `domain: String` — default "codex-product"
-* `max_items: usize` — default 10
-* `max_chars_per_item: usize` — default 3000
-* `max_total_chars: usize` — default 10000
-* `min_importance: u8` — default 8
-
-### 2. Evidence Pack Types (`codex-rs/stage0/src/dcc.rs`)
-
-Added per ADR-003:
-
-* `ProductKnowledgeCandidate` — internal candidate struct
-* `ProductKnowledgeEvidencePack` — capsule artifact schema
-* `ProductKnowledgeQuery` — query metadata
-* `ProductKnowledgeFilters` — filter parameters
-* `ProductKnowledgeItem` — individual evidence item
-* `ProductKnowledgeIntegrity` — SHA-256 integrity hash
-* `PRODUCT_KNOWLEDGE_CANONICAL_TYPES` — allowed type values
-
-### 3. Retrieval + Filtering Logic (`codex-rs/stage0/src/dcc.rs`)
-
-Added functions:
-
-* `build_product_knowledge_query()` — deterministic query builder (no LLM)
-* `filter_product_knowledge_results()` — client-side filtering:
-  * importance >= 8
-  * must have canonical `type:*` tag
-  * excludes `system:true`
-* `assemble_product_knowledge_lane()` — markdown lane with truncation
-* `build_product_knowledge_pack()` — construct evidence pack with integrity hash
-
-### 4. DCC Integration (`codex-rs/stage0/src/dcc.rs`)
-
-Updated `compile_context()`:
-
-* Added step 12: product knowledge retrieval from `codex-product` domain
-* Queries via `LocalMemoryClient` trait (CLI adapter)
-* Filters and assembles lane
-* Returns `product_knowledge_lane` and `product_knowledge_pack` in result
-
-Updated `assemble_task_brief()`:
-
-* Added optional `product_knowledge_lane: Option<&str>` parameter
-* Inserts lane after Section 3 (Code Context), before Section 4
-
-Updated `CompileContextResult`:
-
-* Added `product_knowledge_lane: Option<String>`
-* Added `product_knowledge_pack: Option<ProductKnowledgeEvidencePack>`
-
-### 5. Stage0Result Integration (`codex-rs/stage0/src/lib.rs`)
-
-Added to `Stage0Result`:
-
-* `product_knowledge_pack: Option<ProductKnowledgeEvidencePack>`
-
-Exported new types from crate root.
-
-### 6. Capsule Snapshotting Helper (`codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs`)
-
-Added `write_product_knowledge_to_capsule()`:
-
-* Writes evidence pack to `mv2://<workspace>/<spec>/<run>/artifact/product_knowledge/evidence_pack.json`
-* Returns logical URI on success
-* Logs and returns error on failure
-
-### 7. Unit Tests (`codex-rs/stage0/src/dcc.rs`)
-
-Added 9 unit tests for product knowledge functionality:
-
-* `test_filter_importance_threshold` - verifies importance >= 8 filtering
-* `test_filter_requires_type_tag` - verifies canonical type tag requirement
-* `test_filter_excludes_system` - verifies system:true exclusion
-* `test_product_knowledge_evidence_pack_schema` - tests pack serialization and integrity hash
-* `test_query_builder_deterministic` - verifies deterministic query generation
-* `test_query_builder_empty_iqo_fallback` - tests fallback with empty IQO
-* `test_query_builder_fully_empty_returns_wildcard` - tests wildcard fallback
-* `test_assemble_lane_respects_bounds` - verifies max\_items and max\_total\_chars
-* `test_canonical_types_complete` - verifies all 7 ADR-003 types are present
+**Build Status:** `cargo check -p codex-tui` PASSES (74 warnings, 0 errors)
 
 ***
 
-## Files Modified
+## What Was Implemented
 
-| File                                                         | Changes                                                          |
-| ------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `codex-rs/stage0/src/config.rs`                              | Added `ProductKnowledgeConfig` struct                            |
-| `codex-rs/stage0/src/dcc.rs`                                 | Added types, retrieval, filtering, assembly, pack building       |
-| `codex-rs/stage0/src/lib.rs`                                 | Added `product_knowledge_pack` to `Stage0Result`, exported types |
-| `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs` | Added `write_product_knowledge_to_capsule()` helper              |
-| `codex-rs/stage0/src/dcc.rs`                                 | Added 9 unit tests for product knowledge functionality           |
+### SPEC-KIT-981 (Complete)
+
+1. **Config Types** (`codex-rs/core/src/config_types.rs:287-349`)
+   * Added `SpecKitStageAgents` struct with fields for all 10 stages
+   * Added `get_agent_for_stage()` method
+
+2. **Config Parsing** (`codex-rs/core/src/config.rs`)
+   * Added `SpecKitConfig` struct for `[speckit]` section
+   * Added `speckit_stage_agents` field to `Config` struct
+   * Updated 4 test fixtures with new field
+
+3. **Agent Defaults** (`codex-rs/tui/src/chatwidget/spec_kit/gate_evaluation.rs:248-299`)
+   * Updated `preferred_agent_for_stage()`:
+     * All stages → GptPro (except Implement)
+     * Implement → GptCodex
+   * Added `agent_for_stage()` config-aware selector
+
+4. **Prompts** (`docs/spec-kit/prompts.json`)
+   * Added `gpt_pro` entries for: spec-clarify, spec-analyze, spec-checklist
+
+5. **Parity Bug Fix** (NEW: `codex-rs/tui/src/chatwidget/spec_kit/agent_resolver.rs`)
+   * Created shared `resolve_agent_config_name()` function
+   * Uses canonical\_name fallback with error reporting
+   * Updated `agent_orchestrator.rs` (lines \~515 and \~850)
+   * Updated `headless/backend.rs` (line \~48)
+
+6. **Config Examples**
+   * `codex-rs/config.toml.example`: Added canonical\_name to GPT agents, added `[speckit.stage_agents]`
+   * Root `config.toml.example`: Same updates
+
+7. **Guard Test** (`codex-rs/tui/src/spec_prompts.rs:1322-1366`)
+   * Added `all_stages_have_prompts_for_default_agents()` test
+
+### SPEC-KIT-982 (Partial)
+
+1. **Unified Builder** (NEW: `codex-rs/tui/src/chatwidget/spec_kit/prompt_vars.rs`)
+   * Created `build_prompt_context()` function
+   * Deterministic section order: Stage0 → Maieutic → ACE → spec/plan/tasks
+   * Budget enforcement: ACE 4KB, Maieutic 4KB, per-file 20KB
+   * ACE bullet deduplication and ID tracking
+   * 7 unit tests included
+
+**NOT YET DONE:**
+
+* Wire `prompt_vars::build_prompt_context()` into `agent_orchestrator.rs`
+* Wire into `headless/prompt_builder.rs`
+
+### Documentation Updates
+
+1. **codex-rs/SPEC.md** - Added SPEC-KIT-981/982/983 tracking
+2. **docs/POLICY.md** - Added Section 2.8 "Stage→Agent Routing"
 
 ***
 
-## Build Status
+## Files Changed
 
-**Builds successfully** with only pre-existing warnings:
+```
+Modified:
+  codex-rs/SPEC.md
+  codex-rs/core/src/config.rs
+  codex-rs/core/src/config_types.rs
+  codex-rs/tui/src/chatwidget/spec_kit/mod.rs
+  codex-rs/tui/src/chatwidget/spec_kit/gate_evaluation.rs
+  codex-rs/tui/src/chatwidget/spec_kit/agent_orchestrator.rs
+  codex-rs/tui/src/chatwidget/spec_kit/headless/backend.rs
+  codex-rs/tui/src/spec_prompts.rs
+  codex-rs/config.toml.example
+  config.toml.example
+  docs/spec-kit/prompts.json
+  docs/POLICY.md
 
-```bash
-cargo build -p codex-stage0 -p codex-tui
-# Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.85s
+New:
+  codex-rs/tui/src/chatwidget/spec_kit/agent_resolver.rs
+  codex-rs/tui/src/chatwidget/spec_kit/prompt_vars.rs
 ```
 
 ***
 
-## Remaining Work (Next Session)
+## Remaining Work
 
-### Prompt E Status: COMPLETE
+1. **Wire unified builder into TUI** (`agent_orchestrator.rs`):
+   * Refactor `build_individual_agent_prompt()` to call `prompt_vars::build_prompt_context()`
+   * Return `(prompt, ace_bullet_ids)` tuple
+   * Update callers to track `ace_bullet_ids_used`
 
-All unit tests added and passing (9 tests total).
+2. **Wire unified builder into headless** (`headless/prompt_builder.rs`):
+   * Refactor `build_headless_prompt()` to use unified builder
+   * Add optional ACE client integration (safe fallback)
 
-### For Prompt F (Next Phase):
+3. **Run validation suite**:
+   ```bash
+   cd codex-rs
+   cargo fmt --all -- --check
+   cargo clippy --workspace --all-targets -- -D warnings
+   cargo test -p codex-tui
+   cargo test -p codex-cli --test speckit
+   python3 scripts/doc_lint.py
+   ```
 
-* NotebookLM pre-check against `codex-product`
-* Post-curation of Tier2 outputs into `codex-product`
-* Load `tmp/prompt-pack-product-knowledge/prompt-f-notebooklm-precheck.md`
+4. **Commit** (if validation passes):
+   ```
+   feat(spec-kit): SPEC-KIT-981/982 config-driven stage agents + unified prompt builder
 
-### Optional Integration Testing:
-
-* Requires `codex-product` domain with test data
-* Verify lane appears in TASK\_BRIEF when enabled
-* Verify evidence pack is valid JSON
-* Test failure modes (local-memory unavailable)
-
-***
-
-## Key Design Decisions Made
-
-1. **Separation of Concerns**: Stage0 crate returns `ProductKnowledgeEvidencePack` in result; caller (TUI/CLI) handles capsule write. This avoids dependency on memvid\_adapter in Stage0 crate.
-
-2. **Feature Flag Default OFF**: Per ADR-003, product knowledge lane is opt-in.
-
-3. **Deterministic Query**: Query builder uses heuristics only (no LLM calls) to ensure replay determinism.
-
-4. **Client-side Filtering**: Filtering happens after retrieval to ensure consistent behavior regardless of local-memory version.
-
-***
-
-## Session Restart Prompt (Next Session)
-
-Copy everything below the `---` into the first message of the next session:
+   - Add [speckit.stage_agents] config for per-stage agent override
+   - Change defaults to GPT (gpt_pro for all, gpt_codex for implement)
+   - Add gpt_pro prompts for clarify/analyze/checklist
+   - Fix TUI/headless parity bug with shared agent_resolver
+   - Create unified prompt_vars builder with ACE + maieutic sections
+   ```
 
 ***
 
-Begin Prompt F implementation for NotebookLM pre-check + post-curation in `codex-rs` / Spec-Kit.
+## Session Restart Prompt
 
-**Context:** Prompt E (Product Knowledge Lane) is 100% complete with 9 unit tests passing.
+Copy everything below the line into the first message of the next session:
 
-**First, read:**
+***
 
-* `HANDOFF.md` (this file - shows what was done)
-* `docs/adr/ADR-003-product-knowledge-layer-local-memory.md` (architecture)
-* `tmp/prompt-pack-product-knowledge/prompt-f-notebooklm-precheck.md` (requirements)
+Continue SPEC-KIT-981/982 implementation from HANDOFF.md
 
-**Goal:**
+## Status
 
-1. **NotebookLM pre-check**: Search `codex-product` before issuing Tier2 questions to avoid redundant calls
-2. **Post-curation**: Distill durable NotebookLM outputs into `codex-product` insights
+* **SPEC-KIT-981**: COMPLETE (config, defaults, prompts, parity fix, tests)
+* **SPEC-KIT-982**: 80% - unified `prompt_vars.rs` builder created with 7 tests, wiring pending
 
-**Files to reference:**
+## First, read:
 
-* `codex-rs/stage0/src/config.rs` - ProductKnowledgeConfig
-* `codex-rs/stage0/src/dcc.rs` - Core implementation + product knowledge types
-* `codex-rs/stage0/src/lib.rs` - Stage0Result
-* `codex-rs/tui/src/chatwidget/spec_kit/stage0_integration.rs` - Integration helpers
+* `HANDOFF.md` (shows exactly what was done)
+* `codex-rs/tui/src/chatwidget/spec_kit/prompt_vars.rs` (new unified builder)
+* `codex-rs/tui/src/chatwidget/spec_kit/agent_resolver.rs` (shared resolver)
 
-**Build command:**
+## Remaining Tasks
 
-```bash
-cargo build -p codex-stage0 -p codex-tui
-```
+1. **Wire unified builder into TUI `agent_orchestrator.rs`**:
+   * In `build_individual_agent_prompt()`, call `prompt_vars::build_prompt_context()`
+   * Pass maieutic\_spec and ace\_bullets (if available)
+   * Return `(prompt, ace_bullet_ids)` to caller
 
-**Test command:**
+2. **Wire unified builder into headless `prompt_builder.rs`**:
+   * In `build_headless_prompt()`, call shared `prompt_vars::build_prompt_context()`
+   * Handle ACE client safely (log and fallback if unavailable)
 
-```bash
-cargo test -p codex-stage0
-```
+3. **Run validation**:
+   ```bash
+   cd codex-rs
+   cargo fmt --all -- --check
+   cargo test -p codex-tui
+   python3 scripts/doc_lint.py
+   ```
+
+4. **If all passes, commit with**:
+   ```
+   feat(spec-kit): SPEC-KIT-981/982 config-driven stage agents + unified prompt builder
+   ```
+
+## Key Files
+
+* `codex-rs/tui/src/chatwidget/spec_kit/agent_orchestrator.rs` (lines \~110-311 build\_individual\_agent\_prompt)
+* `codex-rs/tui/src/chatwidget/spec_kit/headless/prompt_builder.rs` (lines \~34-192 build\_headless\_prompt)
+* `codex-rs/tui/src/chatwidget/spec_kit/prompt_vars.rs` (new unified builder)
+
+***
+
+*Generated by Claude Code session 2026-01-31*

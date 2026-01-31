@@ -120,6 +120,7 @@ args = ["--model", "gpt-4"]
 
 [[agents]]
 name = "gpt-5"
+canonical_name = "gpt_pro"  # SPEC-KIT-981: Used for architect/judge roles
 command = "gpt"
 enabled = true
 read-only = false
@@ -128,6 +129,7 @@ args = ["--model", "gpt-5", "--reasoning", "high"]
 
 [[agents]]
 name = "gpt-5-codex"
+canonical_name = "gpt_codex"  # SPEC-KIT-981: Used for implementer role
 command = "gpt"
 enabled = true
 read-only = false
@@ -232,6 +234,22 @@ tool_timeout_sec = 120
 
 # File Opener Configuration
 file-opener = "vscode"  # Options: vscode, vscode-insiders, windsurf, cursor, none
+
+# Spec-Kit stage→agent mapping (SPEC-KIT-981)
+# Override default routing (all stages default to GPT)
+# Valid values: gpt_pro, gpt_codex, gemini, claude, code
+[speckit.stage_agents]
+# Uncomment to override defaults:
+# specify = "gpt_pro"      # PRD generation
+# plan = "gpt_pro"         # Architecture planning
+# tasks = "gpt_pro"        # Task breakdown
+# implement = "gpt_codex"  # Code generation (default: gpt_codex)
+# validate = "gpt_pro"     # Validation
+# audit = "gpt_pro"        # Security/quality audit
+# unlock = "gpt_pro"       # Release gates
+# clarify = "gpt_pro"      # Ambiguity resolution
+# analyze = "gpt_pro"      # Consistency checking
+# checklist = "gpt_pro"    # Quality scoring
 
 # Subagent Commands
 # Configure optional custom multi-agent slash commands.

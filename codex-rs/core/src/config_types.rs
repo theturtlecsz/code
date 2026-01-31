@@ -285,6 +285,68 @@ impl AgentConfig {
     }
 }
 
+/// Spec-Kit stage→agent mapping configuration.
+///
+/// Allows overriding which agent handles each pipeline stage.
+/// If not specified, defaults to GPT (gpt_pro for most stages, gpt_codex for implement).
+///
+/// Valid agent values: "gpt_pro", "gpt_codex", "gemini", "claude", "code"
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct SpecKitStageAgents {
+    /// Agent for Specify stage (PRD generation)
+    #[serde(default)]
+    pub specify: Option<String>,
+    /// Agent for Plan stage (architecture/planning)
+    #[serde(default)]
+    pub plan: Option<String>,
+    /// Agent for Tasks stage (task breakdown)
+    #[serde(default)]
+    pub tasks: Option<String>,
+    /// Agent for Implement stage (code generation)
+    #[serde(default)]
+    pub implement: Option<String>,
+    /// Agent for Validate stage (testing/validation)
+    #[serde(default)]
+    pub validate: Option<String>,
+    /// Agent for Audit stage (security/quality audit)
+    #[serde(default)]
+    pub audit: Option<String>,
+    /// Agent for Unlock stage (release gates)
+    #[serde(default)]
+    pub unlock: Option<String>,
+    /// Agent for Clarify quality command
+    #[serde(default)]
+    pub clarify: Option<String>,
+    /// Agent for Analyze quality command
+    #[serde(default)]
+    pub analyze: Option<String>,
+    /// Agent for Checklist quality command
+    #[serde(default)]
+    pub checklist: Option<String>,
+}
+
+impl SpecKitStageAgents {
+    /// Get the configured agent for a stage by name.
+    ///
+    /// Returns None if not configured (caller should use default).
+    pub fn get_agent_for_stage(&self, stage_name: &str) -> Option<&str> {
+        match stage_name.to_lowercase().as_str() {
+            "specify" | "spec-specify" => self.specify.as_deref(),
+            "plan" | "spec-plan" => self.plan.as_deref(),
+            "tasks" | "spec-tasks" => self.tasks.as_deref(),
+            "implement" | "spec-implement" => self.implement.as_deref(),
+            "validate" | "spec-validate" => self.validate.as_deref(),
+            "audit" | "spec-audit" => self.audit.as_deref(),
+            "unlock" | "spec-unlock" => self.unlock.as_deref(),
+            "clarify" | "spec-clarify" => self.clarify.as_deref(),
+            "analyze" | "spec-analyze" => self.analyze.as_deref(),
+            "checklist" | "spec-checklist" => self.checklist.as_deref(),
+            _ => None,
+        }
+    }
+}
+
 /// GitHub integration settings.
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct GithubConfig {

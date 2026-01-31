@@ -1222,7 +1222,10 @@ mod tests {
 
         // Get the Claude prompt for Tasks stage (Claude is the preferred/only agent)
         let result = get_prompt_with_version("spec-tasks", SpecAgent::Claude, None);
-        assert!(result.is_some(), "Expected spec-tasks Claude prompt to exist");
+        assert!(
+            result.is_some(),
+            "Expected spec-tasks Claude prompt to exist"
+        );
 
         let (template, version) = result.unwrap();
 
@@ -1315,6 +1318,54 @@ mod tests {
                 "{} leaks ${{TEMPLATE:}}: {}",
                 stage_key,
                 &prompt[..prompt.len().min(200)]
+            );
+        }
+    }
+
+    // SPEC-KIT-981: Guard test - all stages have prompts for default GPT agents
+    #[test]
+    fn all_stages_have_prompts_for_default_agents() {
+        use crate::chatwidget::spec_kit::gate_evaluation::preferred_agent_for_stage;
+
+        // Test all stages including quality commands
+        let all_stages = [
+            SpecStage::Specify,
+            SpecStage::Plan,
+            SpecStage::Tasks,
+            SpecStage::Implement,
+            SpecStage::Validate,
+            SpecStage::Audit,
+            SpecStage::Unlock,
+            SpecStage::Clarify,
+            SpecStage::Analyze,
+            SpecStage::Checklist,
+        ];
+
+        for stage in all_stages {
+            let agent = preferred_agent_for_stage(stage);
+            let stage_key = stage.key();
+
+            let result = get_prompt_with_version(stage_key, agent, None);
+            assert!(
+                result.is_some(),
+                "Missing prompt for stage {:?} ({}) with default agent {:?}",
+                stage,
+                stage_key,
+                agent
+            );
+
+            let (template, version) = result.unwrap();
+            assert!(
+                !template.is_empty(),
+                "Empty template for stage {:?} with agent {:?}",
+                stage,
+                agent
+            );
+            assert!(
+                !version.is_empty(),
+                "Empty version for stage {:?} with agent {:?}",
+                stage,
+                agent
             );
         }
     }

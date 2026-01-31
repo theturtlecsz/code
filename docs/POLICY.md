@@ -192,6 +192,31 @@ Stage 0 -> Single Architect -> Single Implementer -> Single Judge
 }
 ```
 
+### 2.8 Stage→Agent Routing
+
+> **Added**: SPEC-KIT-981 (2026-01-31)
+
+**Principle**: Spec-Kit stages are single-owner; no consensus.
+
+**Default Routing** (GPT-first):
+
+| Stage                       | Default Agent | Notes                   |
+| --------------------------- | ------------- | ----------------------- |
+| Specify, Plan, Tasks        | `gpt_pro`     | Architect/Planner roles |
+| Implement                   | `gpt_codex`   | Code generation         |
+| Validate, Audit, Unlock     | `gpt_pro`     | Judge/Validator roles   |
+| Clarify, Analyze, Checklist | `gpt_pro`     | Quality gate commands   |
+
+**Override via Config** (`config.toml`):
+
+```toml
+[speckit.stage_agents]
+plan = "claude"       # Override Plan stage to use Claude
+implement = "gemini"  # Override Implement stage to use Gemini
+```
+
+**Note**: TUI UI for editing stage→agent defaults is tracked separately (SPEC-KIT-983).
+
 ***
 
 ## 3. Evidence Policy

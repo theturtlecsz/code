@@ -249,23 +249,54 @@ pub(in super::super) fn parse_consensus_stage(stage: &str) -> Option<SpecStage> 
 ///
 /// This is the default behavior when `SPEC_KIT_CONSENSUS=false` (default).
 /// Returns a single agent per stage based on the canonical pipeline:
-/// - Plan/Specify: Architect (Gemini for local-first)
-/// - Implement: Implementer (Claude for best code quality)
-/// - Audit/Validate: Judge (Claude for reliability)
+/// - All stages except Implement: GPT Pro (architect/judge roles)
+/// - Implement: GPT Codex (code generation)
+///
+/// SPEC-KIT-981: Changed defaults from Gemini/Claude to GPT.
 pub fn preferred_agent_for_stage(stage: SpecStage) -> crate::spec_prompts::SpecAgent {
     use crate::spec_prompts::SpecAgent;
     match stage {
-        // Architect roles
-        SpecStage::Specify | SpecStage::Plan => SpecAgent::Gemini,
-        // Implementer role
-        SpecStage::Implement | SpecStage::Tasks => SpecAgent::Claude,
-        // Validation/Judge roles
-        SpecStage::Validate | SpecStage::Audit | SpecStage::Unlock => SpecAgent::Claude,
-        // Analysis (Librarian-adjacent)
-        SpecStage::Clarify | SpecStage::Analyze => SpecAgent::Gemini,
-        // Quality checks
-        SpecStage::Checklist => SpecAgent::Claude,
+        // Implementer role → gpt_codex (code generation)
+        SpecStage::Implement => SpecAgent::GptCodex,
+        // All other roles → gpt_pro (architect/judge/planner)
+        SpecStage::Specify
+        | SpecStage::Plan
+        | SpecStage::Tasks
+        | SpecStage::Validate
+        | SpecStage::Audit
+        | SpecStage::Unlock
+        | SpecStage::Clarify
+        | SpecStage::Analyze
+        | SpecStage::Checklist => SpecAgent::GptPro,
     }
+}
+
+/// Get the agent for a stage, checking config override first.
+///
+/// Resolution order:
+/// 1. Config override (if valid agent name)
+/// 2. Default from preferred_agent_for_stage()
+///
+/// SPEC-KIT-981: Config-aware agent selection.
+pub fn agent_for_stage(
+    stage: SpecStage,
+    config: Option<&codex_core::config_types::SpecKitStageAgents>,
+) -> crate::spec_prompts::SpecAgent {
+    use crate::spec_prompts::SpecAgent;
+
+    if let Some(cfg) = config {
+        if let Some(agent_str) = cfg.get_agent_for_stage(stage.key()) {
+            if let Some(agent) = SpecAgent::from_string(agent_str) {
+                return agent;
+            }
+            tracing::warn!(
+                "Invalid agent '{}' in config for stage {:?}, using default",
+                agent_str,
+                stage
+            );
+        }
+    }
+    preferred_agent_for_stage(stage)
 }
 
 /// Get expected agent roster for a spec stage.
@@ -1412,34 +1443,35 @@ mod gr001_tests {
     fn test_preferred_agent_for_stages() {
         use crate::spec_prompts::SpecAgent;
 
-        // Architect roles use Gemini
+        // SPEC-KIT-981: All stages use GptPro except Implement which uses GptCodex
+        // Architect roles use GptPro
         assert_eq!(
             preferred_agent_for_stage(SpecStage::Specify),
-            SpecAgent::Gemini
+            SpecAgent::GptPro
         );
         assert_eq!(
             preferred_agent_for_stage(SpecStage::Plan),
-            SpecAgent::Gemini
+            SpecAgent::GptPro
         );
 
-        // Implementer uses Claude
+        // Implementer uses GptCodex
         assert_eq!(
             preferred_agent_for_stage(SpecStage::Implement),
-            SpecAgent::Claude
-        );
-        assert_eq!(
-            preferred_agent_for_stage(SpecStage::Tasks),
-            SpecAgent::Claude
+            SpecAgent::GptCodex
         );
 
-        // Judge uses Claude
+        // Other stages use GptPro
+        assert_eq!(
+            preferred_agent_for_stage(SpecStage::Tasks),
+            SpecAgent::GptPro
+        );
         assert_eq!(
             preferred_agent_for_stage(SpecStage::Validate),
-            SpecAgent::Claude
+            SpecAgent::GptPro
         );
         assert_eq!(
             preferred_agent_for_stage(SpecStage::Audit),
-            SpecAgent::Claude
+            SpecAgent::GptPro
         );
     }
 

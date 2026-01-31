@@ -21,6 +21,7 @@ use crate::config_types::ReasoningSummary;
 use crate::config_types::SandboxWorkspaceWrite;
 use crate::config_types::ShellEnvironmentPolicy;
 use crate::config_types::ShellEnvironmentPolicyToml;
+use crate::config_types::SpecKitStageAgents;
 use crate::config_types::TextVerbosity;
 use crate::config_types::ThemeColors;
 use crate::config_types::ThemeName;
@@ -190,6 +191,10 @@ pub struct Config {
 
     /// Quality gate configuration per checkpoint (plan, tasks, validate, audit, unlock)
     pub quality_gates: Option<QualityGateConfig>,
+
+    /// Spec-Kit stage→agent mapping (SPEC-KIT-981)
+    /// Allows overriding which agent handles each pipeline stage.
+    pub speckit_stage_agents: SpecKitStageAgents,
 
     /// Hot-reload configuration
     pub hot_reload: Option<HotReloadConfig>,
@@ -1611,6 +1616,19 @@ pub struct ConfigToml {
     pub subagents: Option<crate::config_types::SubagentsToml>,
     /// Experimental path to a rollout file to resume from.
     pub experimental_resume: Option<PathBuf>,
+
+    /// Spec-Kit configuration section (SPEC-KIT-981)
+    #[serde(default)]
+    pub speckit: Option<SpecKitConfig>,
+}
+
+/// Spec-Kit configuration section parsed from [speckit] in config.toml
+#[derive(Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub struct SpecKitConfig {
+    /// Stage→agent mapping overrides
+    #[serde(default)]
+    pub stage_agents: SpecKitStageAgents,
 }
 
 fn deserialize_option_bool_from_maybe_string<'de, D>(
@@ -2181,6 +2199,7 @@ impl Config {
             github: cfg.github.unwrap_or_default(),
             validation: cfg.validation.unwrap_or_default(),
             quality_gates: cfg.quality_gates,
+            speckit_stage_agents: cfg.speckit.map(|s| s.stage_agents).unwrap_or_default(),
             hot_reload: cfg.hot_reload,
             subagent_commands: cfg.subagents.map(|s| s.commands).unwrap_or_default(),
             experimental_resume: cfg.experimental_resume,
@@ -3261,6 +3280,7 @@ model_text_verbosity = "high"
                 ace: AceConfig::default(),
                 agents: Vec::new(),
                 quality_gates: None,
+                speckit_stage_agents: SpecKitStageAgents::default(),
                 hot_reload: None,
                 model_providers: fixture.model_provider_map.clone(),
                 project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
@@ -3344,6 +3364,7 @@ model_text_verbosity = "high"
             ace: AceConfig::default(),
             agents: Vec::new(),
             quality_gates: None,
+            speckit_stage_agents: SpecKitStageAgents::default(),
             hot_reload: None,
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
@@ -3442,6 +3463,7 @@ model_text_verbosity = "high"
             ace: AceConfig::default(),
             agents: Vec::new(),
             quality_gates: None,
+            speckit_stage_agents: SpecKitStageAgents::default(),
             hot_reload: None,
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,
@@ -3526,6 +3548,7 @@ model_text_verbosity = "high"
             ace: AceConfig::default(),
             agents: Vec::new(),
             quality_gates: None,
+            speckit_stage_agents: SpecKitStageAgents::default(),
             hot_reload: None,
             model_providers: fixture.model_provider_map.clone(),
             project_doc_max_bytes: PROJECT_DOC_MAX_BYTES,

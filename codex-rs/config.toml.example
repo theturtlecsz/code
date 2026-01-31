@@ -55,20 +55,61 @@ command = "npx"
 args = ["-y", "@theturtlecsz/local-memory-mcp"]
 
 # Agent configuration for multi-agent workflows
-[[agents]]
-name = "claude"
-command = "claude"
-enabled = true
+# Use canonical_name to enable resolution across TUI/CLI/headless
 
 [[agents]]
-name = "gemini"
+name = "claude-haiku"
+canonical_name = "claude"  # Resolved from prompts.json agent names
+command = "claude"
+enabled = true
+description = "Claude for validation and synthesis"
+
+[[agents]]
+name = "gemini-flash"
+canonical_name = "gemini"  # Resolved from prompts.json agent names
 command = "gemini"
 enabled = true
+description = "Gemini for research and analysis"
 
 [[agents]]
 name = "code"
+canonical_name = "code"
 command = "code"
 enabled = true
+description = "Claude Code for implementation"
+
+# GPT agents (SPEC-KIT-981: Default for all stages)
+[[agents]]
+name = "gpt-5.2-architect"
+canonical_name = "gpt_pro"  # Used for architect/judge roles
+command = "openai-chat"
+args = ["--model", "gpt-5.2"]
+enabled = true
+description = "GPT-5.2 for architect/planner/judge roles"
+
+[[agents]]
+name = "gpt-5.2-codex"
+canonical_name = "gpt_codex"  # Used for implementer role
+command = "openai-chat"
+args = ["--model", "gpt-5.2-codex"]
+enabled = true
+description = "GPT-5.2 Codex for code generation"
+
+# Spec-Kit stage→agent mapping (SPEC-KIT-981)
+# Override default routing (all stages default to GPT)
+# Valid values: gpt_pro, gpt_codex, gemini, claude, code
+[speckit.stage_agents]
+# Uncomment to override defaults:
+# specify = "gpt_pro"      # PRD generation
+# plan = "gpt_pro"         # Architecture planning
+# tasks = "gpt_pro"        # Task breakdown
+# implement = "gpt_codex"  # Code generation (default: gpt_codex)
+# validate = "gpt_pro"     # Validation
+# audit = "gpt_pro"        # Security/quality audit
+# unlock = "gpt_pro"       # Release gates
+# clarify = "gpt_pro"      # Ambiguity resolution
+# analyze = "gpt_pro"      # Consistency checking
+# checklist = "gpt_pro"    # Quality scoring
 
 # Subagent command overrides
 [[subagents.commands]]
