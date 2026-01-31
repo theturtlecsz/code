@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use codex_core::agent_tool::{AgentStatus, AGENT_MANAGER};
+use codex_core::agent_tool::{AGENT_MANAGER, AgentStatus};
 use codex_core::config_types::AgentConfig;
 
 use super::runner::HeadlessError;

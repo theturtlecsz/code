@@ -522,7 +522,6 @@ pub struct PlanArgs {
     pub json: bool,
 
     // === SPEC-KIT-905: Execution flags for CLI parity ===
-
     /// Actually execute the stage (not just validate)
     ///
     /// Requires maieutic input in headless mode via --maieutic or --maieutic-answers.
@@ -575,7 +574,6 @@ pub struct TasksArgs {
     pub json: bool,
 
     // === SPEC-KIT-905: Execution flags for CLI parity ===
-
     /// Actually execute the stage (not just validate)
     #[arg(long = "execute")]
     pub execute: bool,
@@ -616,7 +614,6 @@ pub struct ImplementArgs {
     pub json: bool,
 
     // === SPEC-KIT-905: Execution flags for CLI parity ===
-
     /// Actually execute the stage (not just validate)
     #[arg(long = "execute")]
     pub execute: bool,
@@ -658,7 +655,6 @@ pub struct ValidateStageArgs {
     pub json: bool,
 
     // === SPEC-KIT-905: Execution flags for CLI parity ===
-
     /// Actually execute the stage (not just validate)
     #[arg(long = "execute")]
     pub execute: bool,
@@ -699,7 +695,6 @@ pub struct AuditArgs {
     pub json: bool,
 
     // === SPEC-KIT-905: Execution flags for CLI parity ===
-
     /// Actually execute the stage (not just validate)
     #[arg(long = "execute")]
     pub execute: bool,
@@ -740,7 +735,6 @@ pub struct UnlockArgs {
     pub json: bool,
 
     // === SPEC-KIT-905: Execution flags for CLI parity ===
-
     /// Actually execute the stage (not just validate)
     #[arg(long = "execute")]
     pub execute: bool,
@@ -2479,7 +2473,11 @@ fn run_tasks(executor: SpeckitExecutor, args: TasksArgs, cwd: PathBuf) -> anyhow
 /// D113/D133: Implement command with full execution parity.
 /// Validates SPEC prerequisites and guardrails, or executes the stage.
 /// Returns exit 0 on success, exit 2 on validation failure.
-fn run_implement(executor: SpeckitExecutor, args: ImplementArgs, cwd: PathBuf) -> anyhow::Result<()> {
+fn run_implement(
+    executor: SpeckitExecutor,
+    args: ImplementArgs,
+    cwd: PathBuf,
+) -> anyhow::Result<()> {
     use std::io::IsTerminal;
 
     let stage = Stage::Implement;
@@ -2612,7 +2610,11 @@ fn run_implement(executor: SpeckitExecutor, args: ImplementArgs, cwd: PathBuf) -
 /// D113/D133: Validate command with full execution parity.
 /// Validates SPEC prerequisites and guardrails, or executes the stage.
 /// Returns exit 0 on success, exit 2 on validation failure.
-fn run_validate(executor: SpeckitExecutor, args: ValidateStageArgs, cwd: PathBuf) -> anyhow::Result<()> {
+fn run_validate(
+    executor: SpeckitExecutor,
+    args: ValidateStageArgs,
+    cwd: PathBuf,
+) -> anyhow::Result<()> {
     use std::io::IsTerminal;
 
     let stage = Stage::Validate;

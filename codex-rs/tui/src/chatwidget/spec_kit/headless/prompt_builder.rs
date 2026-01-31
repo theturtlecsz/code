@@ -2,10 +2,14 @@
 //!
 //! Provides prompt building for headless mode without ChatWidget dependency.
 //! Extracted from `agent_orchestrator.rs:build_individual_agent_prompt()`.
+//!
+//! D113/D133: Now uses unified prompt-source API for TUI/headless parity.
 
 use std::path::Path;
 
 use super::runner::HeadlessError;
+use crate::chatwidget::spec_kit::gate_evaluation::preferred_agent_for_stage;
+use crate::spec_prompts::{SpecAgent, SpecStage, get_prompt_with_version, render_prompt_text};
 
 /// Maximum size for individual file content in prompts (~20KB)
 const MAX_FILE_SIZE: usize = 20_000;
@@ -15,10 +19,12 @@ const MAX_FILE_SIZE: usize = 20_000;
 /// This is the headless equivalent of `build_individual_agent_prompt()` from
 /// `agent_orchestrator.rs`. It doesn't depend on ChatWidget or TUI state.
 ///
+/// D113/D133: Now uses unified prompt-source API for TUI/headless parity.
+///
 /// # Arguments
 /// - `spec_id`: SPEC identifier (e.g., "SPEC-KIT-900")
 /// - `stage`: Stage name (e.g., "plan", "tasks")
-/// - `agent_name`: Agent name from prompts.json (e.g., "gemini", "claude", "gpt_pro")
+/// - `agent_name`: Agent canonical name from preferred_agent_for_stage() (e.g., "gemini", "claude")
 /// - `cwd`: Working directory (project root)
 /// - `stage0_context`: Optional Stage 0 context (Divine Truth + Task Brief)
 ///
@@ -32,46 +38,19 @@ pub fn build_headless_prompt(
     cwd: &Path,
     stage0_context: Option<&str>,
 ) -> Result<String, HeadlessError> {
-    // Load prompts.json
-    let prompts_path = cwd.join("docs/spec-kit/prompts.json");
-    let prompts_content = std::fs::read_to_string(&prompts_path).map_err(|e| {
-        HeadlessError::InfraError(format!(
-            "Failed to read prompts.json at {}: {}",
-            prompts_path.display(),
-            e
-        ))
-    })?;
+    // D113/D133: Parse stage to SpecStage enum for parity with TUI
+    let spec_stage = SpecStage::from_stage_name(stage)
+        .ok_or_else(|| HeadlessError::InfraError(format!("Unknown stage: {}", stage)))?;
 
-    let prompts: serde_json::Value = serde_json::from_str(&prompts_content)
-        .map_err(|e| HeadlessError::InfraError(format!("Failed to parse prompts.json: {}", e)))?;
+    // D113/D133: Parse agent name to SpecAgent enum
+    let spec_agent = SpecAgent::from_string(agent_name)
+        .ok_or_else(|| HeadlessError::InfraError(format!("Unknown agent: {}", agent_name)))?;
 
-    // Map stage name to stage key in prompts.json
-    let stage_key = match stage {
-        "plan" => "spec-plan",
-        "tasks" => "spec-tasks",
-        "implement" => "spec-implement",
-        "validate" => "spec-validate",
-        "audit" => "spec-audit",
-        "unlock" => "spec-unlock",
-        _ => {
-            return Err(HeadlessError::InfraError(format!(
-                "Unknown stage: {}",
-                stage
-            )));
-        }
-    };
+    let stage_key = spec_stage.key();
 
-    // Get stage-specific prompts
-    let stage_prompts = prompts.get(stage_key).ok_or_else(|| {
-        HeadlessError::InfraError(format!("No prompts found for stage {}", stage_key))
-    })?;
-
-    // Get THIS agent's prompt template
-    let prompt_template = stage_prompts
-        .get(agent_name)
-        .and_then(|v| v.get("prompt"))
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
+    // D113/D133: Use unified prompt-source API (project-local with embedded fallback)
+    let (prompt_template, prompt_version) =
+        get_prompt_with_version(stage_key, spec_agent, Some(cwd)).ok_or_else(|| {
             HeadlessError::InfraError(format!(
                 "No prompt found for agent {} in stage {}",
                 agent_name, stage_key
@@ -192,20 +171,22 @@ pub fn build_headless_prompt(
         }
     }
 
-    // Get prompt metadata (simplified - use defaults for headless)
-    let prompt_version = format!("headless-{}", stage);
-    let model_id = "headless";
-    let model_release = "unknown";
-    let reasoning_mode = "default";
+    // D113/D133: Use unified render_prompt_text() for all substitutions
+    // This ensures ${TEMPLATE:*} expansion, real model metadata, and consistent handling
+    let prompt = render_prompt_text(
+        &prompt_template,
+        &prompt_version,
+        &[("SPEC_ID", spec_id), ("CONTEXT", &context)],
+        spec_stage,
+        spec_agent,
+    );
 
-    // Replace all placeholders
-    let prompt = prompt_template
-        .replace("${SPEC_ID}", spec_id)
-        .replace("${CONTEXT}", &context)
-        .replace("${PROMPT_VERSION}", &prompt_version)
-        .replace("${MODEL_ID}", model_id)
-        .replace("${MODEL_RELEASE}", model_release)
-        .replace("${REASONING_MODE}", reasoning_mode);
+    // D113/D133: Debug assertion - no template tokens should leak
+    debug_assert!(
+        !prompt.contains("${TEMPLATE:"),
+        "Template token leaked in build_headless_prompt: {}",
+        prompt.chars().take(200).collect::<String>()
+    );
 
     Ok(prompt)
 }
@@ -262,56 +243,23 @@ fn extract_useful_content(content: &str) -> String {
     content[..cut_pos].trim().to_string()
 }
 
-/// Get the list of agents for a given stage from prompts.json
-pub fn get_agents_for_stage(cwd: &Path, stage: &str) -> Result<Vec<String>, HeadlessError> {
-    let prompts_path = cwd.join("docs/spec-kit/prompts.json");
-    let prompts_content = std::fs::read_to_string(&prompts_path)
-        .map_err(|e| HeadlessError::InfraError(format!("Failed to read prompts.json: {}", e)))?;
+/// Get the agent(s) for a given stage.
+///
+/// D113/D133: Returns single preferred agent matching TUI's `preferred_agent_for_stage()`.
+/// This ensures headless execution uses the same agent selection as TUI (GR-001 compliant).
+///
+/// Note: The `cwd` parameter is kept for API compatibility but is no longer used
+/// since agent selection is now based on the canonical stage-to-agent mapping.
+pub fn get_agents_for_stage(_cwd: &Path, stage: &str) -> Result<Vec<String>, HeadlessError> {
+    // D113/D133: Parse stage to SpecStage enum for parity with TUI
+    let spec_stage = SpecStage::from_stage_name(stage)
+        .ok_or_else(|| HeadlessError::InfraError(format!("Unknown stage: {}", stage)))?;
 
-    let prompts: serde_json::Value = serde_json::from_str(&prompts_content)
-        .map_err(|e| HeadlessError::InfraError(format!("Failed to parse prompts.json: {}", e)))?;
+    // D113/D133: Use TUI's preferred_agent_for_stage() for single-agent selection
+    let preferred = preferred_agent_for_stage(spec_stage);
 
-    let stage_key = match stage {
-        "plan" => "spec-plan",
-        "tasks" => "spec-tasks",
-        "implement" => "spec-implement",
-        "validate" => "spec-validate",
-        "audit" => "spec-audit",
-        "unlock" => "spec-unlock",
-        _ => {
-            return Err(HeadlessError::InfraError(format!(
-                "Unknown stage: {}",
-                stage
-            )));
-        }
-    };
-
-    let stage_prompts = prompts.get(stage_key).ok_or_else(|| {
-        HeadlessError::InfraError(format!("No prompts found for stage {}", stage_key))
-    })?;
-
-    // Extract agent names from the stage prompts object
-    let mut agents = Vec::new();
-    if let Some(obj) = stage_prompts.as_object() {
-        for key in obj.keys() {
-            // Skip non-agent keys like "version"
-            if key != "version" {
-                agents.push(key.clone());
-            }
-        }
-    }
-
-    // Sort agents for deterministic order (gemini, claude, gpt_pro)
-    agents.sort();
-
-    if agents.is_empty() {
-        return Err(HeadlessError::InfraError(format!(
-            "No agents found for stage {}",
-            stage_key
-        )));
-    }
-
-    Ok(agents)
+    // Return single agent as vector (maintains API contract)
+    Ok(vec![preferred.canonical_name().to_string()])
 }
 
 #[cfg(test)]
@@ -373,13 +321,25 @@ mod tests {
     }
 
     #[test]
-    fn test_get_agents_for_stage() {
+    fn test_get_agents_for_stage_single_agent() {
+        // D113/D133: Headless now returns single preferred agent matching TUI
         let temp = TempDir::new().unwrap();
         setup_test_spec(&temp, "TEST-001");
 
+        // Plan stage should return Gemini (architect role)
         let agents = get_agents_for_stage(temp.path(), "plan").unwrap();
-        assert!(agents.contains(&"gemini".to_string()));
-        assert!(agents.contains(&"claude".to_string()));
+        assert_eq!(agents.len(), 1, "Should return exactly one agent");
+        assert_eq!(agents[0], "gemini", "Plan stage should prefer Gemini");
+
+        // Tasks stage should return Claude (implementer role)
+        let agents = get_agents_for_stage(temp.path(), "tasks").unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0], "claude", "Tasks stage should prefer Claude");
+
+        // Implement stage should return Claude
+        let agents = get_agents_for_stage(temp.path(), "implement").unwrap();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0], "claude", "Implement stage should prefer Claude");
     }
 
     #[test]
@@ -400,5 +360,47 @@ mod tests {
         let useful = extract_useful_content(content);
         assert!(useful.contains("Useful content"));
         assert!(!useful.contains("Debug output"));
+    }
+
+    #[test]
+    fn test_headless_prompt_no_template_leakage() {
+        // D113/D133: Verify ${TEMPLATE:*} tokens are expanded
+        let temp = TempDir::new().unwrap();
+
+        // Create prompts.json with template token
+        let spec_dir = temp.path().join("docs").join("TEST-TPL");
+        std::fs::create_dir_all(&spec_dir).unwrap();
+        std::fs::write(spec_dir.join("spec.md"), "# TEST-TPL\n\nTest spec.\n").unwrap();
+
+        let prompts_dir = temp.path().join("docs/spec-kit");
+        std::fs::create_dir_all(&prompts_dir).unwrap();
+        std::fs::write(
+            prompts_dir.join("prompts.json"),
+            r#"{
+                "spec-plan": {
+                    "version": "test-v1",
+                    "gemini": {
+                        "role": "Researcher",
+                        "prompt": "Template: ${TEMPLATE:plan}\nSPEC: ${SPEC_ID}\nContext: ${CONTEXT}"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let prompt =
+            build_headless_prompt("TEST-TPL", "plan", "gemini", temp.path(), None).unwrap();
+
+        // Template token should be expanded (not leaked)
+        assert!(
+            !prompt.contains("${TEMPLATE:"),
+            "Template token leaked: {}",
+            prompt.chars().take(300).collect::<String>()
+        );
+        // Should contain expanded template reference
+        assert!(
+            prompt.contains("[embedded:plan]") || prompt.contains("templates/plan"),
+            "Template should be expanded"
+        );
     }
 }

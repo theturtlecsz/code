@@ -21,7 +21,7 @@
     * [Deliverable Formats](#deliverable-formats)
       * [Plans (`docs/SPEC-<id>-<slug>/plan.md`)](#plans-docsspec-id-slugplanmd)
       * [Tasks (`docs/SPEC-<id>-<slug>/tasks.md` + SPEC.md)](#tasks-docsspec-id-slugtasksmd--specmd)
-    * [Multi-Agent Expectations](#multi-agent-expectations)
+    * [Agent Execution (GR-001)](#agent-execution-gr-001)
     * [Config Isolation (SPEC-KIT-964)](#config-isolation-spec-kit-964)
     * [Capsule as System of Record](#capsule-as-system-of-record)
     * [Reference Documents](#reference-documents)
@@ -31,7 +31,7 @@
     * [Evidence Capture](#evidence-capture)
   * [3. Runbook: Troubleshooting](#3-runbook-troubleshooting)
     * [If HAL Telemetry Fails](#if-hal-telemetry-fails)
-    * [If Consensus Drift Occurs](#if-consensus-drift-occurs)
+    * [If Agent Execution Fails](#if-agent-execution-fails)
     * [If Dirty Tree Blocks Guardrails](#if-dirty-tree-blocks-guardrails)
     * [If Evidence Exceeds Limits](#if-evidence-exceeds-limits)
     * [If NotebookLM Is Unavailable](#if-notebooklm-is-unavailable)
@@ -223,12 +223,16 @@ Enable `SPEC_OPS_TELEMETRY_HAL=1` during HAL smoke tests to capture `hal.summary
 * On PR open: Status -> `In Review`, populate `Branch`
 * On merge: Status -> `Done`, fill `PR`, add dated note referencing evidence
 
-### Multi-Agent Expectations
+### Agent Execution (GR-001)
 
-* **Consensus is fully automated** via native integration (ARCH-002, 5.3x faster). All 13 `/speckit.*` commands operational
-* **Agent roster**: Tier 2 uses gemini/claude/code (or gpt\_pro for dev stages), Tier 3 adds gpt\_codex, Tier 4 dynamically selects 3-5 agents
-* **Degradation handling**: If agent fails, retry up to 3 times (AR-2). If still fails, continue with remaining agents (2/3 consensus still valid)
-* **Consensus metadata**: Automatically records `agent`, `version`, `content` in local-memory. Synthesis includes `consensus_ok`, `degraded`, `missing_agents`, `conflicts[]`
+* **Single-agent default**: Native integration uses `preferred_agent_for_stage()` (GR-001 compliant)
+  * Plan/Specify: Gemini (Architect role)
+  * Implement/Tasks: Claude (Implementer role)
+  * Validate/Audit/Unlock: Claude (Judge role)
+  * Clarify/Analyze: Gemini (Librarian role)
+* **Retry handling**: If agent fails, retry up to 3 times (AR-2)
+* **Prompt version tracking**: Version comes from same source as prompt template (D113/D133)
+* **Template expansion**: `${TEMPLATE:*}` tokens resolved automatically
 * **Memory System**: Use local-memory via **CLI + REST only** (no MCP). Byterover deprecated 2025-10-18
 * **Validation**: `/implement` runs `cargo fmt`, `cargo clippy`, build checks, tests before returning
 
@@ -332,12 +336,12 @@ docs/SPEC-<id>-<slug>/evidence/
 2. Re-run with `SPEC_OPS_TELEMETRY_HAL=1`
 3. Verify telemetry JSON has required fields
 
-### If Consensus Drift Occurs
+### If Agent Execution Fails
 
-1. Check which agents are missing/failed
-2. Re-run: `/spec-consensus <SPEC-ID> <stage>`
-3. Document degradation in report
-4. 2/3 consensus is still valid (AR-2 retry logic)
+1. Check agent status and error messages
+2. Re-run the stage: `/<stage> <SPEC-ID>` (e.g., `/spec-plan SPEC-KIT-001`)
+3. If agent times out, check agent configs and routing
+4. AR-2 retry logic handles transient failures (3 attempts)
 
 ### If Dirty Tree Blocks Guardrails
 

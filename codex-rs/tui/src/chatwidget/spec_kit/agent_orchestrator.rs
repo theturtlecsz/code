@@ -106,6 +106,7 @@ fn extract_useful_content_from_stage_file(content: &str) -> String {
 /// Build individual agent prompt with context (matches quality gate pattern)
 /// SPEC-KIT-900 Session 3: Fix architectural mismatch - each agent gets unique prompt
 /// SPEC-KIT-102: Added stage0_context parameter for combined Divine Truth + Task Brief injection
+/// D113/D133: Now uses unified prompt-source API for TUI/headless parity
 async fn build_individual_agent_prompt(
     spec_id: &str,
     stage: SpecStage,
@@ -113,33 +114,21 @@ async fn build_individual_agent_prompt(
     cwd: &Path,
     stage0_context: Option<&str>, // SPEC-KIT-102: Pre-computed combined_context_md()
 ) -> Result<String, String> {
-    use serde_json::Value;
+    // D113/D133: Parse agent name to SpecAgent enum
+    let spec_agent = SpecAgent::from_string(agent_name)
+        .ok_or_else(|| format!("Unknown agent name: {}", agent_name))?;
 
-    // Load prompts.json
-    let prompts_path = cwd.join("docs/spec-kit/prompts.json");
-    let prompts_content = std::fs::read_to_string(&prompts_path)
-        .map_err(|e| format!("Failed to read prompts.json: {}", e))?;
-
-    let prompts: Value = serde_json::from_str(&prompts_content)
-        .map_err(|e| format!("Failed to parse prompts.json: {}", e))?;
-
-    // Get stage-specific prompts
-    let stage_key = stage.key(); // "spec-plan", "spec-tasks", etc.
-    let stage_prompts = prompts
-        .get(stage_key)
-        .ok_or_else(|| format!("No prompts found for stage {}", stage_key))?;
-
-    // Get THIS agent's prompt template
-    let prompt_template = stage_prompts
-        .get(agent_name)
-        .and_then(|v| v.get("prompt"))
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            format!(
-                "No prompt found for agent {} in stage {}",
-                agent_name, stage_key
-            )
-        })?;
+    // D113/D133: Use unified prompt-source API (project-local with embedded fallback)
+    let stage_key = stage.key();
+    let (prompt_template, prompt_version) =
+        crate::spec_prompts::get_prompt_with_version(stage_key, spec_agent, Some(cwd)).ok_or_else(
+            || {
+                format!(
+                    "No prompt found for agent {} in stage {}",
+                    agent_name, stage_key
+                )
+            },
+        )?;
 
     // Find SPEC directory using ACID-compliant resolver
     let spec_dir = super::spec_directory::find_spec_directory(cwd, spec_id)?;
@@ -301,41 +290,22 @@ async fn build_individual_agent_prompt(
         }
     }
 
-    // SPEC-KIT-924: Replace ALL template variables including metadata
-    // Parse agent name to SpecAgent enum to get metadata
-    let spec_agent = SpecAgent::from_string(agent_name)
-        .ok_or_else(|| format!("Unknown agent name: {}", agent_name))?;
+    // D113/D133: Use unified render_prompt_text() for all substitutions
+    // This ensures ${TEMPLATE:*} expansion and consistent variable handling
+    let prompt = crate::spec_prompts::render_prompt_text(
+        &prompt_template,
+        &prompt_version,
+        &[("SPEC_ID", spec_id), ("CONTEXT", &context)],
+        stage,
+        spec_agent,
+    );
 
-    // Get prompt version
-    let prompt_version =
-        crate::spec_prompts::stage_version_enum(stage).unwrap_or_else(|| "unversioned".to_string());
-
-    // Get model metadata (MODEL_ID, MODEL_RELEASE, REASONING_MODE)
-    let metadata = crate::spec_prompts::model_metadata(stage, spec_agent);
-    let model_id = metadata
-        .iter()
-        .find(|(k, _)| k == "MODEL_ID")
-        .map(|(_, v)| v.as_str())
-        .unwrap_or("unknown");
-    let model_release = metadata
-        .iter()
-        .find(|(k, _)| k == "MODEL_RELEASE")
-        .map(|(_, v)| v.as_str())
-        .unwrap_or("unknown");
-    let reasoning_mode = metadata
-        .iter()
-        .find(|(k, _)| k == "REASONING_MODE")
-        .map(|(_, v)| v.as_str())
-        .unwrap_or("unknown");
-
-    // Replace all placeholders (including metadata variables)
-    let prompt = prompt_template
-        .replace("${SPEC_ID}", spec_id)
-        .replace("${CONTEXT}", &context)
-        .replace("${PROMPT_VERSION}", &prompt_version)
-        .replace("${MODEL_ID}", model_id)
-        .replace("${MODEL_RELEASE}", model_release)
-        .replace("${REASONING_MODE}", reasoning_mode);
+    // D113/D133: Debug assertion - no template tokens should leak
+    debug_assert!(
+        !prompt.contains("${TEMPLATE:"),
+        "Template token leaked in build_individual_agent_prompt: {}",
+        prompt.chars().take(200).collect::<String>()
+    );
 
     Ok(prompt)
 }

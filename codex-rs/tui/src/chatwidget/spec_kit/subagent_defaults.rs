@@ -25,8 +25,12 @@ fn make_config(
 /// Return the default subagent configuration for a Spec-Kit command.
 ///
 /// The caller should only use this when the active configuration is missing an
-/// explicit entry for the command. These defaults preserve the documented
-/// multi-agent line-up and memory tagging discipline.
+/// explicit entry for the command.
+///
+/// **Note (D113/D133)**: These configs are for the legacy subagent orchestration path.
+/// The primary execution path now uses native orchestration with single-agent selection
+/// via `preferred_agent_for_stage()` (GR-001 compliant). These defaults are retained
+/// for backward compatibility with explicit subagent invocations.
 pub fn default_for(name: &str) -> Option<SubagentCommandConfig> {
     match name {
         "speckit.new" => Some(make_config(
