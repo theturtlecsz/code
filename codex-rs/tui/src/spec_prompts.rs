@@ -1255,4 +1255,67 @@ mod tests {
             "Tasks Claude template still contains ${{PREVIOUS_OUTPUTS.plan}}"
         );
     }
+
+    // MAINT-15: Guard test - no PREVIOUS_OUTPUTS in embedded prompts
+    #[test]
+    fn embedded_prompts_json_no_previous_outputs() {
+        // Assert PROMPTS_JSON contains no ${PREVIOUS_OUTPUTS substring anywhere
+        // This prevents consensus-era relics from creeping back in
+        assert!(
+            !PROMPTS_JSON.contains("${PREVIOUS_OUTPUTS"),
+            "Embedded prompts.json still contains ${{PREVIOUS_OUTPUTS}} - consensus era relic"
+        );
+    }
+
+    // MAINT-15: Guard test - preferred-agent prompts have ${CONTEXT}
+    #[test]
+    fn preferred_agent_prompts_have_context() {
+        // Table-driven test for stages with Claude as preferred agent
+        let stages = [
+            ("spec-implement", SpecStage::Implement),
+            ("spec-validate", SpecStage::Validate),
+            ("spec-audit", SpecStage::Audit),
+            ("spec-unlock", SpecStage::Unlock),
+        ];
+
+        for (stage_key, stage) in stages {
+            let result = get_prompt_with_version(stage_key, SpecAgent::Claude, None);
+            assert!(
+                result.is_some(),
+                "Expected {} Claude prompt to exist",
+                stage_key
+            );
+
+            let (template, version) = result.unwrap();
+
+            // Template must contain ${CONTEXT}
+            assert!(
+                template.contains("${CONTEXT}"),
+                "{} Claude template missing ${{CONTEXT}}",
+                stage_key
+            );
+
+            // Rendered prompt must not leak ${PREVIOUS_OUTPUTS} or ${TEMPLATE:
+            let prompt = render_prompt_text(
+                &template,
+                &version,
+                &[("SPEC_ID", "TEST-001"), ("CONTEXT", "test context")],
+                stage,
+                SpecAgent::Claude,
+            );
+
+            assert!(
+                !prompt.contains("${PREVIOUS_OUTPUTS"),
+                "{} leaks ${{PREVIOUS_OUTPUTS}}: {}",
+                stage_key,
+                &prompt[..prompt.len().min(200)]
+            );
+            assert!(
+                !prompt.contains("${TEMPLATE:"),
+                "{} leaks ${{TEMPLATE:}}: {}",
+                stage_key,
+                &prompt[..prompt.len().min(200)]
+            );
+        }
+    }
 }
