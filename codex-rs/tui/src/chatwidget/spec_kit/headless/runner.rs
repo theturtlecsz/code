@@ -20,6 +20,8 @@ use codex_spec_kit::Stage;
 use super::backend::{AgentBackend, DefaultAgentBackend};
 use super::output::{HeadlessOutput, Stage0Info};
 use super::prompt_builder::{build_headless_prompt, get_agents_for_stage};
+use crate::chatwidget::spec_kit::ace_client::PlaybookBullet;
+use crate::chatwidget::spec_kit::ace_prompt_injector::{command_to_scope, should_use_ace, stage_to_ace_command};
 use crate::chatwidget::spec_kit::maieutic::MaieuticSpec;
 use crate::chatwidget::spec_kit::native_guardrail::run_native_guardrail;
 use crate::chatwidget::spec_kit::stage0_integration::{
@@ -221,6 +223,7 @@ impl Default for HeadlessConfig {
 /// Headless pipeline runner
 ///
 /// Executes `/speckit.auto` without requiring a TUI.
+/// SPEC-KIT-982: Added ace_bullets for project heuristics injection.
 pub struct HeadlessPipelineRunner {
     /// SPEC identifier
     pub spec_id: String,
@@ -230,6 +233,8 @@ pub struct HeadlessPipelineRunner {
     pub to_stage: Stage,
     /// Maieutic spec with pre-supplied answers
     pub maieutic_spec: MaieuticSpec,
+    /// ACE project heuristics (optional, from playbook)
+    pub ace_bullets: Option<Vec<PlaybookBullet>>,
     /// Configuration
     pub config: HeadlessConfig,
     /// Core config for LLM access
@@ -249,11 +254,13 @@ impl HeadlessPipelineRunner {
     ///
     /// Uses `DefaultAgentBackend` with real agent spawning via AGENT_MANAGER.
     /// For tests, use `new_with_backend()` with a `MockAgentBackend`.
+    /// SPEC-KIT-982: Added optional ace_bullets for project heuristics.
     pub fn new(
         spec_id: String,
         from_stage: Stage,
         to_stage: Stage,
         maieutic_spec: MaieuticSpec,
+        ace_bullets: Option<Vec<PlaybookBullet>>, // SPEC-KIT-982: Project heuristics
         config: HeadlessConfig,
         planner_config: codex_core::config::Config,
         cwd: PathBuf,
@@ -265,6 +272,7 @@ impl HeadlessPipelineRunner {
             from_stage,
             to_stage,
             maieutic_spec,
+            ace_bullets,
             config,
             planner_config,
             cwd,
@@ -275,11 +283,13 @@ impl HeadlessPipelineRunner {
     /// Create a new headless runner with custom backend
     ///
     /// Use this constructor for testing with a mock backend.
+    /// SPEC-KIT-982: Added optional ace_bullets for project heuristics.
     pub fn new_with_backend(
         spec_id: String,
         from_stage: Stage,
         to_stage: Stage,
         maieutic_spec: MaieuticSpec,
+        ace_bullets: Option<Vec<PlaybookBullet>>, // SPEC-KIT-982: Project heuristics
         config: HeadlessConfig,
         planner_config: codex_core::config::Config,
         cwd: PathBuf,
@@ -290,6 +300,7 @@ impl HeadlessPipelineRunner {
             from_stage,
             to_stage,
             maieutic_spec,
+            ace_bullets,
             config,
             planner_config,
             cwd,
@@ -526,8 +537,12 @@ impl HeadlessPipelineRunner {
     fn execute_stage(&self, stage: &Stage) -> Result<(), HeadlessError> {
         let stage_name = stage.as_str();
 
-        // D113/D133: Get preferred agent for this stage (GR-001 single-agent routing)
-        let agents = get_agents_for_stage(&self.cwd, stage_name)?;
+        // SPEC-KIT-981: Use config-aware agent selection for parity with TUI
+        let agents = get_agents_for_stage(
+            &self.cwd,
+            stage_name,
+            Some(&self.planner_config.speckit_stage_agents),
+        )?;
 
         tracing::info!(
             stage = %stage_name,
@@ -544,16 +559,29 @@ impl HeadlessPipelineRunner {
             .map(|s0| s0.combined_context_md());
         let stage0_context = stage0_context_owned.as_deref();
 
+        // SPEC-KIT-982: Determine ACE bullets for this stage
+        // Priority: 1) Use pre-supplied bullets, 2) Fetch if ACE enabled, 3) None
+        let ace_bullets_for_stage: Option<Vec<PlaybookBullet>> = if self.ace_bullets.is_some() {
+            // Use pre-supplied bullets (from constructor)
+            self.ace_bullets.clone()
+        } else {
+            // Try to fetch ACE bullets for this stage
+            self.fetch_ace_bullets_for_stage(stage)
+        };
+
         // Execute each agent and collect outputs
         let mut outputs: Vec<(String, String)> = Vec::new();
         for agent_name in &agents {
             // Build prompt for this agent
+            // SPEC-KIT-982: Include maieutic contract and ACE heuristics
             let prompt = build_headless_prompt(
                 &self.spec_id,
                 stage_name,
                 agent_name,
                 &self.cwd,
                 stage0_context,
+                Some(&self.maieutic_spec),
+                ace_bullets_for_stage.as_deref(),
             )?;
 
             tracing::info!(
@@ -727,6 +755,161 @@ impl HeadlessPipelineRunner {
             ))),
         }
     }
+
+    /// SPEC-KIT-982: Fetch ACE bullets for a stage if ACE is enabled.
+    ///
+    /// Uses the same scope mapping as TUI (via command_to_scope) for parity.
+    /// Falls back to None on any error (safe degradation).
+    fn fetch_ace_bullets_for_stage(&self, stage: &Stage) -> Option<Vec<PlaybookBullet>> {
+        let ace_config = &self.planner_config.ace;
+
+        // Check if ACE is enabled
+        if !ace_config.enabled {
+            tracing::debug!("ACE disabled in config");
+            return None;
+        }
+
+        // Convert stage to ACE command name (using same mapping as TUI)
+        let stage_name = stage.as_str();
+        let command_name = stage_to_ace_command_name(stage_name);
+
+        // Check if this stage should use ACE
+        if !should_use_ace(ace_config, &command_name) {
+            tracing::debug!(
+                stage = %stage_name,
+                command = %command_name,
+                "ACE not enabled for this stage"
+            );
+            return None;
+        }
+
+        // Get scope for this command
+        let Some(scope) = command_to_scope(&command_name) else {
+            tracing::debug!(
+                stage = %stage_name,
+                command = %command_name,
+                "No ACE scope mapping for this stage"
+            );
+            return None;
+        };
+
+        // Get repo root and branch for ACE query
+        let repo_root = self.cwd.to_string_lossy().to_string();
+        let branch = get_current_branch_sync(&self.cwd).unwrap_or_else(|| "main".to_string());
+
+        // Try to fetch via tokio runtime (if available)
+        // This is safe because headless execution may or may not have a runtime
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                let scope_owned = scope.to_string();
+                let slice_size = ace_config.slice_size;
+
+                let result = handle.block_on(async {
+                    crate::chatwidget::spec_kit::ace_client::playbook_slice(
+                        repo_root,
+                        branch,
+                        scope_owned,
+                        slice_size,
+                        false, // exclude_neutral
+                    )
+                    .await
+                });
+
+                match result {
+                    crate::chatwidget::spec_kit::ace_client::AceResult::Ok(response) => {
+                        tracing::info!(
+                            stage = %stage_name,
+                            scope = %scope,
+                            bullet_count = response.bullets.len(),
+                            "ACE fetch successful in headless mode"
+                        );
+                        Some(response.bullets)
+                    }
+                    crate::chatwidget::spec_kit::ace_client::AceResult::Disabled => {
+                        tracing::debug!("ACE client disabled");
+                        None
+                    }
+                    crate::chatwidget::spec_kit::ace_client::AceResult::Error(e) => {
+                        tracing::warn!(
+                            stage = %stage_name,
+                            error = %e,
+                            "ACE fetch failed in headless mode (safe fallback)"
+                        );
+                        None
+                    }
+                }
+            }
+            Err(_) => {
+                // No tokio runtime available - create one temporarily
+                tracing::debug!("No tokio runtime available, creating temporary runtime for ACE fetch");
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Failed to create tokio runtime for ACE fetch");
+                        return None;
+                    }
+                };
+
+                let scope_owned = scope.to_string();
+                let slice_size = ace_config.slice_size;
+
+                let result = rt.block_on(async {
+                    crate::chatwidget::spec_kit::ace_client::playbook_slice(
+                        repo_root,
+                        branch,
+                        scope_owned,
+                        slice_size,
+                        false,
+                    )
+                    .await
+                });
+
+                match result {
+                    crate::chatwidget::spec_kit::ace_client::AceResult::Ok(response) => {
+                        tracing::info!(
+                            stage = %stage_name,
+                            scope = %scope,
+                            bullet_count = response.bullets.len(),
+                            "ACE fetch successful in headless mode (temp runtime)"
+                        );
+                        Some(response.bullets)
+                    }
+                    crate::chatwidget::spec_kit::ace_client::AceResult::Disabled => None,
+                    crate::chatwidget::spec_kit::ace_client::AceResult::Error(e) => {
+                        tracing::warn!(error = %e, "ACE fetch failed (temp runtime)");
+                        None
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Convert Stage name to ACE command name using stage_to_ace_command.
+///
+/// Maps stage names like "plan", "tasks" to "speckit.plan", "speckit.tasks".
+fn stage_to_ace_command_name(stage_name: &str) -> String {
+    // Stage names from Stage::as_str() are like "plan", "tasks", etc.
+    // We need to map these to speckit.XXX format for ACE
+    stage_to_ace_command(stage_name)
+}
+
+/// Get current git branch synchronously (helper for headless mode).
+fn get_current_branch_sync(cwd: &std::path::Path) -> Option<String> {
+    std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(cwd)
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
 }
 
 /// Convert codex_spec_kit::Stage to SpecStage for guardrail validation
@@ -926,11 +1109,13 @@ mod tests {
         let backend = MockAgentBackend::with_responses(responses);
 
         // Create runner with mock backend
+        // SPEC-KIT-982: Pass None for ace_bullets in tests
         let mut runner = HeadlessPipelineRunner::new_with_backend(
             "TEST-001".to_string(),
             Stage::Plan,
             Stage::Plan,
             test_maieutic(),
+            None, // ace_bullets
             HeadlessConfig {
                 stage0_timeout: Duration::from_secs(1),
                 agent_timeout: Duration::from_secs(30),
@@ -992,6 +1177,7 @@ mod tests {
             Stage::Plan,
             Stage::Plan,
             test_maieutic(),
+            None, // ace_bullets
             HeadlessConfig::default(),
             planner_config,
             temp.path().to_path_buf(),
@@ -1028,6 +1214,7 @@ mod tests {
             Stage::Plan,
             Stage::Tasks,
             test_maieutic(),
+            None, // ace_bullets
             HeadlessConfig::default(),
             planner_config,
             temp.path().to_path_buf(),
@@ -1073,6 +1260,7 @@ mod tests {
             Stage::Plan,
             Stage::Tasks,
             test_maieutic(),
+            None, // ace_bullets
             HeadlessConfig::default(),
             planner_config,
             temp.path().to_path_buf(),
@@ -1234,6 +1422,7 @@ mod tests {
             Stage::Plan,
             Stage::Tasks,
             test_maieutic(),
+            None, // ace_bullets
             HeadlessConfig::default(),
             planner_config,
             temp.path().to_path_buf(),

@@ -92,13 +92,19 @@ pub fn build_prompt_context(
         }
     }
 
-    // 4. spec.md content
+    // 4. spec.md content (REQUIRED - hard error if missing/unreadable)
+    // SPEC-KIT-982: Enforce spec.md as a hard requirement for prompt correctness
     let spec_md = spec_dir.join("spec.md");
-    if let Ok(spec_content) = std::fs::read_to_string(&spec_md) {
-        context.push_str("## spec.md\n\n");
-        append_with_budget(&mut context, &spec_content, FILE_SECTION_MAX_BYTES);
-        context.push_str("\n\n");
-    }
+    let spec_content = std::fs::read_to_string(&spec_md).map_err(|e| {
+        format!(
+            "Missing or unreadable spec.md at {}: {} (prompt building requires spec.md)",
+            spec_md.display(),
+            e
+        )
+    })?;
+    context.push_str("## spec.md\n\n");
+    append_with_budget(&mut context, &spec_content, FILE_SECTION_MAX_BYTES);
+    context.push_str("\n\n");
 
     // 5. plan.md content (for stages after Plan)
     if !matches!(stage, SpecStage::Specify | SpecStage::Plan) {
@@ -462,5 +468,51 @@ mod tests {
         assert!(stage0_pos < maieutic_pos);
         assert!(maieutic_pos < ace_pos);
         assert!(ace_pos < spec_pos);
+    }
+
+    /// SPEC-KIT-982: Verify missing spec.md returns an error (hard requirement)
+    #[test]
+    fn test_missing_spec_md_returns_error() {
+        let temp = TempDir::new().unwrap();
+        // Intentionally do NOT create spec.md
+
+        let result =
+            build_prompt_context("TEST-001", SpecStage::Plan, temp.path(), None, None, None);
+
+        assert!(result.is_err(), "Expected error for missing spec.md");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("Missing or unreadable spec.md"),
+            "Error message should indicate spec.md issue: {}",
+            err
+        );
+    }
+
+    /// SPEC-KIT-982: Verify unreadable spec.md returns an error
+    #[test]
+    #[cfg(unix)]
+    fn test_unreadable_spec_md_returns_error() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TempDir::new().unwrap();
+        let spec_path = temp.path().join("spec.md");
+        std::fs::write(&spec_path, "# Test").unwrap();
+
+        // Remove read permissions
+        std::fs::set_permissions(&spec_path, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+        let result =
+            build_prompt_context("TEST-001", SpecStage::Plan, temp.path(), None, None, None);
+
+        // Restore permissions before asserting (for cleanup)
+        std::fs::set_permissions(&spec_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        assert!(result.is_err(), "Expected error for unreadable spec.md");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("Missing or unreadable spec.md"),
+            "Error message should indicate spec.md issue: {}",
+            err
+        );
     }
 }

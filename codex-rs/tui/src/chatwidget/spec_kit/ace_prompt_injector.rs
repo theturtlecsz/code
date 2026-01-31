@@ -32,23 +32,50 @@ pub fn should_use_ace(config: &AceConfig, command_name: &str) -> bool {
 }
 
 /// Map command name to ACE scope
+///
+/// SPEC-KIT-982: Updated to handle both legacy "spec-XXX" format and
+/// new "speckit.XXX" format for Tier-1 parity.
 pub fn command_to_scope(command_name: &str) -> Option<&str> {
     // Remove "speckit." prefix if present
     let name = command_name
         .strip_prefix("speckit.")
         .unwrap_or(command_name);
 
-    match name {
+    // Handle both "spec-XXX" and plain "XXX" formats
+    let normalized = name.strip_prefix("spec-").unwrap_or(name);
+
+    match normalized {
         "constitution" => Some("global"),
         "clarify" => Some("clarify"),
         "analyze" => Some("analyze"),
         "checklist" => Some("checklist"),
         "specify" => Some("specify"),
+        "plan" => Some("plan"),
         "tasks" => Some("tasks"),
         "implement" => Some("implement"),
-        "test" | "validate" => Some("test"),
+        // SPEC-KIT-982: Validate/Audit/Unlock all map to "test" scope
+        "test" | "validate" | "audit" | "unlock" => Some("test"),
         _ => None,
     }
+}
+
+/// Convert a SpecStage command to a normalized ACE command name.
+///
+/// SPEC-KIT-982: Provides consistent "speckit.XXX" format for ACE matching.
+/// Use this instead of `stage.command_name()` directly for ACE operations.
+pub fn stage_to_ace_command(stage_command_name: &str) -> String {
+    // If already has "speckit." prefix (like "speckit.specify"), return as-is
+    if stage_command_name.starts_with("speckit.") {
+        return stage_command_name.to_string();
+    }
+
+    // Handle legacy "spec-XXX" format → "speckit.XXX"
+    if let Some(suffix) = stage_command_name.strip_prefix("spec-") {
+        return format!("speckit.{}", suffix);
+    }
+
+    // Plain name → add prefix
+    format!("speckit.{}", stage_command_name)
 }
 
 /// Normalize bullet text for deduplication
@@ -278,14 +305,45 @@ mod tests {
 
     #[test]
     fn test_command_to_scope() {
+        // New "speckit.XXX" format
         assert_eq!(command_to_scope("speckit.specify"), Some("specify"));
         assert_eq!(command_to_scope("specify"), Some("specify"));
+        assert_eq!(command_to_scope("speckit.plan"), Some("plan"));
         assert_eq!(command_to_scope("speckit.tasks"), Some("tasks"));
         assert_eq!(command_to_scope("speckit.implement"), Some("implement"));
         assert_eq!(command_to_scope("speckit.test"), Some("test"));
         assert_eq!(command_to_scope("speckit.validate"), Some("test"));
+        assert_eq!(command_to_scope("speckit.audit"), Some("test"));
+        assert_eq!(command_to_scope("speckit.unlock"), Some("test"));
         assert_eq!(command_to_scope("speckit.constitution"), Some("global"));
         assert_eq!(command_to_scope("speckit.unknown"), None);
+
+        // SPEC-KIT-982: Legacy "spec-XXX" format support
+        assert_eq!(command_to_scope("spec-plan"), Some("plan"));
+        assert_eq!(command_to_scope("spec-tasks"), Some("tasks"));
+        assert_eq!(command_to_scope("spec-implement"), Some("implement"));
+        assert_eq!(command_to_scope("spec-validate"), Some("test"));
+        assert_eq!(command_to_scope("spec-audit"), Some("test"));
+        assert_eq!(command_to_scope("spec-unlock"), Some("test"));
+    }
+
+    /// SPEC-KIT-982: Test stage_to_ace_command normalization
+    #[test]
+    fn test_stage_to_ace_command() {
+        // Already has speckit. prefix - return as-is
+        assert_eq!(stage_to_ace_command("speckit.specify"), "speckit.specify");
+
+        // Legacy "spec-XXX" format - normalize to "speckit.XXX"
+        assert_eq!(stage_to_ace_command("spec-plan"), "speckit.plan");
+        assert_eq!(stage_to_ace_command("spec-tasks"), "speckit.tasks");
+        assert_eq!(stage_to_ace_command("spec-implement"), "speckit.implement");
+        assert_eq!(stage_to_ace_command("spec-validate"), "speckit.validate");
+        assert_eq!(stage_to_ace_command("spec-audit"), "speckit.audit");
+        assert_eq!(stage_to_ace_command("spec-unlock"), "speckit.unlock");
+
+        // Plain name - add prefix
+        assert_eq!(stage_to_ace_command("plan"), "speckit.plan");
+        assert_eq!(stage_to_ace_command("tasks"), "speckit.tasks");
     }
 
     #[test]

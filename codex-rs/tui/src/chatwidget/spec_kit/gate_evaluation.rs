@@ -304,13 +304,18 @@ pub fn agent_for_stage(
 /// **PR6**: Always returns a single preferred agent. Legacy multi-agent
 /// voting has been removed.
 ///
+/// **SPEC-KIT-981**: Now accepts optional config for stage→agent overrides.
+/// If config specifies a valid agent for the stage, that agent is used;
+/// otherwise falls back to `preferred_agent_for_stage()` defaults.
+///
 /// See: docs/MODEL-POLICY.md Section 2 (GR-001)
 // ARCH-006: Use SpecAgent enum instead of strings
 pub(in super::super) fn expected_agents_for_stage(
     stage: SpecStage,
+    config: Option<&codex_core::config_types::SpecKitStageAgents>,
 ) -> Vec<crate::spec_prompts::SpecAgent> {
-    // PR6: Always return single agent - multi-agent voting removed
-    vec![preferred_agent_for_stage(stage)]
+    // SPEC-KIT-981: Use config-aware agent selection
+    vec![agent_for_stage(stage, config)]
 }
 
 /// Extract string array from JSON value
@@ -892,7 +897,8 @@ pub async fn run_spec_consensus(
     }
 
     // ARCH-006: Use SpecAgent enum for expected agents
-    let expected_agents = expected_agents_for_stage(stage);
+    // Note: Legacy consensus path - no config available, use defaults
+    let expected_agents = expected_agents_for_stage(stage, None);
     let mut missing_agents: Vec<String> = expected_agents
         .iter()
         .map(|agent| agent.canonical_name().to_string())
@@ -1420,7 +1426,7 @@ mod gr001_tests {
         // SAFETY: Test isolation
         unsafe { std::env::remove_var("SPEC_KIT_CONSENSUS") };
 
-        let agents = expected_agents_for_stage(SpecStage::Implement);
+        let agents = expected_agents_for_stage(SpecStage::Implement, None);
         assert_eq!(agents.len(), 1, "PR6: always single agent");
 
         // Even with env var set, still single agent
@@ -1428,7 +1434,7 @@ mod gr001_tests {
             std::env::set_var("SPEC_KIT_CONSENSUS", "true");
         }
 
-        let agents = expected_agents_for_stage(SpecStage::Implement);
+        let agents = expected_agents_for_stage(SpecStage::Implement, None);
         assert_eq!(
             agents.len(),
             1,
@@ -1473,6 +1479,64 @@ mod gr001_tests {
             preferred_agent_for_stage(SpecStage::Audit),
             SpecAgent::GptPro
         );
+    }
+
+    // =========================================================================
+    // SPEC-KIT-981: Config-aware agent selection tests
+    // =========================================================================
+
+    #[test]
+    fn test_agent_for_stage_uses_default_when_no_config() {
+        use crate::spec_prompts::SpecAgent;
+
+        // Without config, should use GPT defaults
+        let agent = agent_for_stage(SpecStage::Plan, None);
+        assert_eq!(agent, SpecAgent::GptPro);
+
+        let agent = agent_for_stage(SpecStage::Implement, None);
+        assert_eq!(agent, SpecAgent::GptCodex);
+    }
+
+    #[test]
+    fn test_agent_for_stage_uses_config_override() {
+        use crate::spec_prompts::SpecAgent;
+        use codex_core::config_types::SpecKitStageAgents;
+
+        let mut config = SpecKitStageAgents::default();
+        config.plan = Some("claude".to_string());
+
+        let agent = agent_for_stage(SpecStage::Plan, Some(&config));
+        assert_eq!(agent, SpecAgent::Claude);
+
+        // Implement should still use default if not overridden
+        let agent = agent_for_stage(SpecStage::Implement, Some(&config));
+        assert_eq!(agent, SpecAgent::GptCodex);
+    }
+
+    #[test]
+    fn test_agent_for_stage_invalid_config_falls_back() {
+        use crate::spec_prompts::SpecAgent;
+        use codex_core::config_types::SpecKitStageAgents;
+
+        let mut config = SpecKitStageAgents::default();
+        config.plan = Some("invalid_agent_name".to_string());
+
+        // Invalid agent should fall back to default
+        let agent = agent_for_stage(SpecStage::Plan, Some(&config));
+        assert_eq!(agent, SpecAgent::GptPro);
+    }
+
+    #[test]
+    fn test_expected_agents_for_stage_with_config() {
+        use crate::spec_prompts::SpecAgent;
+        use codex_core::config_types::SpecKitStageAgents;
+
+        let mut config = SpecKitStageAgents::default();
+        config.validate = Some("gemini".to_string());
+
+        let agents = expected_agents_for_stage(SpecStage::Validate, Some(&config));
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0], SpecAgent::Gemini);
     }
 
     // =========================================================================

@@ -1270,14 +1270,23 @@ pub(crate) fn advance_spec_auto(widget: &mut ChatWidget) {
                     SpecAutoPhase::Guardrail => {
                         // Log stage start and add TUI boundary marker
                         if let Some(run_id) = &state.run_id {
+                            // SPEC-KIT-981: Use config-aware agent selection
+                            let stage_agents_config = Some(&widget.config.speckit_stage_agents);
                             let tier = super::execution_logger::tier_from_agent_count(
-                                super::gate_evaluation::expected_agents_for_stage(stage).len(),
+                                super::gate_evaluation::expected_agents_for_stage(
+                                    stage,
+                                    stage_agents_config,
+                                )
+                                .len(),
                             );
                             let expected_agents: Vec<String> =
-                                super::gate_evaluation::expected_agents_for_stage(stage)
-                                    .into_iter()
-                                    .map(|a| a.canonical_name().to_string())
-                                    .collect();
+                                super::gate_evaluation::expected_agents_for_stage(
+                                    stage,
+                                    stage_agents_config,
+                                )
+                                .into_iter()
+                                .map(|a| a.canonical_name().to_string())
+                                .collect();
 
                             state.execution_logger.log_event(
                                 super::execution_logger::ExecutionEvent::StageStart {

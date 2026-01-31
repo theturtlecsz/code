@@ -100,21 +100,22 @@ These invariants MUST NOT be violated:
 
 ### In Progress
 
-| Spec         | Status      | Owner | Next Action                                           |
-| ------------ | ----------- | ----- | ----------------------------------------------------- |
-| SPEC-KIT-981 | In Progress | -     | Config-driven stage→agent mapping (GPT default)       |
-| SPEC-KIT-982 | In Progress | -     | ACE + maieutic in per-agent prompts (unified builder) |
+| Spec | Status | Owner | Next Action |
+| ---- | ------ | ----- | ----------- |
+| -    | -      | -     | -           |
 
 ### Planned
 
-| Spec         | Description                                         |
-| ------------ | --------------------------------------------------- |
-| SPEC-KIT-983 | TUI UI for stage→agent defaults (separate Q/A spec) |
+| Spec         | Description                                                      |
+| ------------ | ---------------------------------------------------------------- |
+| SPEC-KIT-983 | TUI UI for stage→agent defaults (requires architect Q/A session) |
 
 ### Completed (Recent)
 
 | Spec                | Completion Date | Key Deliverables                                                                              |
 | ------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| SPEC-KIT-982        | 2026-01-31      | ACE + maieutic injection into per-agent prompts via unified builder (D113/D133 parity)        |
+| SPEC-KIT-981        | 2026-01-31      | Config-driven stage→agent mapping with GPT-5.2 defaults, TUI/headless parity                  |
 | MAINT-14            | 2026-01-31      | Fix ${ARTIFACTS}/${PREVIOUS\_OUTPUTS} placeholder leakage, NEXT\_FOCUS\_ROADMAP refresh       |
 | SPEC-KIT-905        | 2026-01-30      | CLI stage parity: ID rename, docstring fixes, table-driven test, D113/D133 alignment          |
 | SPEC-KIT-900        | 2026-01-29      | Headless CLI execution parity, real agent spawning via AGENT\_MANAGER, exit codes (D113/D133) |

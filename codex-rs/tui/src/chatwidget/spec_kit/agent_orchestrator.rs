@@ -10,10 +10,12 @@
 #![allow(dead_code, unused_variables)] // Some coordination helpers unused
 
 use super::super::ChatWidget;
+use super::ace_client::PlaybookBullet;
 use super::command_handlers::halt_spec_auto_with_error;
 use super::consensus_coordinator::block_on_sync;
 use super::gate_evaluation::expected_agents_for_stage;
 use super::handler::check_consensus_and_advance_spec_auto;
+use super::maieutic::MaieuticSpec;
 use super::quality_gate_handler::on_quality_gate_agents_complete;
 use super::state::{SpecAutoPhase, ValidateBeginOutcome, ValidateRunInfo};
 use super::validation_lifecycle::{
@@ -107,12 +109,15 @@ fn extract_useful_content_from_stage_file(content: &str) -> String {
 /// SPEC-KIT-900 Session 3: Fix architectural mismatch - each agent gets unique prompt
 /// SPEC-KIT-102: Added stage0_context parameter for combined Divine Truth + Task Brief injection
 /// D113/D133: Now uses unified prompt-source API for TUI/headless parity
+/// SPEC-KIT-982: Added maieutic_spec and ace_bullets for contract injection
 async fn build_individual_agent_prompt(
     spec_id: &str,
     stage: SpecStage,
     agent_name: &str,
     cwd: &Path,
     stage0_context: Option<&str>, // SPEC-KIT-102: Pre-computed combined_context_md()
+    maieutic_spec: Option<&MaieuticSpec>, // SPEC-KIT-982: Delegation contract
+    ace_bullets: Option<&[PlaybookBullet]>, // SPEC-KIT-982: Project heuristics
 ) -> Result<String, String> {
     // D113/D133: Parse agent name to SpecAgent enum
     let spec_agent = SpecAgent::from_string(agent_name)
@@ -140,8 +145,8 @@ async fn build_individual_agent_prompt(
         stage,
         &spec_dir,
         stage0_context,
-        None, // maieutic_spec (future: pass from caller)
-        None, // ace_bullets (future: pass from caller)
+        maieutic_spec,
+        ace_bullets,
     )?;
 
     // Log context stats for debugging
@@ -342,6 +347,7 @@ async fn spawn_and_wait_for_agent(
 
 /// Spawn regular stage agents SEQUENTIALLY with output passing
 /// Session 3: True sequential execution with agent collaboration
+/// SPEC-KIT-982: Added maieutic_spec and ace_bullets for contract injection
 async fn spawn_regular_stage_agents_sequential(
     cwd: &Path,
     spec_id: &str,
@@ -351,6 +357,8 @@ async fn spawn_regular_stage_agents_sequential(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
     stage0_context: Option<&str>, // SPEC-KIT-102: Combined context from Stage 0
+    maieutic_spec: Option<&MaieuticSpec>, // SPEC-KIT-982: Delegation contract
+    ace_bullets: Option<&[PlaybookBullet]>, // SPEC-KIT-982: Project heuristics
 ) -> Result<Vec<AgentSpawnInfo>, String> {
     let run_tag = run_id
         .as_ref()
@@ -383,8 +391,17 @@ async fn spawn_regular_stage_agents_sequential(
             super::agent_resolver::resolve_agent_config_name(agent_name, agent_configs)?;
 
         // Build prompt for THIS agent with previous agent outputs injected
-        let mut prompt =
-            build_individual_agent_prompt(spec_id, stage, agent_name, cwd, stage0_context).await?;
+        // SPEC-KIT-982: Include maieutic contract and ACE heuristics
+        let mut prompt = build_individual_agent_prompt(
+            spec_id,
+            stage,
+            agent_name,
+            cwd,
+            stage0_context,
+            maieutic_spec,
+            ace_bullets,
+        )
+        .await?;
 
         // Inject previous agent outputs into prompt (INTELLIGENT EXTRACTION)
         for (prev_agent_name, prev_output) in &agent_outputs {
@@ -483,6 +500,7 @@ async fn spawn_regular_stage_agents_sequential(
 /// ## Fallback
 /// If this function fails, the caller should fall back to cloud mode using
 /// `spawn_regular_stage_agents_sequential`.
+/// SPEC-KIT-982: Added maieutic_spec and ace_bullets for contract injection
 #[allow(clippy::too_many_arguments)]
 async fn spawn_reflex_stage_agents_sequential(
     cwd: &Path,
@@ -493,6 +511,8 @@ async fn spawn_reflex_stage_agents_sequential(
     expected_agents: &[String],
     _agent_configs: &[AgentConfig],
     stage0_context: Option<&str>,
+    maieutic_spec: Option<&MaieuticSpec>, // SPEC-KIT-982: Delegation contract
+    ace_bullets: Option<&[PlaybookBullet]>, // SPEC-KIT-982: Project heuristics
     routing_decision: &RoutingDecision,
     run_tag: &str,
 ) -> Result<Vec<AgentSpawnInfo>, String> {
@@ -534,8 +554,17 @@ async fn spawn_reflex_stage_agents_sequential(
         );
 
         // Build prompt for THIS agent with previous agent outputs injected
-        let mut prompt =
-            build_individual_agent_prompt(spec_id, stage, agent_name, cwd, stage0_context).await?;
+        // SPEC-KIT-982: Include maieutic contract and ACE heuristics
+        let mut prompt = build_individual_agent_prompt(
+            spec_id,
+            stage,
+            agent_name,
+            cwd,
+            stage0_context,
+            maieutic_spec,
+            ace_bullets,
+        )
+        .await?;
 
         // Inject previous agent outputs into prompt (same as regular spawner)
         for (prev_agent_name, prev_output) in &agent_outputs {
@@ -666,6 +695,7 @@ async fn spawn_reflex_stage_agents_sequential(
 ///
 /// SPEC-933 Component 3: Optimized parallel spawning with tokio::JoinSet
 /// Target: 150ms → 50ms (3× speedup) via true concurrent initialization
+/// SPEC-KIT-982: Added maieutic_spec and ace_bullets for contract injection
 async fn spawn_regular_stage_agents_parallel(
     cwd: &Path,
     spec_id: &str,
@@ -675,6 +705,8 @@ async fn spawn_regular_stage_agents_parallel(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
     stage0_context: Option<String>, // SPEC-KIT-102: Combined context from Stage 0 (owned for async)
+    maieutic_spec: Option<MaieuticSpec>, // SPEC-KIT-982: Delegation contract (owned for async)
+    ace_bullets: Option<Vec<PlaybookBullet>>, // SPEC-KIT-982: Project heuristics (owned for async)
 ) -> Result<Vec<AgentSpawnInfo>, String> {
     use std::time::Instant;
     use tokio::task::JoinSet;
@@ -712,6 +744,8 @@ async fn spawn_regular_stage_agents_parallel(
         let batch_id = batch_id.clone();
         let agent_configs_cloned = agent_configs.to_vec();
         let stage0_ctx = stage0_context.clone(); // SPEC-KIT-102: Clone for async move
+        let maieutic_cloned = maieutic_spec.clone(); // SPEC-KIT-982: Clone for async move
+        let ace_cloned = ace_bullets.clone(); // SPEC-KIT-982: Clone for async move
 
         // SPEC-KIT-981: Use shared resolver for TUI/headless parity
         let config_name =
@@ -723,12 +757,15 @@ async fn spawn_regular_stage_agents_parallel(
 
             // Build individual prompt (no previous outputs)
             // SPEC-KIT-102: Pass Stage 0 context to agent prompt builder
+            // SPEC-KIT-982: Pass maieutic contract and ACE heuristics
             let prompt = build_individual_agent_prompt(
                 &spec_id,
                 stage,
                 &agent_name,
                 &cwd,
                 stage0_ctx.as_deref(),
+                maieutic_cloned.as_ref(),
+                ace_cloned.as_deref(),
             )
             .await?;
 
@@ -956,6 +993,7 @@ fn emit_implementer_routing_decision(
 
 /// Spawn regular stage agents natively (SPEC-KIT-900 Session 3)
 /// Routes to appropriate execution pattern based on stage type
+/// SPEC-KIT-982: Added maieutic_spec and ace_bullets for contract injection
 async fn spawn_regular_stage_agents_native(
     cwd: &Path,
     spec_id: &str,
@@ -966,6 +1004,8 @@ async fn spawn_regular_stage_agents_native(
     expected_agents: &[String],
     agent_configs: &[AgentConfig],
     stage0_context: Option<String>, // SPEC-KIT-102: Combined context from Stage 0
+    maieutic_spec: Option<MaieuticSpec>, // SPEC-KIT-982: Delegation contract
+    ace_bullets: Option<Vec<PlaybookBullet>>, // SPEC-KIT-982: Project heuristics
 ) -> Result<Vec<AgentSpawnInfo>, String> {
     let run_tag = run_id
         .as_ref()
@@ -1001,6 +1041,8 @@ async fn spawn_regular_stage_agents_native(
                 expected_agents,
                 agent_configs,
                 stage0_context.as_deref(), // SPEC-KIT-102
+                maieutic_spec.as_ref(),    // SPEC-KIT-982
+                ace_bullets.as_deref(),    // SPEC-KIT-982
             )
             .await
         }
@@ -1043,6 +1085,8 @@ async fn spawn_regular_stage_agents_native(
                         expected_agents,
                         agent_configs,
                         stage0_context.as_deref(),
+                        maieutic_spec.as_ref(), // SPEC-KIT-982
+                        ace_bullets.as_deref(), // SPEC-KIT-982
                         &routing_decision,
                         &run_tag,
                     )
@@ -1065,6 +1109,8 @@ async fn spawn_regular_stage_agents_native(
                                 expected_agents,
                                 agent_configs,
                                 stage0_context.as_deref(), // SPEC-KIT-102
+                                maieutic_spec.as_ref(),    // SPEC-KIT-982
+                                ace_bullets.as_deref(),    // SPEC-KIT-982
                             )
                             .await
                         }
@@ -1084,6 +1130,8 @@ async fn spawn_regular_stage_agents_native(
                         expected_agents,
                         agent_configs,
                         stage0_context.as_deref(), // SPEC-KIT-102
+                        maieutic_spec.as_ref(),    // SPEC-KIT-982
+                        ace_bullets.as_deref(),    // SPEC-KIT-982
                     )
                     .await
                 }
@@ -1108,6 +1156,8 @@ async fn spawn_regular_stage_agents_native(
                 expected_agents,
                 agent_configs,
                 stage0_context, // SPEC-KIT-102
+                maieutic_spec,  // SPEC-KIT-982
+                ace_bullets,    // SPEC-KIT-982
             )
             .await
         }
@@ -1128,6 +1178,8 @@ async fn spawn_regular_stage_agents_native(
                 expected_agents,
                 agent_configs,
                 stage0_context.as_deref(), // SPEC-KIT-102
+                maieutic_spec.as_ref(),    // SPEC-KIT-982
+                ace_bullets.as_deref(),    // SPEC-KIT-982
             )
             .await
         }
@@ -1267,10 +1319,11 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
     let ace_bullets = {
         let ace_config = &widget.config.ace;
         if ace_config.enabled {
-            use super::ace_prompt_injector::{command_to_scope, should_use_ace};
+            use super::ace_prompt_injector::{command_to_scope, should_use_ace, stage_to_ace_command};
             use super::routing::{get_current_branch, get_repo_root};
 
-            let command_name = format!("speckit.{}", stage.command_name());
+            // SPEC-KIT-982: Use normalized ACE command name for consistent matching
+            let command_name = stage_to_ace_command(stage.command_name());
 
             if should_use_ace(ace_config, &command_name) {
                 if let Some(scope) = command_to_scope(&command_name) {
@@ -1464,7 +1517,18 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 spec_id
             )));
             // Build clear agent list based on stage
-            let agent_count = expected_agents_for_stage(stage).len();
+            // SPEC-KIT-981: Use config-aware agent selection
+            // Clone the config to avoid borrow conflicts with widget.history_push()
+            let stage_agents_config_owned = widget.config.speckit_stage_agents.clone();
+            let expected_agents_list =
+                expected_agents_for_stage(stage, Some(&stage_agents_config_owned));
+            let agent_count = expected_agents_list.len();
+            let agent_names_display = expected_agents_list
+                .iter()
+                .map(|a| a.canonical_name())
+                .collect::<Vec<_>>()
+                .join(", ");
+
             let execution_mode = if matches!(
                 stage,
                 crate::spec_prompts::SpecStage::Validate
@@ -1482,11 +1546,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
             )));
             lines.push(ratatui::text::Line::from(format!(
                 "   Agents: {}",
-                expected_agents_for_stage(stage)
-                    .iter()
-                    .map(|a| a.canonical_name())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                agent_names_display
             )));
 
             widget.history_push(crate::history_cell::PlainHistoryCell::new(
@@ -1494,7 +1554,10 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 HistoryCellType::Notice,
             ));
 
-            let stage_expected: Vec<String> = expected_agents_for_stage(stage)
+            // SPEC-KIT-981: Match agents by either name OR canonical_name (case-insensitive)
+            // This allows AgentConfig entries like name="gpt-5.2-architect", canonical_name="gpt_pro"
+            // to match when the stage expects "gpt_pro".
+            let stage_expected: Vec<String> = expected_agents_list
                 .into_iter()
                 .filter_map(|agent| {
                     let canonical = agent.canonical_name().to_string();
@@ -1502,7 +1565,9 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                         .config
                         .agents
                         .iter()
-                        .find(|cfg| cfg.enabled && cfg.name.eq_ignore_ascii_case(&canonical))
+                        .find(|cfg| {
+                            cfg.enabled && agent_matches_canonical_key(cfg, &canonical)
+                        })
                         .map(|_| canonical)
                 })
                 .collect();
@@ -1591,6 +1656,16 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                 .and_then(|s| s.stage0_result.as_ref())
                 .map(|r| r.combined_context_md());
 
+            // SPEC-KIT-982: Extract maieutic and ACE from state
+            let maieutic_owned = widget
+                .spec_auto_state
+                .as_ref()
+                .and_then(|s| s.maieutic_spec.clone());
+            let ace_owned = widget
+                .spec_auto_state
+                .as_ref()
+                .and_then(|s| s.ace_bullets_cache.clone());
+
             let spawn_result = block_on_sync(|| async move {
                 spawn_regular_stage_agents_native(
                     &cwd,
@@ -1602,6 +1677,8 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                     &expected_agents_owned,
                     &agent_configs_owned,
                     stage0_context_owned, // SPEC-KIT-102
+                    maieutic_owned,       // SPEC-KIT-982
+                    ace_owned,            // SPEC-KIT-982
                 )
                 .await
             });
@@ -2513,5 +2590,78 @@ pub fn record_agent_costs(widget: &mut ChatWidget, agents: &[AgentInfo]) {
             );
             widget.bottom_pane.set_spec_auto_metrics(Some(metrics));
         }
+    }
+}
+
+/// SPEC-KIT-981: Check if an AgentConfig matches a canonical agent key.
+///
+/// Matches if either:
+/// - cfg.name equals the canonical key (case-insensitive), OR
+/// - cfg.canonical_name equals the canonical key (case-insensitive)
+#[inline]
+pub fn agent_matches_canonical_key(
+    cfg: &codex_core::config_types::AgentConfig,
+    canonical_key: &str,
+) -> bool {
+    cfg.name.eq_ignore_ascii_case(canonical_key)
+        || cfg
+            .canonical_name
+            .as_ref()
+            .is_some_and(|cn| cn.eq_ignore_ascii_case(canonical_key))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codex_core::config_types::AgentConfig;
+
+    /// SPEC-KIT-981: Test that canonical_name-based matching works
+    #[test]
+    fn test_agent_matches_canonical_key_via_canonical_name() {
+        let agent = AgentConfig {
+            name: "gpt-5.2-architect".to_string(),
+            canonical_name: Some("gpt_pro".to_string()),
+            enabled: true,
+            command: "some-command".to_string(),
+            ..Default::default()
+        };
+
+        // Should match via canonical_name
+        assert!(
+            agent_matches_canonical_key(&agent, "gpt_pro"),
+            "Agent with canonical_name='gpt_pro' should match key 'gpt_pro'"
+        );
+        assert!(
+            agent_matches_canonical_key(&agent, "GPT_PRO"),
+            "Matching should be case-insensitive"
+        );
+
+        // Should not match via name (different from canonical_name)
+        assert!(
+            !agent_matches_canonical_key(&agent, "gemini"),
+            "Agent should not match unrelated key 'gemini'"
+        );
+    }
+
+    /// SPEC-KIT-981: Test that name-based matching still works
+    #[test]
+    fn test_agent_matches_canonical_key_via_name() {
+        let agent = AgentConfig {
+            name: "gemini".to_string(),
+            canonical_name: None, // No canonical_name set
+            enabled: true,
+            command: "some-command".to_string(),
+            ..Default::default()
+        };
+
+        // Should match via name
+        assert!(
+            agent_matches_canonical_key(&agent, "gemini"),
+            "Agent with name='gemini' should match key 'gemini'"
+        );
+        assert!(
+            agent_matches_canonical_key(&agent, "GEMINI"),
+            "Matching should be case-insensitive"
+        );
     }
 }

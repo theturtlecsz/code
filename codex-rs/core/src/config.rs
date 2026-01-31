@@ -1623,11 +1623,14 @@ pub struct ConfigToml {
 }
 
 /// Spec-Kit configuration section parsed from [speckit] in config.toml
+///
+/// SPEC-KIT-981: Uses underscore as canonical key (stage_agents), with
+/// kebab-case (stage-agents) as an alias for compatibility.
 #[derive(Deserialize, Debug, Clone, PartialEq, Default)]
-#[serde(rename_all = "kebab-case")]
 pub struct SpecKitConfig {
     /// Stage→agent mapping overrides
-    #[serde(default)]
+    /// Accepts both `stage_agents` (canonical) and `stage-agents` (alias)
+    #[serde(default, alias = "stage-agents")]
     pub stage_agents: SpecKitStageAgents,
 }
 
@@ -2827,6 +2830,36 @@ command = ["echo", "before-tool"]
         let parsed_bool =
             toml::from_str::<ConfigToml>(cfg_bool).expect("boolean should deserialize");
         assert_eq!(parsed_bool.auto_upgrade_enabled, Some(true));
+    }
+
+    /// SPEC-KIT-981: Verify [speckit.stage_agents] parses with underscore (canonical)
+    #[test]
+    fn speckit_stage_agents_underscore_canonical() {
+        let toml_str = r#"
+[speckit.stage_agents]
+plan = "claude"
+implement = "gpt_codex"
+"#;
+        let parsed: ConfigToml =
+            toml::from_str(toml_str).expect("underscore stage_agents should parse");
+        let speckit = parsed.speckit.expect("speckit section should exist");
+        assert_eq!(speckit.stage_agents.plan, Some("claude".to_string()));
+        assert_eq!(speckit.stage_agents.implement, Some("gpt_codex".to_string()));
+    }
+
+    /// SPEC-KIT-981: Verify [speckit.stage-agents] parses with kebab-case (alias)
+    #[test]
+    fn speckit_stage_agents_kebab_alias() {
+        let toml_str = r#"
+[speckit.stage-agents]
+plan = "gemini"
+tasks = "gpt_pro"
+"#;
+        let parsed: ConfigToml =
+            toml::from_str(toml_str).expect("kebab stage-agents should parse as alias");
+        let speckit = parsed.speckit.expect("speckit section should exist");
+        assert_eq!(speckit.stage_agents.plan, Some("gemini".to_string()));
+        assert_eq!(speckit.stage_agents.tasks, Some("gpt_pro".to_string()));
     }
 
     #[test]
