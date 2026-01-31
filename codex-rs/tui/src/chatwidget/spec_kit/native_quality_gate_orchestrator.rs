@@ -228,6 +228,63 @@ pub async fn spawn_quality_gate_agents_native(
     Ok(spawn_infos)
 }
 
+/// Maximum size for individual artifact files (~20KB per file)
+const MAX_ARTIFACT_FILE_SIZE: usize = 20_000;
+
+/// Build artifacts string from SPEC directory files with truncation
+///
+/// Includes: spec.md, PRD.md, plan.md (if exists), tasks.md (if exists)
+/// Each file is truncated to MAX_ARTIFACT_FILE_SIZE to prevent prompt explosion.
+fn build_artifacts_string(spec_dir: &std::path::Path) -> String {
+    let mut artifacts = String::new();
+
+    // Helper to read and truncate a file
+    let read_and_truncate = |path: &std::path::Path| -> Option<String> {
+        std::fs::read_to_string(path).ok().map(|content| {
+            if content.len() > MAX_ARTIFACT_FILE_SIZE {
+                let truncated: String = content.chars().take(MAX_ARTIFACT_FILE_SIZE).collect();
+                format!(
+                    "{}\n\n[...truncated {} chars...]\n",
+                    truncated,
+                    content.len() - MAX_ARTIFACT_FILE_SIZE
+                )
+            } else {
+                content
+            }
+        })
+    };
+
+    // spec.md (required)
+    if let Some(content) = read_and_truncate(&spec_dir.join("spec.md")) {
+        artifacts.push_str("## spec.md\n\n");
+        artifacts.push_str(&content);
+        artifacts.push_str("\n\n");
+    }
+
+    // PRD.md (optional but common)
+    if let Some(content) = read_and_truncate(&spec_dir.join("PRD.md")) {
+        artifacts.push_str("## PRD.md\n\n");
+        artifacts.push_str(&content);
+        artifacts.push_str("\n\n");
+    }
+
+    // plan.md (optional, present post-plan stage)
+    if let Some(content) = read_and_truncate(&spec_dir.join("plan.md")) {
+        artifacts.push_str("## plan.md\n\n");
+        artifacts.push_str(&content);
+        artifacts.push_str("\n\n");
+    }
+
+    // tasks.md (optional, present post-tasks stage)
+    if let Some(content) = read_and_truncate(&spec_dir.join("tasks.md")) {
+        artifacts.push_str("## tasks.md\n\n");
+        artifacts.push_str(&content);
+        artifacts.push_str("\n\n");
+    }
+
+    artifacts
+}
+
 /// Build quality gate prompt with SPEC context
 ///
 /// D113/D133: Uses unified render_prompt_text for all substitutions.
@@ -263,12 +320,20 @@ async fn build_quality_gate_prompt(
         spec_id, spec_content, prd_content
     );
 
+    // MAINT-14: Build artifacts string for ${ARTIFACTS} substitution
+    // Quality gate prompts need access to all artifacts for consistency checking
+    let artifacts = build_artifacts_string(&spec_dir);
+
     // D113/D133: Use unified render_prompt_text for all substitutions
     // This handles: user vars, model metadata, prompt version, and template expansion
     let mut prompt = render_prompt_text(
         prompt_template,
         prompt_version,
-        &[("SPEC_ID", spec_id), ("CONTEXT", &context)],
+        &[
+            ("SPEC_ID", spec_id),
+            ("CONTEXT", &context),
+            ("ARTIFACTS", &artifacts),
+        ],
         spec_stage,
         spec_agent,
     );
@@ -419,6 +484,100 @@ mod tests {
         assert!(
             prompt.contains("v1.0.0-test") || !prompt.contains("${"),
             "Version not substituted or tokens remain"
+        );
+    }
+
+    #[tokio::test]
+    async fn quality_gate_prompt_no_artifacts_leakage() {
+        // MAINT-14: Verify ${ARTIFACTS} placeholder is substituted correctly
+        // and contains expected artifact headers
+
+        // Create temp dir with spec.md, PRD.md, plan.md, tasks.md
+        let temp = tempfile::TempDir::new().unwrap();
+        let spec_dir = temp.path().join("docs/SPEC-ARTIFACTS-TEST");
+        std::fs::create_dir_all(&spec_dir).unwrap();
+        std::fs::write(spec_dir.join("spec.md"), "# Test Spec\nSpec content here").unwrap();
+        std::fs::write(spec_dir.join("PRD.md"), "# Test PRD\nPRD content here").unwrap();
+        std::fs::write(spec_dir.join("plan.md"), "# Plan\nPlan content here").unwrap();
+        std::fs::write(spec_dir.join("tasks.md"), "# Tasks\nTasks content here").unwrap();
+
+        // Use a template that includes ${ARTIFACTS} placeholder
+        let template = "Analyze artifacts for ${SPEC_ID}:\n\n${ARTIFACTS}\n\nProvide analysis.";
+
+        let prompt = build_quality_gate_prompt(
+            "SPEC-ARTIFACTS-TEST",
+            template,
+            "v1.0.0-artifacts",
+            SpecStage::Analyze,
+            SpecAgent::Claude,
+            temp.path(),
+        )
+        .await
+        .unwrap();
+
+        // Assert ${ARTIFACTS} placeholder was substituted (no leak)
+        assert!(
+            !prompt.contains("${ARTIFACTS}"),
+            "ARTIFACTS token leaked to model: {}",
+            &prompt[..prompt.len().min(500)]
+        );
+
+        // Assert artifact headers are present (proves substitution worked)
+        assert!(
+            prompt.contains("## spec.md"),
+            "Expected ## spec.md header in artifacts"
+        );
+        assert!(
+            prompt.contains("## PRD.md"),
+            "Expected ## PRD.md header in artifacts"
+        );
+        assert!(
+            prompt.contains("## plan.md"),
+            "Expected ## plan.md header in artifacts"
+        );
+        assert!(
+            prompt.contains("## tasks.md"),
+            "Expected ## tasks.md header in artifacts"
+        );
+
+        // Assert actual content is present
+        assert!(
+            prompt.contains("Spec content here"),
+            "Expected spec.md content in artifacts"
+        );
+        assert!(
+            prompt.contains("Plan content here"),
+            "Expected plan.md content in artifacts"
+        );
+    }
+
+    #[test]
+    fn build_artifacts_string_truncates_large_files() {
+        // MAINT-14: Verify truncation works correctly for large files
+
+        let temp = tempfile::TempDir::new().unwrap();
+        let spec_dir = temp.path();
+
+        // Create a file larger than MAX_ARTIFACT_FILE_SIZE (20KB)
+        let large_content = "x".repeat(25_000);
+        std::fs::write(spec_dir.join("spec.md"), &large_content).unwrap();
+
+        let artifacts = build_artifacts_string(spec_dir);
+
+        // Should contain the header
+        assert!(artifacts.contains("## spec.md"));
+
+        // Should be truncated (less than original size + some overhead for header/marker)
+        assert!(
+            artifacts.len() < 22_000,
+            "Artifacts should be truncated, got {} chars",
+            artifacts.len()
+        );
+
+        // Should contain truncation marker
+        assert!(
+            artifacts.contains("[...truncated"),
+            "Expected truncation marker in output"
         );
     }
 }

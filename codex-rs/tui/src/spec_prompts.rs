@@ -1213,4 +1213,46 @@ mod tests {
         assert_eq!(SpecStage::from_stage_name("unknown"), None);
         assert_eq!(SpecStage::from_stage_name(""), None);
     }
+
+    #[test]
+    fn tasks_stage_preferred_agent_no_previous_outputs_leakage() {
+        // MAINT-14: Verify Tasks stage Claude prompt does not contain ${PREVIOUS_OUTPUTS
+        // This is critical because Tasks stage runs in single-agent mode (only Claude)
+        // and Gemini never executes, so ${PREVIOUS_OUTPUTS.gemini} would leak to the model.
+
+        // Get the Claude prompt for Tasks stage (Claude is the preferred/only agent)
+        let result = get_prompt_with_version("spec-tasks", SpecAgent::Claude, None);
+        assert!(result.is_some(), "Expected spec-tasks Claude prompt to exist");
+
+        let (template, version) = result.unwrap();
+
+        // Render the prompt with standard variables
+        let prompt = render_prompt_text(
+            &template,
+            &version,
+            &[
+                ("SPEC_ID", "TEST-001"),
+                ("CONTEXT", "Test context for tasks stage"),
+            ],
+            SpecStage::Tasks,
+            SpecAgent::Claude,
+        );
+
+        // Assert no ${PREVIOUS_OUTPUTS leak
+        assert!(
+            !prompt.contains("${PREVIOUS_OUTPUTS"),
+            "PREVIOUS_OUTPUTS placeholder leaked to model in Tasks stage prompt: {}",
+            &prompt[..prompt.len().min(500)]
+        );
+
+        // Also check the raw template doesn't have the problematic references
+        assert!(
+            !template.contains("${PREVIOUS_OUTPUTS.gemini}"),
+            "Tasks Claude template still contains ${{PREVIOUS_OUTPUTS.gemini}}"
+        );
+        assert!(
+            !template.contains("${PREVIOUS_OUTPUTS.plan}"),
+            "Tasks Claude template still contains ${{PREVIOUS_OUTPUTS.plan}}"
+        );
+    }
 }
