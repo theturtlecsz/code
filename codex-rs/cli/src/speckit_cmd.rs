@@ -3483,13 +3483,13 @@ fn run_headless_pipeline(
     };
 
     // Create and run the headless pipeline
-    // SPEC-KIT-982: Pass None for ace_bullets (ACE fetch not yet implemented for CLI)
+    // MAINT-16: CLI passes None - headless runner handles ACE fetching internally when enabled
     let mut runner = HeadlessPipelineRunner::new(
         args.spec_id.clone(),
         from_stage,
         to_stage,
         maieutic_spec,
-        None, // ace_bullets - ACE prefetch not yet implemented for CLI
+        None, // ace_bullets - fetched by headless runner via fetch_ace_bullets_for_stage()
         config,
         planner_config,
         cwd,
