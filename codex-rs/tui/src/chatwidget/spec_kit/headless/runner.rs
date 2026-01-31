@@ -24,7 +24,7 @@ use crate::chatwidget::spec_kit::maieutic::MaieuticSpec;
 use crate::chatwidget::spec_kit::native_guardrail::run_native_guardrail;
 use crate::chatwidget::spec_kit::stage0_integration::{
     Stage0ExecutionConfig, Stage0ExecutionResult, spawn_stage0_async,
-    write_task_brief_to_evidence, write_divine_truth_to_evidence,
+    write_divine_truth_to_evidence, write_task_brief_to_evidence,
 };
 use crate::spec_prompts::SpecStage;
 
@@ -488,7 +488,9 @@ impl HeadlessPipelineRunner {
             let failed_checks: Vec<String> = result
                 .checks_run
                 .iter()
-                .filter(|c| c.status == crate::chatwidget::spec_kit::native_guardrail::CheckStatus::Failed)
+                .filter(|c| {
+                    c.status == crate::chatwidget::spec_kit::native_guardrail::CheckStatus::Failed
+                })
                 .map(|c| {
                     format!(
                         "{}: {}",
@@ -524,7 +526,7 @@ impl HeadlessPipelineRunner {
     fn execute_stage(&self, stage: &Stage) -> Result<(), HeadlessError> {
         let stage_name = stage.as_str();
 
-        // Get agents for this stage from prompts.json
+        // D113/D133: Get preferred agent for this stage (GR-001 single-agent routing)
         let agents = get_agents_for_stage(&self.cwd, stage_name)?;
 
         tracing::info!(
@@ -1033,7 +1035,10 @@ mod tests {
 
         // Guardrail should fail - no spec.md exists
         let result = runner.check_guardrails(&Stage::Plan);
-        assert!(result.is_err(), "Expected guardrail to fail without spec.md");
+        assert!(
+            result.is_err(),
+            "Expected guardrail to fail without spec.md"
+        );
 
         let err = result.unwrap_err();
         assert_eq!(
@@ -1174,12 +1179,9 @@ mod tests {
         );
 
         // Write TASK_BRIEF.md
-        let task_brief_path = write_task_brief_to_evidence(
-            spec_id,
-            temp.path(),
-            &task_brief_content,
-        )
-        .expect("Failed to write TASK_BRIEF.md");
+        let task_brief_path =
+            write_task_brief_to_evidence(spec_id, temp.path(), &task_brief_content)
+                .expect("Failed to write TASK_BRIEF.md");
 
         // Verify TASK_BRIEF.md exists and has correct length
         assert!(task_brief_path.exists(), "TASK_BRIEF.md should exist");
@@ -1193,12 +1195,9 @@ mod tests {
         );
 
         // Write DIVINE_TRUTH.md
-        let divine_truth_path = write_divine_truth_to_evidence(
-            spec_id,
-            temp.path(),
-            &divine_truth_content,
-        )
-        .expect("Failed to write DIVINE_TRUTH.md");
+        let divine_truth_path =
+            write_divine_truth_to_evidence(spec_id, temp.path(), &divine_truth_content)
+                .expect("Failed to write DIVINE_TRUTH.md");
 
         // Verify DIVINE_TRUTH.md exists and has correct length
         assert!(divine_truth_path.exists(), "DIVINE_TRUTH.md should exist");

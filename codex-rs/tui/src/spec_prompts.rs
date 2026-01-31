@@ -9,11 +9,167 @@ use serde::Deserialize;
 use std::fmt::Write as _;
 
 use crate::templates::{TemplateSource, resolve_template_source};
+use std::path::Path;
 
 const PROMPTS_JSON: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../docs/spec-kit/prompts.json"
 ));
+
+// -----------------------------------------------------------------------------
+// Unified Prompt-Source API (D113/D133 Parity Fix)
+// -----------------------------------------------------------------------------
+
+/// Load prompt template and version from project-local prompts.json if it exists,
+/// otherwise fall back to embedded prompts.
+///
+/// Returns `(prompt_template, prompt_version)` from the SAME source to ensure parity.
+///
+/// # Arguments
+/// * `stage_key` - The stage key (e.g., "spec-plan", "spec-tasks")
+/// * `agent` - The agent to get the prompt for
+/// * `project_cwd` - Optional project directory; if Some, tries to load from `cwd/docs/spec-kit/prompts.json`
+pub fn get_prompt_with_version(
+    stage_key: &str,
+    agent: SpecAgent,
+    project_cwd: Option<&Path>,
+) -> Option<(String, String)> {
+    // Try project-local first if path provided
+    if let Some(cwd) = project_cwd {
+        if let Some(result) = load_prompt_from_project(cwd, stage_key, agent) {
+            return Some(result);
+        }
+    }
+
+    // Fall back to embedded
+    load_prompt_from_embedded(stage_key, agent)
+}
+
+/// Load prompt from project-local prompts.json
+///
+/// D113/D133: Distinguishes "file missing" (silent fallback) from "file broken" (warn + fallback).
+fn load_prompt_from_project(
+    cwd: &Path,
+    stage_key: &str,
+    agent: SpecAgent,
+) -> Option<(String, String)> {
+    let prompts_path = cwd.join("docs/spec-kit/prompts.json");
+
+    // Check if file exists first - silent fallback if missing
+    if !prompts_path.exists() {
+        return None;
+    }
+
+    // File exists - attempt read (warn on failure)
+    let content = match std::fs::read_to_string(&prompts_path) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(
+                "Project prompts.json exists but unreadable at {}: {}. Falling back to embedded.",
+                prompts_path.display(),
+                e
+            );
+            return None;
+        }
+    };
+
+    // Attempt parse (warn on invalid JSON)
+    let prompts: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(
+                "Project prompts.json at {} contains invalid JSON: {}. Falling back to embedded.",
+                prompts_path.display(),
+                e
+            );
+            return None;
+        }
+    };
+
+    // Stage/agent lookup failures are silent (partial overrides are valid)
+    let stage_prompts = prompts.get(stage_key)?;
+
+    // Extract version
+    let version = stage_prompts
+        .get("version")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unversioned")
+        .to_string();
+
+    // Extract agent's prompt template
+    let agent_key = agent.canonical_name();
+    let prompt_template = stage_prompts
+        .get(agent_key)
+        .and_then(|v| v.get("prompt"))
+        .and_then(|v| v.as_str())?
+        .to_string();
+
+    Some((prompt_template, version))
+}
+
+/// Load prompt from embedded PROMPTS_JSON constant
+fn load_prompt_from_embedded(stage_key: &str, agent: SpecAgent) -> Option<(String, String)> {
+    let prompt_data = agent_prompt(stage_key, agent)?;
+    let version = stage_version(stage_key).unwrap_or_else(|| "unversioned".to_string());
+    Some((prompt_data.prompt, version))
+}
+
+/// Fully render a prompt template with all substitutions including ${TEMPLATE:*} expansion.
+///
+/// This is the single-point-of-truth for prompt rendering. All code paths
+/// (TUI agent_orchestrator, headless, quality gates) should use this function.
+///
+/// Substitution order:
+/// 1. User-provided variables (SPEC_ID, CONTEXT, etc.)
+/// 2. Model metadata (MODEL_ID, MODEL_RELEASE, REASONING_MODE)
+/// 3. Prompt version (PROMPT_VERSION)
+/// 4. Template expansion (${TEMPLATE:*})
+///
+/// # Arguments
+/// * `template` - The raw prompt template with ${VAR} placeholders
+/// * `version` - The prompt version to inject
+/// * `vars` - User-provided variables as (key, value) pairs
+/// * `stage` - The spec stage (for model metadata lookup)
+/// * `agent` - The agent (for model metadata lookup)
+pub fn render_prompt_text(
+    template: &str,
+    version: &str,
+    vars: &[(&str, &str)],
+    stage: SpecStage,
+    agent: SpecAgent,
+) -> String {
+    let mut text = template.to_string();
+
+    // 1. User-provided variables
+    for (key, value) in vars {
+        let placeholder = format!("${{{}}}", key);
+        text = text.replace(&placeholder, value);
+    }
+
+    // 2. Model metadata
+    let metadata = model_metadata(stage, agent);
+    for (key, value) in metadata {
+        let placeholder = format!("${{{}}}", key);
+        text = text.replace(&placeholder, &value);
+    }
+
+    // 3. Prompt version
+    if text.contains("${PROMPT_VERSION}") {
+        text = text.replace("${PROMPT_VERSION}", version);
+    }
+
+    // 4. Template expansion (CRITICAL: call expand_template_refs)
+    text = expand_template_refs(&text);
+
+    // Debug assertion: no template tokens should remain
+    debug_assert!(
+        !text.contains("${TEMPLATE:"),
+        "Template token(s) leaked through prompt rendering: {}",
+        text.chars().take(200).collect::<String>()
+    );
+
+    text
+}
 
 fn block_on_sync<F, Fut, T>(factory: F) -> T
 where
@@ -384,6 +540,26 @@ impl SpecStage {
     /// Check if this is a pre-pipeline stage (before main 6-stage pipeline)
     pub fn is_pre_pipeline(self) -> bool {
         matches!(self, SpecStage::Specify)
+    }
+
+    /// Parse from stage name string (used by headless for TUI parity)
+    ///
+    /// Accepts both short names ("plan") and full keys ("spec-plan")
+    pub fn from_stage_name(name: &str) -> Option<Self> {
+        let name_lower = name.to_lowercase();
+        match name_lower.as_str() {
+            "plan" | "spec-plan" => Some(SpecStage::Plan),
+            "tasks" | "spec-tasks" => Some(SpecStage::Tasks),
+            "implement" | "spec-implement" => Some(SpecStage::Implement),
+            "validate" | "spec-validate" => Some(SpecStage::Validate),
+            "audit" | "spec-audit" => Some(SpecStage::Audit),
+            "unlock" | "spec-unlock" => Some(SpecStage::Unlock),
+            "specify" | "spec-specify" => Some(SpecStage::Specify),
+            "clarify" | "spec-clarify" => Some(SpecStage::Clarify),
+            "analyze" | "spec-analyze" => Some(SpecStage::Analyze),
+            "checklist" | "spec-checklist" => Some(SpecStage::Checklist),
+            _ => None,
+        }
     }
 }
 
@@ -899,5 +1075,142 @@ mod tests {
         let input = "${TEMPLATE:nonexistent}";
         let output = expand_template_refs(input);
         assert!(output.contains("[embedded:nonexistent]"));
+    }
+
+    // D113/D133 Parity: Unified prompt-source API tests
+
+    #[test]
+    fn get_prompt_with_version_embedded_fallback() {
+        // Without project path, should fall back to embedded
+        let result = get_prompt_with_version("spec-plan", SpecAgent::Gemini, None);
+        assert!(result.is_some());
+        let (template, version) = result.unwrap();
+        assert!(!template.is_empty());
+        assert!(!version.is_empty());
+        assert_ne!(version, "unversioned");
+    }
+
+    #[test]
+    fn get_prompt_with_version_nonexistent_project() {
+        // With non-existent project path, should fall back to embedded
+        let temp = TempDir::new().unwrap();
+        let result = get_prompt_with_version("spec-plan", SpecAgent::Gemini, Some(temp.path()));
+        assert!(result.is_some());
+        let (template, version) = result.unwrap();
+        assert!(!template.is_empty());
+        assert_ne!(version, "unversioned");
+    }
+
+    #[test]
+    fn get_prompt_with_version_invalid_json_falls_back_to_embedded() {
+        // D113/D133: Invalid JSON in project prompts.json should warn and fall back to embedded
+        let temp = TempDir::new().unwrap();
+        let prompts_dir = temp.path().join("docs/spec-kit");
+        std::fs::create_dir_all(&prompts_dir).unwrap();
+
+        // Write invalid JSON
+        std::fs::write(prompts_dir.join("prompts.json"), "{ invalid json }").unwrap();
+
+        // Should return Some(...) via embedded fallback, not None
+        let result = get_prompt_with_version("spec-plan", SpecAgent::Gemini, Some(temp.path()));
+        assert!(
+            result.is_some(),
+            "Expected embedded fallback when project prompts.json is invalid"
+        );
+        let (template, version) = result.unwrap();
+        assert!(!template.is_empty());
+        assert_ne!(version, "unversioned");
+    }
+
+    #[test]
+    fn render_prompt_text_no_template_leakage() {
+        // Critical: no ${TEMPLATE:*} tokens should remain after rendering
+        let template = "Template: ${TEMPLATE:plan}\nSPEC: ${SPEC_ID}\nContext: ${CONTEXT}";
+        let prompt = render_prompt_text(
+            template,
+            "v1.0",
+            &[("SPEC_ID", "TEST-001"), ("CONTEXT", "test context")],
+            SpecStage::Plan,
+            SpecAgent::Gemini,
+        );
+
+        assert!(
+            !prompt.contains("${TEMPLATE:"),
+            "Template token leaked: {}",
+            prompt
+        );
+        assert!(prompt.contains("TEST-001"));
+        assert!(prompt.contains("test context"));
+        assert!(prompt.contains("[embedded:plan]") || prompt.contains("templates/plan"));
+    }
+
+    #[test]
+    fn render_prompt_text_all_variables_replaced() {
+        let template =
+            "Model: ${MODEL_ID} v${MODEL_RELEASE} (${REASONING_MODE})\nVersion: ${PROMPT_VERSION}";
+        let prompt = render_prompt_text(
+            template,
+            "20251002-test",
+            &[],
+            SpecStage::Plan,
+            SpecAgent::Gemini,
+        );
+
+        assert!(!prompt.contains("${MODEL_ID}"));
+        assert!(!prompt.contains("${MODEL_RELEASE}"));
+        assert!(!prompt.contains("${REASONING_MODE}"));
+        assert!(!prompt.contains("${PROMPT_VERSION}"));
+        assert!(prompt.contains("20251002-test"));
+    }
+
+    #[test]
+    fn spec_stage_from_stage_name_short() {
+        assert_eq!(SpecStage::from_stage_name("plan"), Some(SpecStage::Plan));
+        assert_eq!(SpecStage::from_stage_name("tasks"), Some(SpecStage::Tasks));
+        assert_eq!(
+            SpecStage::from_stage_name("implement"),
+            Some(SpecStage::Implement)
+        );
+        assert_eq!(
+            SpecStage::from_stage_name("validate"),
+            Some(SpecStage::Validate)
+        );
+        assert_eq!(SpecStage::from_stage_name("audit"), Some(SpecStage::Audit));
+        assert_eq!(
+            SpecStage::from_stage_name("unlock"),
+            Some(SpecStage::Unlock)
+        );
+    }
+
+    #[test]
+    fn spec_stage_from_stage_name_full_key() {
+        assert_eq!(
+            SpecStage::from_stage_name("spec-plan"),
+            Some(SpecStage::Plan)
+        );
+        assert_eq!(
+            SpecStage::from_stage_name("spec-tasks"),
+            Some(SpecStage::Tasks)
+        );
+        assert_eq!(
+            SpecStage::from_stage_name("spec-implement"),
+            Some(SpecStage::Implement)
+        );
+    }
+
+    #[test]
+    fn spec_stage_from_stage_name_case_insensitive() {
+        assert_eq!(SpecStage::from_stage_name("PLAN"), Some(SpecStage::Plan));
+        assert_eq!(SpecStage::from_stage_name("Plan"), Some(SpecStage::Plan));
+        assert_eq!(
+            SpecStage::from_stage_name("SPEC-PLAN"),
+            Some(SpecStage::Plan)
+        );
+    }
+
+    #[test]
+    fn spec_stage_from_stage_name_invalid() {
+        assert_eq!(SpecStage::from_stage_name("unknown"), None);
+        assert_eq!(SpecStage::from_stage_name(""), None);
     }
 }

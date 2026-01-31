@@ -78,10 +78,11 @@ pub fn render_stage_details(frame: &mut Frame, area: Rect, state: &PipelineConfi
     lines.push(Line::raw(""));
 
     // Quality gate
+    // D113/D133: Updated to reflect single-agent mode (GR-001)
     if selected_stage.has_quality_gate() {
         lines.push(Line::from(vec![
             Span::styled("Quality Gate: ", Style::default().fg(Color::Magenta)),
-            Span::raw("Post-stage checkpoint (3 agents vote)"),
+            Span::raw("Post-stage checkpoint (single critic agent)"),
         ]));
         lines.push(Line::raw(""));
     }

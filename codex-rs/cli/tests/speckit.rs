@@ -4062,7 +4062,32 @@ EOF
         fs::set_permissions(&gemini_shim, perms)?;
     }
 
-    // Create config.toml with gemini agent pointing to our shim
+    // D113/D133: Tasks stage routes to Claude, so we need a claude shim too
+    let claude_shim = bin_dir.join("claude");
+    fs::write(
+        &claude_shim,
+        r##"#!/bin/bash
+cat >/dev/null || true
+cat <<'EOF'
+{
+  "ok": true,
+  "result": "# Tasks Stage Output\n\nThis is deterministic test content from the mock claude agent.\n\n## Tasks\n\n- [ ] Task 1: Implement feature A\n- [ ] Task 2: Add tests for feature A\n- [ ] Task 3: Update documentation\n\n## Implementation Notes\n\nThis mock output is >= 500 bytes to satisfy AgentManager validation requirements. Adding more content here to ensure we exceed the threshold with comfortable margin for the deterministic headless test. D113/D133 routes Tasks stage to Claude agent.",
+  "agent": "claude-mock",
+  "timestamp": "2026-01-30T00:00:00Z"
+}
+EOF
+"##,
+    )?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&claude_shim)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&claude_shim, perms)?;
+    }
+
+    // Create config.toml with both gemini and claude agents pointing to our shims
+    // D113/D133: Plan uses gemini, Tasks uses claude (preferred_agent_for_stage)
     let config_path = codex_home.path().join("config.toml");
     fs::write(
         &config_path,
@@ -4070,6 +4095,12 @@ EOF
 [[agents]]
 name = "gemini"
 command = "gemini"
+args = []
+enabled = true
+
+[[agents]]
+name = "claude"
+command = "claude"
 args = []
 enabled = true
 "#,
@@ -4153,10 +4184,7 @@ enabled = false
         .and_then(|v| v.as_array())
         .ok_or_else(|| anyhow::anyhow!("stages_completed should be array"))?;
 
-    let stage_names: Vec<&str> = stages
-        .iter()
-        .filter_map(|s| s.as_str())
-        .collect();
+    let stage_names: Vec<&str> = stages.iter().filter_map(|s| s.as_str()).collect();
 
     assert!(
         stage_names.contains(&"plan"),
@@ -4195,7 +4223,9 @@ enabled = false
     // The shim outputs JSON with "ok":true marker that should appear in the plan
     let plan_content = fs::read_to_string(&plan_path)?;
     assert!(
-        plan_content.contains("ok") || plan_content.contains("gemini-mock") || plan_content.contains("Plan Stage Output"),
+        plan_content.contains("ok")
+            || plan_content.contains("gemini-mock")
+            || plan_content.contains("Plan Stage Output"),
         "plan.md should contain gemini shim output marker, got: {}",
         plan_content
     );
@@ -4359,10 +4389,7 @@ enabled = false
         .and_then(|v| v.as_array())
         .ok_or_else(|| anyhow::anyhow!("stages_completed should be array"))?;
 
-    let stage_names: Vec<&str> = stages
-        .iter()
-        .filter_map(|s| s.as_str())
-        .collect();
+    let stage_names: Vec<&str> = stages.iter().filter_map(|s| s.as_str()).collect();
 
     assert!(
         stage_names.contains(&"plan"),
@@ -4400,11 +4427,7 @@ fn test_speckit_plan_validation_only_no_artifacts() -> Result<()> {
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let output = cmd
         .args([
-            "speckit",
-            "plan",
-            "--spec",
-            spec_id,
-            "--json",
+            "speckit", "plan", "--spec", spec_id, "--json",
             // Note: NO --execute flag
         ])
         .output()?;

@@ -9,13 +9,15 @@
 //! - Native polls for completion
 //! - Native broker collects results from filesystem
 //! - No Python scripts, no orchestrator LLM
+//!
+//! D113/D133: Now uses unified prompt-source API for consistency.
 
 #![allow(dead_code)] // Native orchestration pending full integration
 
 use super::state::{QualityCheckpoint, QualityGateType};
+use crate::spec_prompts::{SpecAgent, SpecStage, get_prompt_with_version, render_prompt_text};
 use codex_core::agent_tool::AGENT_MANAGER;
 use codex_core::config_types::AgentConfig;
-use serde_json::Value;
 use std::path::Path;
 
 /// Agent spawn info for logging
@@ -58,24 +60,29 @@ pub async fn spawn_quality_gate_agents_native(
         .map(|r| format!("[run:{}]", &r[..8.min(r.len())]))
         .unwrap_or_else(|| "[run:none]".to_string());
 
-    // Load prompts from prompts.json
-    let prompts_path = cwd.join("docs/spec-kit/prompts.json");
-    let prompts_content = std::fs::read_to_string(&prompts_path)
-        .map_err(|e| format!("Failed to read prompts.json: {}", e))?;
-
-    let prompts: Value = serde_json::from_str(&prompts_content)
-        .map_err(|e| format!("Failed to parse prompts.json: {}", e))?;
-
-    // Get gate-specific prompts
+    // D113/D133: Get gate key for prompt lookup
     let gate_key = match gate {
         QualityGateType::Clarify => "quality-gate-clarify",
         QualityGateType::Checklist => "quality-gate-checklist",
         QualityGateType::Analyze => "quality-gate-analyze",
     };
 
-    let gate_prompts = prompts
-        .get(gate_key)
-        .ok_or_else(|| format!("No prompts found for {}", gate_key))?;
+    // D113/D133: Compute spec_agent and spec_stage for unified API
+    let spec_agent = SpecAgent::from_string(quality_gate_agent).unwrap_or(SpecAgent::Claude);
+    let spec_stage = match gate {
+        QualityGateType::Clarify => SpecStage::Clarify,
+        QualityGateType::Checklist => SpecStage::Checklist,
+        QualityGateType::Analyze => SpecStage::Analyze,
+    };
+
+    // D113/D133: Use unified prompt API (project-local → embedded fallback)
+    let (prompt_template, prompt_version) =
+        get_prompt_with_version(gate_key, spec_agent, Some(cwd)).ok_or_else(|| {
+            format!(
+                "No prompt found for {} (agent: {})",
+                gate_key, quality_gate_agent
+            )
+        })?;
 
     // GR-001: Use the single configured agent (no hardcoded multi-agent list)
     // Map common agent names to config names
@@ -119,27 +126,16 @@ pub async fn spawn_quality_gate_agents_native(
     // GR-001: Spawn the single configured agent
     let agent_name = quality_gate_agent;
     {
-        // Try to find agent-specific prompt, fall back to generic "critic" prompt
-        let prompt_template = gate_prompts
-            .get(agent_name)
-            .and_then(|v| v.get("prompt"))
-            .and_then(|v| v.as_str())
-            .or_else(|| {
-                // Fallback: try "critic" or first available prompt
-                gate_prompts
-                    .get("critic")
-                    .and_then(|v| v.get("prompt"))
-                    .and_then(|v| v.as_str())
-            })
-            .ok_or_else(|| {
-                format!(
-                    "No prompt found for {} or 'critic' in {}",
-                    agent_name, gate_key
-                )
-            })?;
-
-        // Build prompt with SPEC context
-        let prompt = build_quality_gate_prompt(spec_id, gate, prompt_template, cwd).await?;
+        // D113/D133: Build prompt with SPEC context using unified render_prompt_text
+        let prompt = build_quality_gate_prompt(
+            spec_id,
+            &prompt_template,
+            &prompt_version,
+            spec_stage,
+            spec_agent,
+            cwd,
+        )
+        .await?;
 
         // Get prompt preview (first 200 chars)
         let prompt_preview = if prompt.len() > 200 {
@@ -233,10 +229,14 @@ pub async fn spawn_quality_gate_agents_native(
 }
 
 /// Build quality gate prompt with SPEC context
+///
+/// D113/D133: Uses unified render_prompt_text for all substitutions.
 async fn build_quality_gate_prompt(
     spec_id: &str,
-    _gate: QualityGateType,
     prompt_template: &str,
+    prompt_version: &str,
+    spec_stage: SpecStage,
+    spec_agent: SpecAgent,
     cwd: &Path,
 ) -> Result<String, String> {
     // Find SPEC directory using central ACID-compliant resolver
@@ -248,10 +248,9 @@ async fn build_quality_gate_prompt(
         std::fs::read_to_string(&spec_md).map_err(|e| format!("Failed to read spec.md: {}", e))?;
 
     let prd_md = spec_dir.join("PRD.md");
-    let prd_content =
-        std::fs::read_to_string(&prd_md).map_err(|e| format!("Failed to read PRD.md: {}", e))?;
+    let prd_content = std::fs::read_to_string(&prd_md).unwrap_or_default();
 
-    // Build context
+    // D113/D133: Build context using standard ${CONTEXT} pattern
     let context = format!(
         r#"SPEC: {}
 
@@ -264,10 +263,15 @@ async fn build_quality_gate_prompt(
         spec_id, spec_content, prd_content
     );
 
-    // Replace placeholders
-    let mut prompt = prompt_template
-        .replace("${SPEC_ID}", spec_id)
-        .replace("SPEC ${SPEC_ID}", &context); // Replace inline SPEC reference with full content
+    // D113/D133: Use unified render_prompt_text for all substitutions
+    // This handles: user vars, model metadata, prompt version, and template expansion
+    let mut prompt = render_prompt_text(
+        prompt_template,
+        prompt_version,
+        &[("SPEC_ID", spec_id), ("CONTEXT", &context)],
+        spec_stage,
+        spec_agent,
+    );
 
     // CRITICAL: Enforce JSON-only output (agents sometimes respond in prose)
     prompt.push_str("\n\nCRITICAL: You MUST output ONLY valid JSON matching the schema above. Do NOT add commentary, explanations, or prose. Start your response with { and end with }. No markdown fences, no preamble, just pure JSON.");
@@ -357,3 +361,64 @@ pub async fn wait_for_quality_gate_agents(
 // === Helper Functions ===
 
 // Removed: Use super::spec_directory::find_spec_directory instead
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn quality_gate_prompt_no_template_leakage() {
+        // D113/D133: Verify render_prompt_text substitutes all tokens correctly
+
+        // Create temp dir with spec.md and PRD.md
+        let temp = tempfile::TempDir::new().unwrap();
+        let spec_dir = temp.path().join("docs/SPEC-TEST");
+        std::fs::create_dir_all(&spec_dir).unwrap();
+        std::fs::write(spec_dir.join("spec.md"), "# Test Spec\nTest content").unwrap();
+        std::fs::write(spec_dir.join("PRD.md"), "# Test PRD").unwrap();
+
+        // Build prompt using unified API (will use embedded prompts since no prompts.json)
+        let prompt = build_quality_gate_prompt(
+            "SPEC-TEST",
+            "Test template: ${SPEC_ID}, Model: ${MODEL_ID}, Version: ${PROMPT_VERSION}, Template: ${TEMPLATE:plan}",
+            "v1.0.0-test",
+            SpecStage::Clarify,
+            SpecAgent::Claude,
+            temp.path(),
+        )
+        .await
+        .unwrap();
+
+        // Assert no template/model tokens leaked
+        assert!(
+            !prompt.contains("${TEMPLATE:"),
+            "Template token leaked: {}",
+            &prompt[..prompt.len().min(300)]
+        );
+        assert!(
+            !prompt.contains("${MODEL_ID}"),
+            "MODEL_ID token leaked: {}",
+            &prompt[..prompt.len().min(300)]
+        );
+        assert!(
+            !prompt.contains("${MODEL_RELEASE}"),
+            "MODEL_RELEASE token leaked"
+        );
+        assert!(
+            !prompt.contains("${REASONING_MODE}"),
+            "REASONING_MODE token leaked"
+        );
+        assert!(
+            !prompt.contains("${PROMPT_VERSION}"),
+            "PROMPT_VERSION token leaked"
+        );
+        assert!(!prompt.contains("${SPEC_ID}"), "SPEC_ID token leaked");
+
+        // Verify substitutions occurred
+        assert!(prompt.contains("SPEC-TEST"), "SPEC_ID not substituted");
+        assert!(
+            prompt.contains("v1.0.0-test") || !prompt.contains("${"),
+            "Version not substituted or tokens remain"
+        );
+    }
+}
