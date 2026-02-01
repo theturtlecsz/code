@@ -106,14 +106,16 @@ These invariants MUST NOT be violated:
 
 ### Planned
 
-| Spec         | Description                                                      |
-| ------------ | ---------------------------------------------------------------- |
-| SPEC-KIT-983 | TUI UI for stage→agent defaults (requires architect Q/A session) |
+| Spec | Description |
+| ---- | ----------- |
+| -    | -           |
 
 ### Completed (Recent)
 
 | Spec                | Completion Date | Key Deliverables                                                                              |
 | ------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| SPEC-KIT-983        | 2026-02-01      | Stage→agent defaults modal + root-only persistence with user-visible errors                   |
+| MAINT-16            | 2026-01-31      | Headless ACE init + runtime-safe fetch + git repo-root parity (D113/D133)                     |
 | SPEC-KIT-982        | 2026-01-31      | ACE + maieutic injection into per-agent prompts via unified builder (D113/D133 parity)        |
 | SPEC-KIT-981        | 2026-01-31      | Config-driven stage→agent mapping with GPT-5.2 defaults, TUI/headless parity                  |
 | MAINT-14            | 2026-01-31      | Fix ${ARTIFACTS}/${PREVIOUS\_OUTPUTS} placeholder leakage, NEXT\_FOCUS\_ROADMAP refresh       |

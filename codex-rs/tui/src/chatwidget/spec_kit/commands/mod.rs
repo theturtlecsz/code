@@ -21,6 +21,7 @@ mod quality;
 mod reflex; // SPEC-KIT-978: Reflex local inference
 pub mod search;
 mod special;
+mod stage_agents; // SPEC-KIT-983: Stage→agent defaults UI
 mod status;
 mod templates; // SPEC-KIT-962: Template management commands
 mod timeline; // SPEC-KIT-973: Time-travel UI commands
@@ -43,6 +44,7 @@ pub use quality::*;
 pub use reflex::*;
 pub use search::*;
 pub use special::*;
+pub use stage_agents::*;
 pub use status::*;
 pub use templates::*;
 pub use timeline::*;

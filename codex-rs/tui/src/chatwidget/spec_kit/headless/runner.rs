@@ -21,7 +21,9 @@ use super::backend::{AgentBackend, DefaultAgentBackend};
 use super::output::{HeadlessOutput, Stage0Info};
 use super::prompt_builder::{build_headless_prompt, get_agents_for_stage};
 use crate::chatwidget::spec_kit::ace_client::PlaybookBullet;
-use crate::chatwidget::spec_kit::ace_prompt_injector::{command_to_scope, should_use_ace, stage_to_ace_command};
+use crate::chatwidget::spec_kit::ace_prompt_injector::{
+    command_to_scope, should_use_ace, stage_to_ace_command,
+};
 use crate::chatwidget::spec_kit::maieutic::MaieuticSpec;
 use crate::chatwidget::spec_kit::native_guardrail::run_native_guardrail;
 use crate::chatwidget::spec_kit::stage0_integration::{
@@ -29,6 +31,9 @@ use crate::chatwidget::spec_kit::stage0_integration::{
     write_divine_truth_to_evidence, write_task_brief_to_evidence,
 };
 use crate::spec_prompts::SpecStage;
+
+// MAINT-16: Import safe sync→async bridge for ACE fetching
+use super::super::consensus_coordinator::block_on_sync;
 
 /// Exit codes for headless execution (D133)
 pub mod exit_codes {
@@ -310,6 +315,41 @@ impl HeadlessPipelineRunner {
         }
     }
 
+    /// Initialize ACE client if configured.
+    ///
+    /// MAINT-16: Headless must initialize ACE like TUI does for parity.
+    /// Called once before pipeline execution.
+    fn maybe_init_ace_client(&self) {
+        if !self.planner_config.ace.enabled {
+            tracing::debug!("ACE disabled in config, skipping client init");
+            return;
+        }
+
+        let Some(ace_server) = self.planner_config.mcp_servers.get("ace") else {
+            tracing::info!("ACE enabled but no [mcp_servers.ace] configured");
+            return;
+        };
+
+        let command = ace_server.command.clone();
+        let args = ace_server.args.clone();
+        let env = ace_server.env.clone();
+
+        // Use block_on_sync for safe async init
+        let init_result = block_on_sync(|| async move {
+            crate::chatwidget::spec_kit::ace_client::init_ace_client(command, args, env).await
+        });
+
+        if let Err(e) = init_result {
+            tracing::warn!(
+                error = %e,
+                "Failed to initialize ACE client (safe degradation)"
+            );
+            // Continue anyway - ACE will gracefully degrade
+        } else {
+            tracing::info!("ACE client initialized for headless mode");
+        }
+    }
+
     /// Run the pipeline (main entry point)
     pub fn run(&mut self) -> HeadlessResult {
         tracing::info!(
@@ -326,6 +366,9 @@ impl HeadlessPipelineRunner {
                 self.stages_completed.clone(),
             );
         }
+
+        // MAINT-16: Initialize ACE client before pipeline runs
+        self.maybe_init_ace_client();
 
         // Step 1: Run Stage0 context injection
         match self.run_stage0() {
@@ -793,93 +836,51 @@ impl HeadlessPipelineRunner {
             return None;
         };
 
-        // Get repo root and branch for ACE query
-        let repo_root = self.cwd.to_string_lossy().to_string();
+        // MAINT-16: Use git root (not cwd) for ACE query parity with TUI
+        let repo_root =
+            get_repo_root_sync(&self.cwd).unwrap_or_else(|| self.cwd.to_string_lossy().to_string());
         let branch = get_current_branch_sync(&self.cwd).unwrap_or_else(|| "main".to_string());
 
-        // Try to fetch via tokio runtime (if available)
-        // This is safe because headless execution may or may not have a runtime
-        match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                let scope_owned = scope.to_string();
-                let slice_size = ace_config.slice_size;
+        // MAINT-16: Use block_on_sync for safe async/sync bridge
+        // This handles both cases: inside tokio runtime (uses block_in_place) and
+        // outside runtime (creates new current_thread runtime).
+        let repo_root_owned = repo_root.clone();
+        let branch_owned = branch.clone();
+        let scope_owned = scope.to_string();
+        let slice_size = ace_config.slice_size;
 
-                let result = handle.block_on(async {
-                    crate::chatwidget::spec_kit::ace_client::playbook_slice(
-                        repo_root,
-                        branch,
-                        scope_owned,
-                        slice_size,
-                        false, // exclude_neutral
-                    )
-                    .await
-                });
+        let result = block_on_sync(|| async move {
+            crate::chatwidget::spec_kit::ace_client::playbook_slice(
+                repo_root_owned,
+                branch_owned,
+                scope_owned,
+                slice_size,
+                false, // exclude_neutral
+            )
+            .await
+        });
 
-                match result {
-                    crate::chatwidget::spec_kit::ace_client::AceResult::Ok(response) => {
-                        tracing::info!(
-                            stage = %stage_name,
-                            scope = %scope,
-                            bullet_count = response.bullets.len(),
-                            "ACE fetch successful in headless mode"
-                        );
-                        Some(response.bullets)
-                    }
-                    crate::chatwidget::spec_kit::ace_client::AceResult::Disabled => {
-                        tracing::debug!("ACE client disabled");
-                        None
-                    }
-                    crate::chatwidget::spec_kit::ace_client::AceResult::Error(e) => {
-                        tracing::warn!(
-                            stage = %stage_name,
-                            error = %e,
-                            "ACE fetch failed in headless mode (safe fallback)"
-                        );
-                        None
-                    }
-                }
+        match result {
+            crate::chatwidget::spec_kit::ace_client::AceResult::Ok(response) => {
+                tracing::info!(
+                    stage = %stage_name,
+                    scope = %scope,
+                    bullet_count = response.bullets.len(),
+                    "ACE fetch successful in headless mode"
+                );
+                Some(response.bullets)
             }
-            Err(_) => {
-                // No tokio runtime available - create one temporarily
-                tracing::debug!("No tokio runtime available, creating temporary runtime for ACE fetch");
-                let rt = match tokio::runtime::Runtime::new() {
-                    Ok(rt) => rt,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "Failed to create tokio runtime for ACE fetch");
-                        return None;
-                    }
-                };
-
-                let scope_owned = scope.to_string();
-                let slice_size = ace_config.slice_size;
-
-                let result = rt.block_on(async {
-                    crate::chatwidget::spec_kit::ace_client::playbook_slice(
-                        repo_root,
-                        branch,
-                        scope_owned,
-                        slice_size,
-                        false,
-                    )
-                    .await
-                });
-
-                match result {
-                    crate::chatwidget::spec_kit::ace_client::AceResult::Ok(response) => {
-                        tracing::info!(
-                            stage = %stage_name,
-                            scope = %scope,
-                            bullet_count = response.bullets.len(),
-                            "ACE fetch successful in headless mode (temp runtime)"
-                        );
-                        Some(response.bullets)
-                    }
-                    crate::chatwidget::spec_kit::ace_client::AceResult::Disabled => None,
-                    crate::chatwidget::spec_kit::ace_client::AceResult::Error(e) => {
-                        tracing::warn!(error = %e, "ACE fetch failed (temp runtime)");
-                        None
-                    }
-                }
+            crate::chatwidget::spec_kit::ace_client::AceResult::Disabled => {
+                tracing::debug!("ACE client disabled");
+                None
+            }
+            crate::chatwidget::spec_kit::ace_client::AceResult::Error(e) => {
+                tracing::warn!(
+                    stage = %stage_name,
+                    error = %e,
+                    "ACE fetch failed in headless mode (safe fallback)"
+                );
+                None
             }
         }
     }
@@ -898,6 +899,26 @@ fn stage_to_ace_command_name(stage_name: &str) -> String {
 fn get_current_branch_sync(cwd: &std::path::Path) -> Option<String> {
     std::process::Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(cwd)
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
+}
+
+/// Get git repository root synchronously (helper for headless mode).
+///
+/// MAINT-16: Matches TUI's routing::get_repo_root() for ACE parity.
+fn get_repo_root_sync(cwd: &std::path::Path) -> Option<String> {
+    std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
         .current_dir(cwd)
         .output()
         .ok()
@@ -1435,6 +1456,59 @@ mod tests {
             result.is_ok(),
             "Guardrail should pass with evidence/ directory: {:?}",
             result.unwrap_err()
+        );
+    }
+
+    /// MAINT-16: Regression test for runtime-present ACE fetch path.
+    ///
+    /// Verifies that fetch_ace_bullets_for_stage() uses block_on_sync
+    /// correctly when called from within a tokio runtime, avoiding the
+    /// "Cannot block_on from within tokio runtime" panic.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ace_fetch_under_runtime_does_not_panic() {
+        use codex_core::config_types::AceMode;
+
+        // Setup test directory
+        let temp = TempDir::new().unwrap();
+        setup_test_spec(&temp, "ACE-TEST-001");
+
+        // Create a temp CODEX_HOME for config
+        let codex_home = TempDir::new().unwrap();
+        let mut planner_config = create_test_config(codex_home.path());
+
+        // Enable ACE with Always mode to ensure fetch path is exercised
+        planner_config.ace.enabled = true;
+        planner_config.ace.mode = AceMode::Always;
+
+        // Create mock backend
+        let backend = MockAgentBackend::with_default_responses();
+
+        // Create runner - will NOT panic on ACE init because block_on_sync handles it
+        let runner = HeadlessPipelineRunner::new_with_backend(
+            "ACE-TEST-001".to_string(),
+            Stage::Plan,
+            Stage::Plan,
+            test_maieutic(),
+            None, // ace_bullets - will be fetched internally
+            HeadlessConfig {
+                stage0_timeout: Duration::from_secs(1),
+                agent_timeout: Duration::from_secs(30),
+                quality_gates_enabled: false,
+                json_output: true,
+            },
+            planner_config,
+            temp.path().to_path_buf(),
+            Box::new(backend),
+        );
+
+        // Call fetch_ace_bullets_for_stage within the tokio runtime
+        // This should NOT panic with "Cannot start a runtime from within a runtime"
+        let result = runner.fetch_ace_bullets_for_stage(&Stage::Plan);
+
+        // ACE client not initialized (no MCP server), so should return None (not panic)
+        assert!(
+            result.is_none(),
+            "Expected None (ACE client not initialized), but got bullets"
         );
     }
 }
