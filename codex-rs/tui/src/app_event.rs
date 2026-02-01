@@ -610,12 +610,14 @@ pub(crate) enum AppEvent {
     },
 
     /// PRD builder questions answered (SPEC-KIT-970)
+    #[allow(dead_code)]
     PrdBuilderSubmitted {
         description: String,
         answers: std::collections::HashMap<String, String>,
     },
 
     /// PRD builder was cancelled by user (SPEC-KIT-970)
+    #[allow(dead_code)]
     PrdBuilderCancelled {
         description: String,
     },

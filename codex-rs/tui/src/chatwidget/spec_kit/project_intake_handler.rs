@@ -145,7 +145,7 @@ pub fn on_project_intake_submitted(
     let should_bootstrap = widget
         .pending_projectnew
         .as_ref()
-        .map_or(false, |p| !p.no_bootstrap_spec);
+        .is_some_and(|p| !p.no_bootstrap_spec);
 
     if should_bootstrap {
         // Get bootstrap description and deep flag

@@ -110,7 +110,7 @@ pub fn validate_spec_answers(answers: &HashMap<String, String>, deep: bool) -> V
     // =========================================================================
 
     // Required: problem (non-empty)
-    if answers.get("problem").map_or(true, |s| s.trim().is_empty()) {
+    if answers.get("problem").is_none_or(|s| s.trim().is_empty()) {
         errors.push("Problem statement is required.".to_string());
     }
 
@@ -121,7 +121,7 @@ pub fn validate_spec_answers(answers: &HashMap<String, String>, deep: bool) -> V
     }
 
     // Required: outcome (non-empty)
-    if answers.get("outcome").map_or(true, |s| s.trim().is_empty()) {
+    if answers.get("outcome").is_none_or(|s| s.trim().is_empty()) {
         errors.push("Expected outcome is required.".to_string());
     }
 
@@ -273,19 +273,19 @@ pub fn validate_project_answers(answers: &HashMap<String, String>, deep: bool) -
     // =========================================================================
 
     // Required: users (non-empty)
-    if answers.get("users").map_or(true, |s| s.trim().is_empty()) {
+    if answers.get("users").is_none_or(|s| s.trim().is_empty()) {
         errors.push("Target users is required.".to_string());
     }
 
     // Required: problem (non-empty)
-    if answers.get("problem").map_or(true, |s| s.trim().is_empty()) {
+    if answers.get("problem").is_none_or(|s| s.trim().is_empty()) {
         errors.push("Problem statement is required.".to_string());
     }
 
     // Required: artifact_kind (non-empty)
     if answers
         .get("artifact_kind")
-        .map_or(true, |s| s.trim().is_empty())
+        .is_none_or(|s| s.trim().is_empty())
     {
         errors.push("Artifact kind is required.".to_string());
     }
@@ -332,7 +332,7 @@ pub fn validate_project_answers(answers: &HashMap<String, String>, deep: bool) -
         // Deep requires deployment_target non-empty
         if answers
             .get("deployment_target")
-            .map_or(true, |s| s.trim().is_empty())
+            .is_none_or(|s| s.trim().is_empty())
         {
             errors.push("Deep mode requires deployment target.".to_string());
         }
@@ -340,7 +340,7 @@ pub fn validate_project_answers(answers: &HashMap<String, String>, deep: bool) -
         // Deep requires data_classification non-empty
         if answers
             .get("data_classification")
-            .map_or(true, |s| s.trim().is_empty())
+            .is_none_or(|s| s.trim().is_empty())
         {
             errors.push("Deep mode requires data classification.".to_string());
         }
@@ -348,7 +348,7 @@ pub fn validate_project_answers(answers: &HashMap<String, String>, deep: bool) -
         // Deep requires nfr_budgets non-empty
         if answers
             .get("nfr_budgets")
-            .map_or(true, |s| s.trim().is_empty())
+            .is_none_or(|s| s.trim().is_empty())
         {
             errors.push("Deep mode requires NFR budgets.".to_string());
         }
@@ -356,7 +356,7 @@ pub fn validate_project_answers(answers: &HashMap<String, String>, deep: bool) -
         // Deep requires ops_baseline non-empty
         if answers
             .get("ops_baseline")
-            .map_or(true, |s| s.trim().is_empty())
+            .is_none_or(|s| s.trim().is_empty())
         {
             errors.push("Deep mode requires ops baseline.".to_string());
         }
@@ -364,7 +364,7 @@ pub fn validate_project_answers(answers: &HashMap<String, String>, deep: bool) -
         // Deep requires security_posture non-empty (for threat model generation)
         if answers
             .get("security_posture")
-            .map_or(true, |s| s.trim().is_empty())
+            .is_none_or(|s| s.trim().is_empty())
         {
             errors.push("Deep mode requires security posture.".to_string());
         }
@@ -372,7 +372,7 @@ pub fn validate_project_answers(answers: &HashMap<String, String>, deep: bool) -
         // Deep requires release_rollout non-empty
         if answers
             .get("release_rollout")
-            .map_or(true, |s| s.trim().is_empty())
+            .is_none_or(|s| s.trim().is_empty())
         {
             errors.push("Deep mode requires release rollout strategy.".to_string());
         }

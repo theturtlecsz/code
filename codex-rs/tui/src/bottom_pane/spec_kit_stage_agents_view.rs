@@ -19,6 +19,7 @@ use super::bottom_pane_view::BottomPaneView;
 use super::{BottomPane, CancellationEvent};
 
 /// Ordered list of stages matching the spec.
+#[allow(dead_code)]
 const STAGES: &[&str] = &[
     "specify",
     "plan",

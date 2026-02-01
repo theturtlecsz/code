@@ -378,7 +378,7 @@ fn test_auto_export_capsule_with_branch_isolation() {
 
     // Create capsule with some data
     let config = CapsuleConfig {
-        capsule_path: capsule_path.clone(),
+        capsule_path,
         workspace_id: "branch_export_test".to_string(),
         ..Default::default()
     };
@@ -429,8 +429,7 @@ fn test_auto_export_capsule_with_branch_isolation() {
     // Verify file was created
     assert!(
         export_path.exists(),
-        "Export file should exist at {:?}",
-        export_path
+        "Export file should exist at {export_path:?}"
     );
     assert!(
         result.bytes_written > 0,

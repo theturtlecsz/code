@@ -6,6 +6,10 @@
 //! - If another process holds the lock, open fails with actionable error
 //! - Lock lifetime matches CapsuleHandle lifetime (via Drop)
 //!
+//! Note: `result_large_err` is allowed because LockError::AlreadyLocked
+//! intentionally contains full LockMetadata for debugging contention issues.
+#![allow(clippy::result_large_err)]
+
 //! ## Lock File Format
 //! Path: `<capsule_path>.lock` (e.g., `workspace.mv2.lock`)
 //! Contents: JSON with LockMetadata
@@ -221,9 +225,8 @@ impl CapsuleLock {
                 }
 
                 // Write metadata to the lock file
-                let json = serde_json::to_string_pretty(&metadata).map_err(|e| {
-                    LockError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
-                })?;
+                let json = serde_json::to_string_pretty(&metadata)
+                    .map_err(|e| LockError::Io(std::io::Error::other(e)))?;
                 file.write_all(json.as_bytes())?;
                 file.sync_all()?;
 

@@ -4701,6 +4701,7 @@ impl ChatWidget<'_> {
     // Undo/snapshot functions moved to undo_snapshots.rs (MAINT-11 Phase 9)
 
     /// Show PRD builder modal with project-specific questions (SPEC-KIT-971)
+    #[allow(dead_code)]
     pub(crate) fn show_prd_builder_with_context(
         &mut self,
         description: String,

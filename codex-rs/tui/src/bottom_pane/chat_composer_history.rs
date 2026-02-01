@@ -236,7 +236,7 @@ impl ChatComposerHistory {
 
 #[cfg(all(test, feature = "legacy_tests"))]
 mod tests {
-    #![expect(clippy::expect_used)]
+    #![allow(clippy::expect_used)]
     use super::*;
     use crate::app_event::AppEvent;
     use codex_core::protocol::Op;
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn navigation_with_async_fetch() {
-        let (tx, rx) = channel::<AppEvent>();
+        let (tx, mut rx) = channel::<AppEvent>();
         let tx = AppEventSender::new(tx);
 
         let mut history = ChatComposerHistory::new();

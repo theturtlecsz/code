@@ -216,11 +216,13 @@ mod tests {
             vec![
                 Row {
                     text: "hello whir".to_string(),
-                    explicit_break: false
+                    explicit_break: false,
+                    width: 10
                 },
                 Row {
                     text: "l this is ".to_string(),
-                    explicit_break: false
+                    explicit_break: false,
+                    width: 10
                 }
             ]
         );
@@ -239,7 +241,8 @@ mod tests {
             rows,
             vec![Row {
                 text: "😀😀 ".to_string(),
-                explicit_break: false
+                explicit_break: false,
+                width: 5
             }]
         );
     }

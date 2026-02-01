@@ -367,7 +367,7 @@ pub fn handle_speckit_reflex(widget: &mut ChatWidget, raw_args: String) {
         }
         Some("e2e") => {
             // SPEC-KIT-978: E2E routing tests
-            let stub = args.iter().any(|a| *a == "--stub");
+            let stub = args.contains(&"--stub");
             handle_reflex_e2e(widget, stub);
         }
         Some("check") => {

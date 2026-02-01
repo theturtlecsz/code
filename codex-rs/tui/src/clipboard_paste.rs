@@ -241,6 +241,8 @@ pub fn normalize_pasted_path(pasted: &str) -> Option<PathBuf> {
 #[cfg(all(test, feature = "legacy_tests"))]
 mod pasted_paths_tests {
     use super::*;
+    #[allow(unused_imports)]
+    use std::path::Path;
 
     #[cfg(not(windows))]
     #[test]
@@ -287,27 +289,10 @@ mod pasted_paths_tests {
     }
 
     #[test]
+    #[ignore = "API changed: pasted_image_format removed with clipboard image helpers"]
     fn pasted_image_format_png_jpeg_unknown() {
-        assert_eq!(
-            pasted_image_format(Path::new("/a/b/c.PNG")),
-            EncodedImageFormat::Png
-        );
-        assert_eq!(
-            pasted_image_format(Path::new("/a/b/c.jpg")),
-            EncodedImageFormat::Jpeg
-        );
-        assert_eq!(
-            pasted_image_format(Path::new("/a/b/c.JPEG")),
-            EncodedImageFormat::Jpeg
-        );
-        assert_eq!(
-            pasted_image_format(Path::new("/a/b/c")),
-            EncodedImageFormat::Other
-        );
-        assert_eq!(
-            pasted_image_format(Path::new("/a/b/c.webp")),
-            EncodedImageFormat::Other
-        );
+        // Test disabled: pasted_image_format function was removed
+        // See line 239: "Image format inference removed alongside clipboard image helpers."
     }
 
     #[test]
@@ -339,18 +324,9 @@ mod pasted_paths_tests {
     }
 
     #[test]
+    #[ignore = "API changed: pasted_image_format removed with clipboard image helpers"]
     fn pasted_image_format_with_windows_style_paths() {
-        assert_eq!(
-            pasted_image_format(Path::new(r"C:\\a\\b\\c.PNG")),
-            EncodedImageFormat::Png
-        );
-        assert_eq!(
-            pasted_image_format(Path::new(r"C:\\a\\b\\c.jpeg")),
-            EncodedImageFormat::Jpeg
-        );
-        assert_eq!(
-            pasted_image_format(Path::new(r"C:\\a\\b\\noext")),
-            EncodedImageFormat::Other
-        );
+        // Test disabled: pasted_image_format function was removed
+        // See line 239: "Image format inference removed alongside clipboard image helpers."
     }
 }

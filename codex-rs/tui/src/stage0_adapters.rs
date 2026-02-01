@@ -160,8 +160,10 @@ struct NotebooklmUpsertResponse {
     pub error: Option<String>,
 }
 
+// Serde: complete API response structure (name not accessed but needed for deserialization)
 #[derive(Debug, Deserialize)]
 struct NotebooklmUpsertData {
+    #[allow(dead_code)]
     pub name: String,
     pub action: String, // "created" | "updated"
 }
@@ -354,7 +356,7 @@ impl Tier2Client for Tier2HttpAdapter {
             // SPEC-TIER2-SOURCES: Step 1 - Upsert CURRENT_SPEC.md source
             // Prepend spec_id as heading for context
             let spec_source_content = format!("# SPEC: {}\n\n{}", spec_id, spec_content);
-            if let Err(e) = upsert_source_blocking(
+            if let Err(_e) = upsert_source_blocking(
                 &client,
                 &base_url,
                 &notebook,
@@ -366,7 +368,7 @@ impl Tier2Client for Tier2HttpAdapter {
 
             // SPEC-TIER2-SOURCES: Step 2 - Upsert CURRENT_TASK_BRIEF.md source
             let brief_source_content = format!("# Task Brief: {}\n\n{}", spec_id, task_brief_md);
-            if let Err(e) = upsert_source_blocking(
+            if let Err(_e) = upsert_source_blocking(
                 &client,
                 &base_url,
                 &notebook,
@@ -525,6 +527,8 @@ impl LlmClient for LlmStubAdapter {
     }
 }
 
+// Tier2 response parsing - awaiting Phase 2 integration (ADR-003)
+#[allow(dead_code)]
 fn parse_tier2_answer_text(text: &str, spec_id: &str) -> Result<Tier2Response> {
     let text = text.trim();
     if text.is_empty() {
@@ -574,6 +578,8 @@ fn parse_tier2_answer_text(text: &str, spec_id: &str) -> Result<Tier2Response> {
 /// Parse causal link suggestions from Divine Truth markdown
 ///
 /// Looks for Section 5 JSON block or inline JSON arrays.
+/// Note: Awaiting Phase 2 integration (ADR-003)
+#[allow(dead_code)]
 fn parse_causal_links_from_markdown(markdown: &str) -> Vec<CausalLinkSuggestion> {
     // Look for JSON block in Section 5 or anywhere in the document
     let json_pattern = regex_lite::Regex::new(r"```json\s*([\s\S]*?)\s*```").ok();

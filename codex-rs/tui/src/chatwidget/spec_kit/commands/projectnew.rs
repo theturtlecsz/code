@@ -23,6 +23,7 @@ use super::super::project_native::{ProjectType, create_project};
 
 /// Phases for the projectnew orchestration flow
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum ProjectNewPhase {
     /// Waiting for vision modal to complete
     VisionPending,
@@ -38,6 +39,7 @@ pub enum ProjectNewPhase {
 ///
 /// Stored on ChatWidget to coordinate across modal completions.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PendingProjectNew {
     /// Project type (rust, python, typescript, go, generic)
     pub project_type: ProjectType,
@@ -167,7 +169,7 @@ impl SpecKitCommand for SpecKitProjectNewCommand {
         };
 
         // Parse project type
-        let project_type = match ProjectType::from_str(type_str) {
+        let project_type = match ProjectType::parse(type_str) {
             Some(t) => t,
             None => {
                 widget.history_push(new_error_event(format!(

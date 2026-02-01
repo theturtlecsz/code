@@ -564,7 +564,7 @@ fn hotkey_suffix(key: KeyCode) -> String {
     }
 }
 
-#[cfg(all(test, feature = "legacy_tests"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use codex_core::protocol::ApprovedCommandMatchKind;
@@ -573,9 +573,18 @@ mod tests {
     use crossterm::event::KeyModifiers;
     use tokio::sync::mpsc::unbounded_channel as channel;
 
-    #[test]
-    fn lowercase_shortcut_is_accepted() {
-        let (tx_raw, rx) = channel::<AppEvent>();
+    /// Helper to drain all pending events from an unbounded receiver
+    fn drain_events(rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>) -> Vec<AppEvent> {
+        let mut events = vec![];
+        while let Ok(e) = rx.try_recv() {
+            events.push(e);
+        }
+        events
+    }
+
+    #[tokio::test]
+    async fn lowercase_shortcut_is_accepted() {
+        let (tx_raw, mut rx) = channel::<AppEvent>();
         let tx = AppEventSender::new(tx_raw);
         let req = ApprovalRequest::Exec {
             id: "1".to_string(),
@@ -585,7 +594,7 @@ mod tests {
         let mut widget = UserApprovalWidget::new(req, tx);
         widget.handle_key_event(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
         assert!(widget.is_complete());
-        let events: Vec<AppEvent> = rx.try_iter().collect();
+        let events = drain_events(&mut rx);
         assert!(events.iter().any(|e| matches!(
             e,
             AppEvent::CodexOp(Op::ExecApproval {
@@ -595,9 +604,9 @@ mod tests {
         )));
     }
 
-    #[test]
-    fn always_option_registers_command() {
-        let (tx_raw, rx) = channel::<AppEvent>();
+    #[tokio::test]
+    async fn always_option_registers_command() {
+        let (tx_raw, mut rx) = channel::<AppEvent>();
         let tx = AppEventSender::new(tx_raw);
         let req = ApprovalRequest::Exec {
             id: "1".to_string(),
@@ -607,7 +616,7 @@ mod tests {
         let mut widget = UserApprovalWidget::new(req, tx);
         widget.handle_key_event(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
 
-        let events: Vec<AppEvent> = rx.try_iter().collect();
+        let events = drain_events(&mut rx);
         assert!(events.iter().any(|event| matches!(
             event,
             AppEvent::RegisterApprovedCommand {
@@ -619,9 +628,9 @@ mod tests {
         )));
     }
 
-    #[test]
-    fn prefix_option_registers_prefix_command() {
-        let (tx_raw, rx) = channel::<AppEvent>();
+    #[tokio::test]
+    async fn prefix_option_registers_prefix_command() {
+        let (tx_raw, mut rx) = channel::<AppEvent>();
         let tx = AppEventSender::new(tx_raw);
         let req = ApprovalRequest::Exec {
             id: "3".to_string(),
@@ -636,7 +645,7 @@ mod tests {
         let mut widget = UserApprovalWidget::new(req, tx);
         widget.handle_key_event(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE));
 
-        let events: Vec<AppEvent> = rx.try_iter().collect();
+        let events = drain_events(&mut rx);
         assert!(events.iter().any(|event| matches!(
             event,
             AppEvent::RegisterApprovedCommand {
@@ -645,7 +654,7 @@ mod tests {
                 persist: true,
                 semantic_prefix: Some(prefix)
             } if command == &vec!["git".to_string(), "checkout".to_string()]
-                && prefix == vec!["git".to_string(), "checkout".to_string()]
+                && *prefix == vec!["git".to_string(), "checkout".to_string()]
         )));
     }
 
@@ -695,9 +704,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn uppercase_shortcut_is_accepted() {
-        let (tx_raw, rx) = channel::<AppEvent>();
+    #[tokio::test]
+    async fn uppercase_shortcut_is_accepted() {
+        let (tx_raw, mut rx) = channel::<AppEvent>();
         let tx = AppEventSender::new(tx_raw);
         let req = ApprovalRequest::Exec {
             id: "2".to_string(),
@@ -707,7 +716,7 @@ mod tests {
         let mut widget = UserApprovalWidget::new(req, tx);
         widget.handle_key_event(KeyEvent::new(KeyCode::Char('Y'), KeyModifiers::NONE));
         assert!(widget.is_complete());
-        let events: Vec<AppEvent> = rx.try_iter().collect();
+        let events = drain_events(&mut rx);
         assert!(events.iter().any(|e| matches!(
             e,
             AppEvent::CodexOp(Op::ExecApproval {

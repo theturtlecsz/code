@@ -71,7 +71,7 @@ impl SpecKitCommand for SpecKitProjectCommand {
         let name = parts[1];
 
         // Parse project type
-        let project_type = match ProjectType::from_str(type_str) {
+        let project_type = match ProjectType::parse(type_str) {
             Some(t) => t,
             None => {
                 widget.history_push(crate::history_cell::new_error_event(format!(

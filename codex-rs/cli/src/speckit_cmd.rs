@@ -9,6 +9,28 @@
 //!
 //! - `code speckit status --spec <ID> [--stale-hours N] [--json]`
 //! - `code speckit review --spec <ID> --stage <STAGE> [--strict-*] [--json]`
+
+// MAINT-930: Clippy allows for speckit CLI module.
+// All actively triggered in this large module (~8000 lines):
+// - uninlined_format_args: 50+ format!("{}", x) patterns
+// - collapsible_if: structured conditionals
+// - ptr_arg: &PathBuf params for API compatibility
+// - redundant_clone: clones for clarity in complex data flows
+// - expect_used/unwrap_used: CLI error handling
+// - redundant_closure/unnecessary_unwrap/double_ended_iterator_last: minor style
+// Future: fix incrementally and narrow allows.
+#![allow(
+    clippy::uninlined_format_args,
+    clippy::collapsible_if,
+    clippy::collapsible_else_if,
+    clippy::ptr_arg,
+    clippy::expect_used,
+    clippy::redundant_clone,
+    clippy::unnecessary_unwrap,
+    clippy::double_ended_iterator_last,
+    clippy::unwrap_used,
+    clippy::redundant_closure_for_method_calls
+)]
 //!
 //! ## Exit Codes (per REVIEW-CONTRACT.md + SPEC-KIT-920)
 //!
@@ -55,8 +77,6 @@ use codex_tui::memvid_adapter::{
     GcConfig,
     // SK974-1: Import types
     ImportOptions,
-    // SPEC-KIT-980: Multimodal ingestion
-    IngestResult,
     LogicEdgeV1,
     LogicalUri,
     MemoryCardV1,
@@ -66,10 +86,8 @@ use codex_tui::memvid_adapter::{
     default_capsule_config,
 };
 // SPEC-KIT-900: Headless pipeline execution
-use codex_tui::headless::{
-    HeadlessError, HeadlessPipelineRunner, HeadlessResult, format_result_json,
-};
-use codex_tui::{DelegationBounds, ElicitationMode, MaieuticSpec};
+use codex_tui::MaieuticSpec;
+use codex_tui::headless::{HeadlessPipelineRunner, format_result_json};
 // WP-A: Projection rebuild types
 use codex_tui::{RebuildRequest, rebuild_projections};
 use std::io::Write;
@@ -157,6 +175,7 @@ fn tool_version() -> String {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// JSON output for NEEDS_INPUT exit code
+#[allow(dead_code)]
 #[derive(Debug, serde::Serialize)]
 struct NeedsInputOutput {
     schema_version: u32,
@@ -173,6 +192,7 @@ struct NeedsInputOutput {
 /// Check if intake is present in capsule for the given spec
 ///
 /// Returns Ok(true) if intake found, Ok(false) if missing, Err on infrastructure failure.
+#[allow(dead_code)]
 fn check_intake_presence(cwd: &Path, spec_id: &str) -> Result<bool, String> {
     use codex_tui::memvid_adapter::{
         CapsuleHandle, EventType, IntakeCompletedPayload, IntakeKind, default_capsule_config,
@@ -201,6 +221,7 @@ fn check_intake_presence(cwd: &Path, spec_id: &str) -> Result<bool, String> {
 }
 
 /// Handle missing intake in headless mode - exit 10 with JSON
+#[allow(dead_code)]
 fn exit_needs_intake(cwd: &Path, spec_id: &str, json_output: bool) -> ! {
     let output = NeedsInputOutput {
         schema_version: SCHEMA_VERSION,
@@ -232,6 +253,7 @@ fn exit_needs_intake(cwd: &Path, spec_id: &str, json_output: bool) -> ! {
 
 /// Check intake presence before execution, exit 10 if missing in headless mode
 /// Exits 3 INFRA_ERROR if capsule is unavailable (no "continue anyway" behavior)
+#[allow(dead_code)]
 fn check_intake_for_execution(cwd: &Path, spec_id: &str, headless: bool, json_output: bool) {
     if !headless {
         return; // TUI mode handles intake interactively
@@ -3362,8 +3384,7 @@ fn run_headless_pipeline(
 ) -> anyhow::Result<()> {
     use chrono::Utc;
     use codex_core::config::ConfigOverrides;
-    use codex_tui::headless::output::HeadlessOutput;
-    use codex_tui::headless::{HeadlessConfig, exit_codes};
+    use codex_tui::headless::HeadlessConfig;
     use std::collections::HashMap;
 
     tracing::info!(
@@ -3682,6 +3703,7 @@ fn run_migrate(executor: SpeckitExecutor, args: MigrateArgs) -> anyhow::Result<(
 const DEFAULT_CAPSULE_PATH: &str = ".speckit/memvid/workspace.mv2";
 
 /// Exit codes for capsule commands (per SPEC-KIT-971)
+#[allow(dead_code)]
 mod capsule_exit {
     pub const SUCCESS: i32 = 0;
     pub const USER_ERROR: i32 = 1; // Bad args, invalid URI
@@ -4249,7 +4271,7 @@ fn run_capsule_events(capsule_path: &PathBuf, args: CapsuleEventsArgs) -> anyhow
 
     // Validate event type if provided
     let event_type_filter: Option<EventType> = if let Some(ref type_str) = args.event_type {
-        match EventType::from_str(type_str) {
+        match EventType::parse(type_str) {
             Some(et) => Some(et),
             None => {
                 let valid_types = EventType::all_variants().join(", ");
@@ -5906,8 +5928,6 @@ fn run_policy_diff(_cwd: PathBuf, args: PolicyDiffArgs) -> anyhow::Result<()> {
 
 /// Run the replay command (SPEC-KIT-975)
 fn run_replay(cwd: PathBuf, args: ReplayArgs) -> anyhow::Result<()> {
-    use codex_tui::memvid_adapter::{BranchId, LogicalUri, default_capsule_config};
-
     match args.command {
         ReplaySubcommand::Run(run_args) => run_replay_run(cwd, run_args),
         ReplaySubcommand::Verify(verify_args) => run_replay_verify(cwd, verify_args),
@@ -5951,7 +5971,7 @@ fn run_replay_run(cwd: PathBuf, args: ReplayRunArgs) -> anyhow::Result<()> {
     // Build branch filter
     let branch = args
         .branch
-        .map(|b| BranchId::from_str(&b))
+        .map(|b| BranchId::new(&b))
         .unwrap_or_else(|| BranchId::for_run(&args.run_id));
 
     // Get events for this run
@@ -6248,7 +6268,7 @@ fn run_graph(cwd: PathBuf, args: GraphArgs) -> anyhow::Result<()> {
 /// Run `graph add-card` command
 fn run_graph_add_card(capsule_path: &PathBuf, args: GraphAddCardArgs) -> anyhow::Result<()> {
     // Validate card type
-    let card_type = match CardType::from_str(&args.card_type) {
+    let card_type = match CardType::parse(&args.card_type) {
         Some(ct) => ct,
         None => {
             let valid_types = CardType::all_variants().join(", ");
@@ -6366,7 +6386,7 @@ fn run_graph_add_card(capsule_path: &PathBuf, args: GraphAddCardArgs) -> anyhow:
 /// Run `graph add-edge` command
 fn run_graph_add_edge(capsule_path: &PathBuf, args: GraphAddEdgeArgs) -> anyhow::Result<()> {
     // Validate edge type
-    let edge_type = match EdgeType::from_str(&args.edge_type) {
+    let edge_type = match EdgeType::parse(&args.edge_type) {
         Some(et) => et,
         None => {
             let valid_types = EdgeType::all_variants().join(", ");
@@ -6511,7 +6531,7 @@ fn run_graph_add_edge(capsule_path: &PathBuf, args: GraphAddEdgeArgs) -> anyhow:
 
 /// Run `graph query` command
 fn run_graph_query(
-    cwd: &PathBuf,
+    _cwd: &PathBuf,
     capsule_path: &PathBuf,
     args: GraphQueryArgs,
 ) -> anyhow::Result<()> {
@@ -7017,7 +7037,7 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
     use std::collections::HashMap;
 
     // Step 1: Parse project type
-    let project_type = match ProjectType::from_str(&args.project_type) {
+    let project_type = match ProjectType::parse(&args.project_type) {
         Some(t) => t,
         None => {
             let exit_code = headless_exit::HARD_FAIL;
@@ -7808,6 +7828,7 @@ pub struct IngestOutput {
 
 /// Error types for ingest operation (testable enum).
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum IngestError {
     FileNotFound(PathBuf),
     FeatureDisabled {

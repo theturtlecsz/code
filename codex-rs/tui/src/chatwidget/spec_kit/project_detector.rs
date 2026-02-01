@@ -3,6 +3,9 @@
 //! Detects project type from filesystem markers to customize PRD builder questions.
 //! Zero cost, instant detection based on config file presence.
 
+// NOTE: Module contains planned infrastructure; allow dead_code during development.
+#![allow(dead_code)]
+
 use std::path::Path;
 
 /// Detected project type

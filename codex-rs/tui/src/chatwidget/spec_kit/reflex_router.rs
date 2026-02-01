@@ -394,7 +394,6 @@ mod tests {
         };
 
         let json = serde_json::to_string_pretty(&payload).unwrap();
-        println!("DEBUG JSON: {}", json);
         assert!(json.contains("\"mode\": \"Cloud\"")); // Note: spaces in pretty-print
         assert!(json.contains("\"is_fallback\": true"));
         assert!(json.contains("\"fallback_reason\": \"ServerUnhealthy\""));

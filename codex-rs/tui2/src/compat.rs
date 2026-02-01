@@ -38,6 +38,7 @@ pub fn convert_reasoning_effort_to_protocol(
     use codex_core::config_types::ReasoningEffort as CoreEffort;
     use codex_protocol::openai_models::ReasoningEffort as ProtocolEffort;
     match effort {
+        CoreEffort::XHigh => ProtocolEffort::XHigh,
         CoreEffort::High => ProtocolEffort::High,
         CoreEffort::Medium => ProtocolEffort::Medium,
         CoreEffort::Low => ProtocolEffort::Low,
@@ -129,7 +130,7 @@ pub mod features {
     }
 
     impl Feature {
-        pub fn key(&self) -> &'static str {
+        pub fn key(self) -> &'static str {
             match self {
                 Feature::ApplyPatchAmendment => "apply_patch_amendment",
                 Feature::Elicitation => "elicitation",
@@ -564,7 +565,7 @@ pub mod path_utils {
 pub mod bash {
     /// Stub - returns None since bash command extraction not available locally
     /// Signature matches upstream which takes &[String] and returns Option<(usize, &str)>
-    pub fn extract_bash_command<'a>(_command: &'a [String]) -> Option<(usize, &'a str)> {
+    pub fn extract_bash_command(_command: &[String]) -> Option<(usize, &str)> {
         None
     }
 }
@@ -573,7 +574,7 @@ pub mod bash {
 pub mod parse_command {
     /// Stub - returns None since shell command extraction not available locally
     /// Signature matches upstream which takes &[String] and returns Option<(usize, &str)>
-    pub fn extract_shell_command<'a>(_command: &'a [String]) -> Option<(usize, &'a str)> {
+    pub fn extract_shell_command(_command: &[String]) -> Option<(usize, &str)> {
         None
     }
 }
@@ -700,7 +701,7 @@ pub mod models_manager {
         }
 
         /// Stub - returns None for list of models (sync version)
-        pub fn try_list_models(&self, _config: &Config) -> Option<Vec<ModelPreset>> {
+        pub fn try_list_models(self, _config: &Config) -> Option<Vec<ModelPreset>> {
             None
         }
     }
@@ -757,7 +758,7 @@ impl ConfigExt for Config {
         // This is a workaround for the lifetime issue with extension traits
         use std::sync::OnceLock;
         static NOTICES: OnceLock<NoticesConfig> = OnceLock::new();
-        NOTICES.get_or_init(|| NoticesConfig::default())
+        NOTICES.get_or_init(NoticesConfig::default)
     }
 
     fn animations(&self) -> bool {

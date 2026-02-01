@@ -6,6 +6,12 @@
 //! - Normal mode: Allows prompts (no-op guard)
 //!
 //! This module enforces D133: headless mode MUST NEVER prompt.
+//!
+//! Note: Several public API functions (`get_prompt_attempts`, `prompts_blocked`,
+//! `blocks_prompts`) are reserved for future telemetry integration (D133 Phase 2).
+
+// D133 API - reserved for future telemetry integration
+#![allow(dead_code)]
 
 use std::sync::atomic::{AtomicU64, Ordering};
 

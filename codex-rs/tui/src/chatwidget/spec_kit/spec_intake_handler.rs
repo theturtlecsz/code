@@ -262,7 +262,7 @@ pub fn on_spec_intake_cancelled(
         super::pipeline_coordinator::cancel_pipeline_after_intake_backfill(widget, &spec_id);
     } else {
         // Check if this is a bootstrap spec cancellation during projectnew
-        let was_bootstrap = widget.pending_projectnew.as_ref().map_or(false, |p| {
+        let was_bootstrap = widget.pending_projectnew.as_ref().is_some_and(|p| {
             p.phase == super::commands::projectnew::ProjectNewPhase::BootstrapSpecPending
         });
 

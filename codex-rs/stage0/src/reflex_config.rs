@@ -109,45 +109,45 @@ fn parse_model_policy_toml(path: &PathBuf) -> Result<ReflexConfig, String> {
     Ok(ReflexConfig {
         enabled: reflex
             .get("enabled")
-            .and_then(|v| v.as_bool())
+            .and_then(toml::Value::as_bool)
             .unwrap_or(false),
         endpoint: reflex
             .get("endpoint")
-            .and_then(|v| v.as_str())
+            .and_then(toml::Value::as_str)
             .unwrap_or("http://127.0.0.1:3009/v1")
             .to_string(),
         model: reflex
             .get("model")
-            .and_then(|v| v.as_str())
+            .and_then(toml::Value::as_str)
             .unwrap_or("qwen2.5-coder-7b-instruct")
             .to_string(),
         timeout_ms: reflex
             .get("timeout_ms")
-            .and_then(|v| v.as_integer())
+            .and_then(toml::Value::as_integer)
             .map(|v| v as u64)
             .unwrap_or(1500),
         json_schema_required: reflex
             .get("json_schema_required")
-            .and_then(|v| v.as_bool())
+            .and_then(toml::Value::as_bool)
             .unwrap_or(true),
         fallback_to_cloud: reflex
             .get("fallback_to_cloud")
-            .and_then(|v| v.as_bool())
+            .and_then(toml::Value::as_bool)
             .unwrap_or(true),
         thresholds: ReflexThresholds {
             p95_latency_ms: thresholds_section
                 .and_then(|t| t.get("p95_latency_ms"))
-                .and_then(|v| v.as_integer())
+                .and_then(toml::Value::as_integer)
                 .map(|v| v as u64)
                 .unwrap_or(2000),
             success_parity_percent: thresholds_section
                 .and_then(|t| t.get("success_parity_percent"))
-                .and_then(|v| v.as_integer())
+                .and_then(toml::Value::as_integer)
                 .map(|v| v as u8)
                 .unwrap_or(85),
             json_schema_compliance_percent: thresholds_section
                 .and_then(|t| t.get("json_schema_compliance_percent"))
-                .and_then(|v| v.as_integer())
+                .and_then(toml::Value::as_integer)
                 .map(|v| v as u8)
                 .unwrap_or(100),
         },

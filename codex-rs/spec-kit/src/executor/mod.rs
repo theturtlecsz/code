@@ -1387,6 +1387,8 @@ mod tests {
         let executor = SpeckitExecutor::new(ExecutionContext {
             repo_root: std::path::PathBuf::from("/tmp/nonexistent"),
             policy_snapshot: None, // Use defaults
+            headless: false,
+            maieutic_input: None,
         });
 
         let cmd = SpeckitCommand::Review {
@@ -1414,6 +1416,8 @@ mod tests {
         let executor = SpeckitExecutor::new(ExecutionContext {
             repo_root: std::path::PathBuf::from("/tmp/nonexistent"),
             policy_snapshot: None, // Use defaults
+            headless: false,
+            maieutic_input: None,
         });
 
         let cmd = SpeckitCommand::Review {

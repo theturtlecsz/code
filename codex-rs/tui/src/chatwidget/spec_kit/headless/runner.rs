@@ -1152,7 +1152,7 @@ mod tests {
 
         // Create runner with mock backend
         // SPEC-KIT-982: Pass None for ace_bullets in tests
-        let mut runner = HeadlessPipelineRunner::new_with_backend(
+        let runner = HeadlessPipelineRunner::new_with_backend(
             "TEST-001".to_string(),
             Stage::Plan,
             Stage::Plan,
@@ -1214,7 +1214,7 @@ mod tests {
         // Create mock backend WITHOUT plan response
         let backend = MockAgentBackend::with_responses(HashMap::new());
 
-        let mut runner = HeadlessPipelineRunner::new_with_backend(
+        let runner = HeadlessPipelineRunner::new_with_backend(
             "TEST-002".to_string(),
             Stage::Plan,
             Stage::Plan,

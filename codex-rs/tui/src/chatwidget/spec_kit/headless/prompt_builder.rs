@@ -5,6 +5,9 @@
 //!
 //! D113/D133: Now uses unified prompt-source API for TUI/headless parity.
 
+// NOTE: Module contains planned infrastructure; allow dead_code during development.
+#![allow(dead_code)]
+
 use std::path::Path;
 
 use super::runner::HeadlessError;

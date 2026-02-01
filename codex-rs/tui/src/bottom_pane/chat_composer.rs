@@ -2185,6 +2185,7 @@ mod tests {
     use crate::bottom_pane::InputResult;
     use crate::bottom_pane::chat_composer::LARGE_PASTE_CHAR_THRESHOLD;
     use crate::bottom_pane::textarea::TextArea;
+    use ratatui::widgets::WidgetRef;
 
     #[test]
     fn test_current_at_token_basic_cases() {
@@ -2343,7 +2344,7 @@ mod tests {
 
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         let needs_redraw = composer.handle_paste("hello".to_string());
         assert!(needs_redraw);
@@ -2366,7 +2367,7 @@ mod tests {
 
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         let large = "x".repeat(LARGE_PASTE_CHAR_THRESHOLD + 10);
         let needs_redraw = composer.handle_paste(large.clone());
@@ -2395,7 +2396,7 @@ mod tests {
         let large = "y".repeat(LARGE_PASTE_CHAR_THRESHOLD + 1);
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         composer.handle_paste(large);
         assert_eq!(composer.pending_pastes.len(), 1);
@@ -2431,7 +2432,7 @@ mod tests {
 
         for (name, input) in test_cases {
             // Create a fresh composer for each test case
-            let mut composer = ChatComposer::new(true, sender.clone(), false);
+            let mut composer = ChatComposer::new(true, sender.clone(), false, false);
 
             if let Some(text) = input {
                 composer.handle_paste(text);
@@ -2479,9 +2480,9 @@ mod tests {
         use crossterm::event::KeyModifiers;
         use tokio::sync::mpsc::error::TryRecvError;
 
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         // Type the slash command.
         type_chars_humanlike(&mut composer, &['/', 'i', 'n', 'i', 't']);
@@ -2493,11 +2494,15 @@ mod tests {
         // When a slash command is dispatched, the composer should return a
         // Command result (not submit literal text) and clear its textarea.
         match result {
-            InputResult::None | InputResult::ScrollUp | InputResult::ScrollDown => {}
+            InputResult::Command(cmd) => {
+                assert_eq!(cmd.command(), "init");
+            }
             InputResult::Submitted(text) => {
                 panic!("expected command dispatch, but composer submitted literal text: {text}")
             }
-            InputResult::None => panic!("expected Command result for '/init'"),
+            InputResult::None | InputResult::ScrollUp | InputResult::ScrollDown => {
+                panic!("expected Command result for '/init'")
+            }
         }
         assert!(composer.textarea.is_empty(), "composer should be cleared");
 
@@ -2521,13 +2526,7 @@ mod tests {
 
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(
-            true,
-            sender,
-            false,
-            "Ask Codex to do anything".to_string(),
-            false,
-        );
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         type_chars_humanlike(&mut composer, &['/', 'c']);
 
@@ -2545,9 +2544,9 @@ mod tests {
         use crossterm::event::KeyModifiers;
         use tokio::sync::mpsc::error::TryRecvError;
 
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         type_chars_humanlike(&mut composer, &['/', 'm', 'e', 'n', 't', 'i', 'o', 'n']);
 
@@ -2555,11 +2554,15 @@ mod tests {
             composer.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
         match result {
-            InputResult::None | InputResult::ScrollUp | InputResult::ScrollDown => {}
+            InputResult::Command(cmd) => {
+                assert_eq!(cmd.command(), "mention");
+            }
             InputResult::Submitted(text) => {
                 panic!("expected command dispatch, but composer submitted literal text: {text}")
             }
-            InputResult::None => panic!("expected Command result for '/mention'"),
+            InputResult::None | InputResult::ScrollUp | InputResult::ScrollDown => {
+                panic!("expected Command result for '/mention'")
+            }
         }
         assert!(composer.textarea.is_empty(), "composer should be cleared");
 
@@ -2585,7 +2588,7 @@ mod tests {
 
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         // Define test cases: (paste content, is_large)
         let test_cases = [
@@ -2658,7 +2661,7 @@ mod tests {
 
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         // Define test cases: (content, is_large)
         let test_cases = [
@@ -2724,7 +2727,7 @@ mod tests {
 
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         // Define test cases: (cursor_position_from_end, expected_pending_count)
         let test_cases = [
@@ -2765,7 +2768,7 @@ mod tests {
     fn test_typed_anything_on_paste() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         // Initially typed_anything should be false
         assert!(!composer.typed_anything);
@@ -2785,7 +2788,7 @@ mod tests {
     fn test_typed_anything_on_large_paste() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         // Initially typed_anything should be false
         assert!(!composer.typed_anything);
@@ -2804,7 +2807,7 @@ mod tests {
     fn test_typed_anything_on_insert_str() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         // Initially typed_anything should be false
         assert!(!composer.typed_anything);
@@ -2828,7 +2831,7 @@ mod tests {
 
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender, false);
+        let mut composer = ChatComposer::new(true, sender, false, false);
 
         // Create a test terminal
         let backend = TestBackend::new(100, 10);
@@ -2877,14 +2880,14 @@ mod tests {
     fn test_new_session_resets_typed_anything() {
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = AppEventSender::new(tx);
-        let mut composer = ChatComposer::new(true, sender.clone(), false);
+        let mut composer = ChatComposer::new(true, sender.clone(), false, false);
 
         // Type something
         composer.insert_str("test");
         assert!(composer.typed_anything);
 
         // Simulate new session by creating a new composer (this is what happens on /new)
-        let composer2 = ChatComposer::new(true, sender, false);
+        let composer2 = ChatComposer::new(true, sender, false, false);
         assert!(
             !composer2.typed_anything,
             "New session should reset typed_anything"

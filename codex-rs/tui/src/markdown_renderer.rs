@@ -1724,6 +1724,7 @@ fn to_superscript(s: &str) -> String {
 mod tests {
     use super::*;
     use ratatui::style::Modifier;
+    #[allow(unused_imports)]
     use unicode_width::UnicodeWidthStr;
 
     #[test]

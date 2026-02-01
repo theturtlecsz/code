@@ -101,27 +101,19 @@ pub async fn wait_for_agents(
 
     let start = Instant::now();
 
-    loop {
-        if start.elapsed() > timeout {
-            return Err(HeadlessError::Timeout {
-                expected: agent_ids.len(),
-                completed: 0,
-                elapsed_ms: start.elapsed().as_millis() as u64,
-            });
-        }
-
-        // TODO: Poll AGENT_MANAGER for agent status
-        // For now, return empty results for stub
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        // Placeholder: In real implementation, check agent status here
-        // let manager = AGENT_MANAGER.read().await;
-        // for id in agent_ids { ... }
-
-        // For stub purposes, break immediately
-        // Real implementation will poll until agents complete
-        break;
+    // Stub implementation: poll once then return
+    // Real implementation will loop until agents complete or timeout
+    if start.elapsed() > timeout {
+        return Err(HeadlessError::Timeout {
+            expected: agent_ids.len(),
+            completed: 0,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+        });
     }
+
+    // TODO: Poll AGENT_MANAGER for agent status
+    // For now, return empty results for stub
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Stub: Return empty results
     // Real implementation will return actual agent outputs

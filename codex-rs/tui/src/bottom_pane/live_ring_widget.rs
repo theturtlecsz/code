@@ -12,6 +12,7 @@ pub(crate) struct LiveRingWidget {
 
 impl LiveRingWidget {
     #[cfg(all(test, feature = "legacy_tests"))]
+    #[allow(dead_code)]
     pub fn new(max_rows: usize, rows: Vec<Line<'static>>) -> Self {
         Self {
             max_rows: max_rows as u16,

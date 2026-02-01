@@ -46,7 +46,7 @@ impl SpecKitCommand for CapsuleDoctorCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        let subcommand = args.trim().split_whitespace().next().unwrap_or("doctor");
+        let subcommand = args.split_whitespace().next().unwrap_or("doctor");
 
         match subcommand {
             "doctor" => execute_doctor(widget),
@@ -428,11 +428,11 @@ fn execute_export(widget: &mut ChatWidget, args: &str) {
     };
 
     // Parse encryption flags (default: encrypt)
-    let no_encrypt = parts.iter().any(|&p| p == "--no-encrypt");
+    let no_encrypt = parts.contains(&"--no-encrypt");
     let encrypt = !no_encrypt;
 
     // Parse safe mode flags (default: safe)
-    let unsafe_export = parts.iter().any(|&p| p == "--unsafe");
+    let unsafe_export = parts.contains(&"--unsafe");
     let safe_mode = !unsafe_export;
 
     // Determine output path per D2: ./docs/specs/<SPEC_ID>/runs/<RUN_ID>/capsule.mv2e
@@ -610,7 +610,7 @@ fn execute_import(widget: &mut ChatWidget, args: &str) {
     };
 
     // Parse --require-verified flag
-    let require_verified = parts.iter().any(|&p| p == "--require-verified");
+    let require_verified = parts.contains(&"--require-verified");
 
     // Check source exists
     if !source_path.exists() {
@@ -676,7 +676,7 @@ fn execute_import(widget: &mut ChatWidget, args: &str) {
                         Line::from(format!("   Source: {}", result.source_path.display())),
                         Line::from(format!("   Mount name: {}", result.mount_name)),
                         Line::from(format!("   Format: {}", format_str)),
-                        Line::from(format!("   Access: read-only (D103)")),
+                        Line::from("   Access: read-only (D103)"),
                         Line::from(""),
                         Line::from(format!("   Artifacts: {}", result.artifact_count)),
                         Line::from(format!("   Checkpoints: {}", result.checkpoint_count)),
@@ -769,10 +769,10 @@ fn execute_gc(widget: &mut ChatWidget, args: &str) {
     };
 
     // Parse --dry-run flag
-    let dry_run = parts.iter().any(|&p| p == "--dry-run");
+    let dry_run = parts.contains(&"--dry-run");
 
     // Parse --no-keep-pinned flag
-    let keep_pinned = !parts.iter().any(|&p| p == "--no-keep-pinned");
+    let keep_pinned = !parts.contains(&"--no-keep-pinned");
 
     // Open workspace capsule
     let capsule_path = get_capsule_path();
@@ -959,10 +959,10 @@ mod tests {
             None
         };
 
-        let no_encrypt = parts.iter().any(|&p| p == "--no-encrypt");
+        let no_encrypt = parts.contains(&"--no-encrypt");
         let encrypt = !no_encrypt;
 
-        let unsafe_export = parts.iter().any(|&p| p == "--unsafe");
+        let unsafe_export = parts.contains(&"--unsafe");
         let safe_mode = !unsafe_export;
 
         (spec_id, run_id, output_path, encrypt, safe_mode)
@@ -1068,7 +1068,7 @@ mod tests {
             None
         };
 
-        let require_verified = parts.iter().any(|&p| p == "--require-verified");
+        let require_verified = parts.contains(&"--require-verified");
 
         (source_path, mount_as, require_verified)
     }
@@ -1154,8 +1154,8 @@ mod tests {
             30
         };
 
-        let dry_run = parts.iter().any(|&p| p == "--dry-run");
-        let keep_pinned = !parts.iter().any(|&p| p == "--no-keep-pinned");
+        let dry_run = parts.contains(&"--dry-run");
+        let keep_pinned = !parts.contains(&"--no-keep-pinned");
 
         (retention_days, dry_run, keep_pinned)
     }

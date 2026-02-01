@@ -96,7 +96,7 @@ impl SpecIntakeModal {
         let Some(option) = question
             .options
             .iter()
-            .find(|opt| opt.label.to_ascii_uppercase() == label.to_ascii_uppercase())
+            .find(|opt| opt.label.eq_ignore_ascii_case(&label))
         else {
             return;
         };

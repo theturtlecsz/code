@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 // Re-export from stage0 for shared access
-pub use codex_stage0::{ReflexConfig, ReflexThresholds, load_reflex_config};
+pub use codex_stage0::load_reflex_config;
 
 /// Exit codes for reflex commands
 pub mod exit_codes {
@@ -215,7 +215,7 @@ async fn run_reflex_health(args: HealthArgs) -> i32 {
                     endpoint: String::new(),
                     model: String::new(),
                     available_models: vec![],
-                    error: Some(e.clone()),
+                    error: Some(e),
                     latency_ms: None,
                 };
                 println!(
@@ -280,7 +280,7 @@ async fn run_reflex_health(args: HealthArgs) -> i32 {
                     println!("✓ Reflex server healthy");
                     println!("  Endpoint: {}", config.endpoint);
                     println!("  Model: {} (available)", config.model);
-                    println!("  Latency: {}ms", latency_ms);
+                    println!("  Latency: {latency_ms}ms");
                     println!("  Available models: {}", available_models.join(", "));
                 } else {
                     println!("✗ Reflex server unhealthy");
@@ -384,7 +384,7 @@ async fn run_reflex_models(args: ModelsArgs) -> i32 {
         Ok(cfg) => cfg,
         Err(e) => {
             if args.json {
-                println!(r#"{{"error": "{}"}}"#, e);
+                println!(r#"{{"error": "{e}"}}"#);
             } else {
                 eprintln!("Configuration error: {e}");
             }
@@ -421,7 +421,7 @@ async fn run_reflex_models(args: ModelsArgs) -> i32 {
             }
             Err(e) => {
                 if args.json {
-                    println!(r#"{{"error": "{}"}}"#, e);
+                    println!(r#"{{"error": "{e}"}}"#);
                 } else {
                     eprintln!("Failed to parse response: {e}");
                 }
@@ -431,7 +431,7 @@ async fn run_reflex_models(args: ModelsArgs) -> i32 {
         Ok(resp) => {
             let status = resp.status();
             if args.json {
-                println!(r#"{{"error": "HTTP {}"}}"#, status);
+                println!(r#"{{"error": "HTTP {status}"}}"#);
             } else {
                 eprintln!("Server returned HTTP {status}");
             }
@@ -439,7 +439,7 @@ async fn run_reflex_models(args: ModelsArgs) -> i32 {
         }
         Err(e) => {
             if args.json {
-                println!(r#"{{"error": "{}"}}"#, e);
+                println!(r#"{{"error": "{e}"}}"#);
             } else {
                 eprintln!("Failed to connect: {e}");
             }
@@ -454,7 +454,7 @@ async fn run_reflex_status(args: StatusArgs) -> i32 {
         Ok(cfg) => cfg,
         Err(e) => {
             if args.json {
-                println!(r#"{{"error": "{}"}}"#, e);
+                println!(r#"{{"error": "{e}"}}"#);
             } else {
                 eprintln!("Configuration error: {e}");
             }
@@ -540,9 +540,9 @@ async fn run_reflex_e2e(args: E2eArgs) -> i32 {
     if args.verbose && !args.json {
         println!("SPEC-KIT-975/978: E2E Reflex Routing Test");
         println!("==========================================");
-        println!("Mode:     {}", mode);
-        println!("Endpoint: {}", endpoint);
-        println!("Model:    {}", model);
+        println!("Mode:     {mode}");
+        println!("Endpoint: {endpoint}");
+        println!("Model:    {model}");
         println!();
     }
 
@@ -655,8 +655,8 @@ async fn run_reflex_e2e(args: E2eArgs) -> i32 {
         role: "Implementer".to_string(),
         is_fallback: false,
         fallback_reason: None,
-        reflex_endpoint: Some(endpoint.clone()),
-        reflex_model: Some(model.clone()),
+        reflex_endpoint: Some(endpoint),
+        reflex_model: Some(model),
         cloud_model: Some("claude-3-opus".to_string()),
         health_check_latency_ms: Some(100),
     };
@@ -730,7 +730,7 @@ async fn run_reflex_e2e(args: E2eArgs) -> i32 {
         error: if all_passed {
             None
         } else {
-            Some(format!("{} test(s) failed", failed))
+            Some(format!("{failed} test(s) failed"))
         },
     };
 
@@ -741,7 +741,7 @@ async fn run_reflex_e2e(args: E2eArgs) -> i32 {
         );
     } else {
         println!();
-        println!("Results: {} passed, {} failed", passed, failed);
+        println!("Results: {passed} passed, {failed} failed");
         if all_passed {
             println!("All E2E tests passed!");
         } else {
@@ -764,6 +764,7 @@ async fn run_reflex_e2e(args: E2eArgs) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_stage0::{ReflexConfig, ReflexThresholds};
 
     #[test]
     fn test_default_reflex_config() {

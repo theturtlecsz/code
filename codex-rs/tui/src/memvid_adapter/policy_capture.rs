@@ -7,6 +7,9 @@
 //! - D101: Dual storage (filesystem + capsule)
 //! - D102: Events tagged with policy_id for traceability
 //!
+//! Note: `result_large_err` is allowed since we use CapsuleResult type.
+#![allow(clippy::result_large_err)]
+//!
 //! ## Drift Detection (SPEC-KIT-977)
 //!
 //! Policy drift detection relies on `CapsuleHandle.current_policy`, but this

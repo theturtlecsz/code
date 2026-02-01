@@ -165,40 +165,34 @@ pub fn check_phase_enforcement(
 
         SunsetPhase::Phase1 => {
             // Phase 1: Warning but allow
-            let warning = format!(
+            let warning =
                 "\n\x1b[33m\u{26a0}\u{fe0f}  local-memory backend is deprecated.\x1b[0m\n\
                     Run `lm-import` to migrate to memvid.\n\
                     See: docs/SPEC-KIT-979-local-memory-sunset/MIGRATION.md\n"
-            );
+                    .to_string();
             PhaseEnforcementResult::AllowWithWarning(warning)
         }
 
         SunsetPhase::Phase2 => {
             if force_deprecated {
                 // Phase 2 with --force-deprecated: Warning but allow
-                let warning = format!(
-                    "\n\x1b[33m\u{26a0}\u{fe0f}  local-memory backend is deprecated (--force-deprecated active).\x1b[0m\n\
+                let warning = "\n\x1b[33m\u{26a0}\u{fe0f}  local-memory backend is deprecated (--force-deprecated active).\x1b[0m\n\
                         This backend will be removed in Phase 3.\n\
-                        Run `lm-import --all --verify` to complete migration.\n"
-                );
+                        Run `lm-import --all --verify` to complete migration.\n".to_string();
                 PhaseEnforcementResult::AllowWithWarning(warning)
             } else {
                 // Phase 2 without --force-deprecated: Block
-                let error = format!(
-                    "\n\x1b[31m\u{1f6a8} Error: local-memory backend requires --force-deprecated flag in Phase 2.\x1b[0m\n\
+                let error = "\n\x1b[31m\u{1f6a8} Error: local-memory backend requires --force-deprecated flag in Phase 2.\x1b[0m\n\
                        Add --force-deprecated to proceed, or migrate to memvid:\n\
-                       Run: lm-import --all --verify\n"
-                );
+                       Run: lm-import --all --verify\n".to_string();
                 PhaseEnforcementResult::Block(error)
             }
         }
 
         SunsetPhase::Phase3 => {
             // Phase 3: Always block (regardless of --force-deprecated)
-            let error = format!(
-                "\n\x1b[31m\u{1f6a8} Error: local-memory backend has been removed in Phase 3.\x1b[0m\n\
-                   Use memvid (the default) or run lm-import to migrate existing data.\n"
-            );
+            let error = "\n\x1b[31m\u{1f6a8} Error: local-memory backend has been removed in Phase 3.\x1b[0m\n\
+                   Use memvid (the default) or run lm-import to migrate existing data.\n".to_string();
             PhaseEnforcementResult::Block(error)
         }
     }

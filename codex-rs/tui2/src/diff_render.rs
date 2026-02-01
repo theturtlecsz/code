@@ -155,7 +155,7 @@ fn render_changes_block(rows: Vec<Row>, wrap_cols: usize, cwd: &Path) -> Vec<RtL
     if let [row] = &rows[..] {
         let verb = match &row.change {
             FileChange::Add { .. } => "Added",
-            FileChange::Delete { .. } => "Deleted",
+            FileChange::Delete => "Deleted",
             _ => "Edited",
         };
         header_spans.push(verb.bold());

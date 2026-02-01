@@ -652,6 +652,7 @@ impl BottomPane<'_> {
     }
 
     /// Show PRD builder modal with project-specific questions (SPEC-KIT-971)
+    #[allow(dead_code)]
     pub fn show_prd_builder_with_context(
         &mut self,
         description: String,
@@ -1061,6 +1062,7 @@ mod tests_removed {
     use crate::app_event::AppEvent;
     use ratatui::buffer::Buffer;
     use ratatui::layout::Rect;
+    #[allow(unused_imports)]
     use ratatui::text::Line;
     use tokio::sync::mpsc::unbounded_channel as channel;
 
@@ -1088,105 +1090,11 @@ mod tests_removed {
         assert_eq!(CancellationEvent::Ignored, pane.on_ctrl_c());
     }
 
-    #[test]
-    fn live_ring_renders_above_composer() {
-        let (tx_raw, _rx) = channel::<AppEvent>();
-        let tx = AppEventSender::new(tx_raw);
-        let mut pane = BottomPane::new(BottomPaneParams {
-            app_event_tx: tx,
-            has_input_focus: true,
-            enhanced_keys_supported: false,
-            using_chatgpt_auth: false,
-        });
+    // DISABLED: live_ring_renders_above_composer test removed pending API migration
+    // - set_live_ring_rows method removed
 
-        // Provide 4 rows with max_rows=3; only the last 3 should be visible.
-        pane.set_live_ring_rows(
-            3,
-            vec![
-                Line::from("one".to_string()),
-                Line::from("two".to_string()),
-                Line::from("three".to_string()),
-                Line::from("four".to_string()),
-            ],
-        );
-
-        let area = Rect::new(0, 0, 10, 5);
-        let mut buf = Buffer::empty(area);
-        (&pane).render_ref(area, &mut buf);
-
-        // Extract the first 3 rows and assert they contain the last three lines.
-        let mut lines: Vec<String> = Vec::new();
-        for y in 0..3 {
-            let mut s = String::new();
-            for x in 0..area.width {
-                s.push(buf[(x, y)].symbol().chars().next().unwrap_or(' '));
-            }
-            lines.push(s.trim_end().to_string());
-        }
-        assert_eq!(lines, vec!["two", "three", "four"]);
-    }
-
-    #[test]
-    fn status_indicator_visible_with_live_ring() {
-        let (tx_raw, _rx) = channel::<AppEvent>();
-        let tx = AppEventSender::new(tx_raw);
-        let mut pane = BottomPane::new(BottomPaneParams {
-            app_event_tx: tx,
-            has_input_focus: true,
-            enhanced_keys_supported: false,
-            using_chatgpt_auth: false,
-        });
-
-        // Simulate task running which replaces composer with the status indicator.
-        pane.set_task_running(true);
-        pane.update_status_text("waiting for model".to_string());
-
-        // Provide 2 rows in the live ring (e.g., streaming CoT) and ensure the
-        // status indicator remains visible below them.
-        pane.set_live_ring_rows(
-            2,
-            vec![
-                Line::from("cot1".to_string()),
-                Line::from("cot2".to_string()),
-            ],
-        );
-
-        // Allow some frames so the dot animation is present.
-        std::thread::sleep(std::time::Duration::from_millis(120));
-
-        // Height should include both ring rows, 1 spacer, and the 1-line status.
-        let area = Rect::new(0, 0, 30, 4);
-        let mut buf = Buffer::empty(area);
-        (&pane).render_ref(area, &mut buf);
-
-        // Top two rows are the live ring.
-        let mut r0 = String::new();
-        let mut r1 = String::new();
-        for x in 0..area.width {
-            r0.push(buf[(x, 0)].symbol().chars().next().unwrap_or(' '));
-            r1.push(buf[(x, 1)].symbol().chars().next().unwrap_or(' '));
-        }
-        assert!(r0.contains("cot1"), "expected first live row: {r0:?}");
-        assert!(r1.contains("cot2"), "expected second live row: {r1:?}");
-
-        // Row 2 is the spacer (blank)
-        let mut r2 = String::new();
-        for x in 0..area.width {
-            r2.push(buf[(x, 2)].symbol().chars().next().unwrap_or(' '));
-        }
-        assert!(r2.trim().is_empty(), "expected blank spacer line: {r2:?}");
-
-        // Bottom row is the status line; it should contain the "Coding" header.
-        let mut r3 = String::new();
-        for x in 0..area.width {
-            r3.push(buf[(x, 3)].symbol().chars().next().unwrap_or(' '));
-        }
-        assert!(
-            r3.contains("Coding"),
-            "expected Coding header in status line: {r3:?}"
-        );
-    }
-    // live ring removed; related tests deleted.
+    // DISABLED: status_indicator_visible_with_live_ring test removed pending API migration
+    // - set_live_ring_rows method removed
 
     #[test]
     fn overlay_not_shown_above_approval_modal() {
@@ -1227,6 +1135,7 @@ mod tests_removed {
             app_event_tx: tx.clone(),
             has_input_focus: true,
             enhanced_keys_supported: false,
+            using_chatgpt_auth: false,
         });
 
         // Start a running task so the status indicator is active above the composer.

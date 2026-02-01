@@ -1,5 +1,8 @@
 //! SPEC-KIT-975: Audit Event Emitter for runtime emit wiring.
 //!
+// NOTE: This module is planned infrastructure; allow dead_code during development.
+#![allow(dead_code)]
+//!
 //! This module provides a context-aware wrapper around CapsuleHandle
 //! to emit audit events at runtime boundaries. All emissions are
 //! best-effort: failures are logged but never propagate to callers.

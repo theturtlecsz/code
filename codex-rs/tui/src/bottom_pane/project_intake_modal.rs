@@ -17,6 +17,7 @@ use super::{BottomPane, BottomPaneView, CancellationEvent};
 
 /// Project intake question with predefined options
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) struct ProjectIntakeQuestion {
     pub key: &'static str,
     pub question: &'static str,

@@ -40,7 +40,6 @@ use crate::memvid_adapter::types::{
     ToolResultPayload,
 };
 use codex_stage0::dcc::{Iqo, LocalMemoryClient, LocalMemorySearchParams};
-use secrecy::SecretString;
 use tempfile::TempDir;
 
 // =============================================================================
@@ -712,13 +711,12 @@ fn test_commit_manual_force_allows_duplicates() {
 
     // Verify we have 2 checkpoints with the same label
     let checkpoints = handle.list_checkpoints();
-    let v1_checkpoints: Vec<_> = checkpoints
+    let v1_checkpoint_count = checkpoints
         .iter()
         .filter(|cp| cp.label.as_deref() == Some("v1.0"))
-        .collect();
+        .count();
     assert_eq!(
-        v1_checkpoints.len(),
-        2,
+        v1_checkpoint_count, 2,
         "Should have 2 checkpoints with label 'v1.0'"
     );
 }
@@ -1361,7 +1359,7 @@ fn test_persistence_put_bytes_survive_reopen() {
 
     let test_data = b"Hello, this is test data for persistence!".to_vec();
     let test_metadata = serde_json::json!({"type": "test", "importance": 8});
-    let mut stored_uri: Option<LogicalUri> = None;
+    let stored_uri: LogicalUri;
 
     // Phase 1: Open, put, commit, close
     {
@@ -1374,7 +1372,7 @@ fn test_persistence_put_bytes_survive_reopen() {
         let handle = CapsuleHandle::open(config).expect("should create capsule");
 
         // Put some data
-        let uri = handle
+        stored_uri = handle
             .put(
                 "SPEC-TEST",
                 "run-1",
@@ -1384,8 +1382,6 @@ fn test_persistence_put_bytes_survive_reopen() {
                 test_metadata.clone(),
             )
             .expect("put should succeed");
-
-        stored_uri = Some(uri);
 
         // Commit to flush writes to disk
         handle
@@ -1405,17 +1401,15 @@ fn test_persistence_put_bytes_survive_reopen() {
 
         let handle = CapsuleHandle::open(config).expect("should reopen capsule");
 
-        let uri = stored_uri.as_ref().expect("should have stored URI");
-
         // Resolve should succeed
         let pointer = handle
-            .resolve_uri(uri, None, None)
+            .resolve_uri(&stored_uri, None, None)
             .expect("resolve_uri should succeed after reopen");
         assert!(pointer.length > 0, "Pointer should have non-zero length");
 
         // Get bytes should return identical data
         let retrieved_data = handle
-            .get_bytes(uri, None, None)
+            .get_bytes(&stored_uri, None, None)
             .expect("get_bytes should succeed");
         assert_eq!(
             retrieved_data, test_data,
@@ -2895,32 +2889,29 @@ fn test_curated_merge_excludes_debug_events() {
 
     // Should have: StageTransition (merged) + BranchMerged (from merge operation)
     // Should NOT have: DebugTrace
-    let stage_transitions: Vec<_> = main_events
+    let stage_transition_count = main_events
         .iter()
         .filter(|e| e.event_type == EventType::StageTransition)
-        .collect();
-    let debug_traces: Vec<_> = main_events
+        .count();
+    let debug_trace_count = main_events
         .iter()
         .filter(|e| e.event_type == EventType::DebugTrace)
-        .collect();
-    let branch_merged: Vec<_> = main_events
+        .count();
+    let branch_merged_count = main_events
         .iter()
         .filter(|e| e.event_type == EventType::BranchMerged)
-        .collect();
+        .count();
 
     assert_eq!(
-        stage_transitions.len(),
-        1,
+        stage_transition_count, 1,
         "StageTransition should be merged to main"
     );
     assert_eq!(
-        debug_traces.len(),
-        0,
+        debug_trace_count, 0,
         "DebugTrace should NOT be merged in curated mode"
     );
     assert_eq!(
-        branch_merged.len(),
-        1,
+        branch_merged_count, 1,
         "BranchMerged event should be on main"
     );
 }
@@ -2978,23 +2969,21 @@ fn test_full_merge_includes_debug_events() {
     // Count events on main after merge (should include all)
     let main_events = handle.list_events_filtered(Some(&main_branch));
 
-    let stage_transitions: Vec<_> = main_events
+    let stage_transition_count = main_events
         .iter()
         .filter(|e| e.event_type == EventType::StageTransition)
-        .collect();
-    let debug_traces: Vec<_> = main_events
+        .count();
+    let debug_trace_count = main_events
         .iter()
         .filter(|e| e.event_type == EventType::DebugTrace)
-        .collect();
+        .count();
 
     assert_eq!(
-        stage_transitions.len(),
-        1,
+        stage_transition_count, 1,
         "StageTransition should be merged to main"
     );
     assert_eq!(
-        debug_traces.len(),
-        1,
+        debug_trace_count, 1,
         "DebugTrace SHOULD be merged in full mode"
     );
 }
@@ -3061,35 +3050,32 @@ fn test_curated_merge_persists_after_reopen() {
         let main_events = handle.list_events_filtered(Some(&main_branch));
 
         // Count by type
-        let stage_transitions: Vec<_> = main_events
+        let stage_transition_count = main_events
             .iter()
             .filter(|e| e.event_type == EventType::StageTransition)
-            .collect();
-        let debug_traces: Vec<_> = main_events
+            .count();
+        let debug_trace_count = main_events
             .iter()
             .filter(|e| e.event_type == EventType::DebugTrace)
-            .collect();
+            .count();
 
         assert_eq!(
-            stage_transitions.len(),
-            1,
+            stage_transition_count, 1,
             "StageTransition should persist on main after reopen"
         );
         assert_eq!(
-            debug_traces.len(),
-            0,
+            debug_trace_count, 0,
             "DebugTrace should NOT be on main after reopen"
         );
 
         // The debug trace should still exist on the run branch
         let run_events = handle.list_events_filtered(Some(&run_branch));
-        let run_debug: Vec<_> = run_events
+        let run_debug_count = run_events
             .iter()
             .filter(|e| e.event_type == EventType::DebugTrace)
-            .collect();
+            .count();
         assert_eq!(
-            run_debug.len(),
-            1,
+            run_debug_count, 1,
             "DebugTrace should still be on run branch after reopen"
         );
     }
@@ -3293,11 +3279,11 @@ fn test_spec_kit_975_event_emission() {
         .collect();
     assert_eq!(tool_calls.len(), 1, "Should have 1 ToolCall event");
 
-    let gate_decisions: Vec<_> = all_events
+    let gate_decision_count = all_events
         .iter()
         .filter(|e| e.event_type == EventType::GateDecision)
-        .collect();
-    assert_eq!(gate_decisions.len(), 1, "Should have 1 GateDecision event");
+        .count();
+    assert_eq!(gate_decision_count, 1, "Should have 1 GateDecision event");
 
     // Verify event ordering (events should be in emission order)
     let tool_call_event = &tool_calls[0];
@@ -3445,19 +3431,16 @@ fn test_llm_capture_modes_policy_aligned() {
     assert_eq!(LLMCaptureMode::FullIo.as_str(), "full_io");
 
     // Verify backward compat parsing
-    assert_eq!(LLMCaptureMode::from_str("off"), Some(LLMCaptureMode::None));
+    assert_eq!(LLMCaptureMode::parse("off"), Some(LLMCaptureMode::None));
     assert_eq!(
-        LLMCaptureMode::from_str("hash"),
+        LLMCaptureMode::parse("hash"),
         Some(LLMCaptureMode::PromptsOnly)
     );
     assert_eq!(
-        LLMCaptureMode::from_str("summary"),
+        LLMCaptureMode::parse("summary"),
         Some(LLMCaptureMode::PromptsOnly)
     );
-    assert_eq!(
-        LLMCaptureMode::from_str("full"),
-        Some(LLMCaptureMode::FullIo)
-    );
+    assert_eq!(LLMCaptureMode::parse("full"), Some(LLMCaptureMode::FullIo));
 }
 
 // =============================================================================
@@ -3631,20 +3614,16 @@ fn test_runtime_emit_wiring_integration() {
     );
 
     // Verify event order (sequence numbers should be monotonic)
-    let event_uris: Vec<_> = events
-        .iter()
-        .filter(|e| e.run_id == run_id)
-        .map(|e| e.uri.as_str().to_string())
-        .collect();
+    let event_count = events.iter().filter(|e| e.run_id == run_id).count();
     assert!(
-        event_uris.len() >= 7,
+        event_count >= 7,
         "Should have at least 7 events for this run"
     );
 
     // Verify events are associated with the correct run_id
-    let run_events: Vec<_> = events.iter().filter(|e| e.run_id == run_id).collect();
+    let run_event_count = events.iter().filter(|e| e.run_id == run_id).count();
     assert!(
-        run_events.len() >= 7,
+        run_event_count >= 7,
         "All events should have correct run_id"
     );
 
@@ -4036,7 +4015,7 @@ fn test_replay_offline_retrieval_exact() {
     let run_id = "offline-exact-001";
 
     // Phase 1: Ingest reference artifacts to get real URIs
-    let artifact_uris = vec![
+    let artifact_uris = [
         handle
             .put(
                 spec_id,
@@ -4216,13 +4195,13 @@ fn test_breaker_state_variants() {
     assert_eq!(BreakerState::HalfOpen.as_str(), "half_open");
 
     // Test from_str round-trip
-    assert_eq!(BreakerState::from_str("closed"), Some(BreakerState::Closed));
-    assert_eq!(BreakerState::from_str("open"), Some(BreakerState::Open));
+    assert_eq!(BreakerState::parse("closed"), Some(BreakerState::Closed));
+    assert_eq!(BreakerState::parse("open"), Some(BreakerState::Open));
     assert_eq!(
-        BreakerState::from_str("half_open"),
+        BreakerState::parse("half_open"),
         Some(BreakerState::HalfOpen)
     );
-    assert_eq!(BreakerState::from_str("invalid"), None);
+    assert_eq!(BreakerState::parse("invalid"), None);
 }
 
 #[test]
@@ -4318,7 +4297,7 @@ fn test_event_type_breaker_state_changed() {
 
     // Test from_str
     assert_eq!(
-        EventType::from_str("BreakerStateChanged"),
+        EventType::parse("BreakerStateChanged"),
         Some(EventType::BreakerStateChanged)
     );
 
@@ -4813,7 +4792,7 @@ fn test_edge_references_logical_uris_only() {
 fn test_card_type_variants() {
     // All variants parse correctly
     for variant_str in CardType::all_variants() {
-        let parsed = CardType::from_str(variant_str);
+        let parsed = CardType::parse(variant_str);
         assert!(
             parsed.is_some(),
             "CardType::from_str should parse '{}'",
@@ -4833,13 +4812,13 @@ fn test_card_type_variants() {
         CardType::Run,
     ] {
         let s = ct.as_str();
-        let parsed = CardType::from_str(s);
+        let parsed = CardType::parse(s);
         assert_eq!(parsed, Some(*ct), "CardType round-trip failed for {:?}", ct);
     }
 
     // Unknown type returns None
     assert_eq!(
-        CardType::from_str("unknown_type"),
+        CardType::parse("unknown_type"),
         None,
         "Unknown card type should return None"
     );
@@ -4851,7 +4830,7 @@ fn test_card_type_variants() {
 fn test_edge_type_variants() {
     // All variants parse correctly
     for variant_str in EdgeType::all_variants() {
-        let parsed = EdgeType::from_str(variant_str);
+        let parsed = EdgeType::parse(variant_str);
         assert!(
             parsed.is_some(),
             "EdgeType::from_str should parse '{}'",
@@ -4870,13 +4849,13 @@ fn test_edge_type_variants() {
         EdgeType::RelatedTo,
     ] {
         let s = et.as_str();
-        let parsed = EdgeType::from_str(s);
+        let parsed = EdgeType::parse(s);
         assert_eq!(parsed, Some(*et), "EdgeType round-trip failed for {:?}", et);
     }
 
     // Unknown type returns None
     assert_eq!(
-        EdgeType::from_str("unknown_edge"),
+        EdgeType::parse("unknown_edge"),
         None,
         "Unknown edge type should return None"
     );
@@ -4888,7 +4867,7 @@ fn test_edge_type_variants() {
 fn test_card_persists_after_reopen() {
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join("card_persist.mv2");
-    let mut stored_uri: Option<LogicalUri> = None;
+    let stored_uri: LogicalUri;
 
     // Phase 1: Create and store card
     {
@@ -4902,7 +4881,7 @@ fn test_card_persists_after_reopen() {
 
         let card = MemoryCardV1::new("persist-card", CardType::Decision, "Use Rust", "test");
         let data = card.to_bytes().expect("should serialize");
-        let uri = handle
+        stored_uri = handle
             .put(
                 "SPEC-T",
                 "run1",
@@ -4912,7 +4891,6 @@ fn test_card_persists_after_reopen() {
                 serde_json::json!({}),
             )
             .expect("should put card");
-        stored_uri = Some(uri);
 
         handle
             .commit_stage("SPEC-T", "run1", "decide", None)
@@ -4929,9 +4907,8 @@ fn test_card_persists_after_reopen() {
 
         let handle = CapsuleHandle::open(config).expect("should reopen capsule");
 
-        let uri = stored_uri.as_ref().expect("should have stored URI");
         let bytes = handle
-            .get_bytes(uri, None, None)
+            .get_bytes(&stored_uri, None, None)
             .expect("should get card after reopen");
         let card = MemoryCardV1::from_bytes(&bytes).expect("should deserialize");
 
@@ -4945,7 +4922,7 @@ fn test_card_persists_after_reopen() {
 // SPEC-KIT-974: Export Tests
 // =============================================================================
 
-use crate::memvid_adapter::capsule::{ExportOptions, ExportResult};
+use crate::memvid_adapter::capsule::ExportOptions;
 
 /// SPEC-KIT-974: Export produces single file artifact.
 ///
@@ -5646,7 +5623,7 @@ fn test_capsule_exported_payload_backward_compat() {
 #[test]
 #[serial_test::serial]
 fn test_export_encrypted_roundtrip() {
-    use crate::memvid_adapter::capsule::{CapsuleError, ExportOptions};
+    use crate::memvid_adapter::capsule::ExportOptions;
 
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join("encrypt_test.mv2");
@@ -5701,10 +5678,7 @@ fn test_export_encrypted_roundtrip() {
         "encrypted export file should exist"
     );
     assert!(
-        result
-            .output_path
-            .extension()
-            .map_or(false, |e| e == "mv2e"),
+        result.output_path.extension().is_some_and(|e| e == "mv2e"),
         "export should have .mv2e extension"
     );
     assert!(result.bytes_written > 0, "should have written bytes");
@@ -6003,13 +5977,12 @@ fn test_safe_export_excludes_full_io_model_calls() {
 
     // Verify source capsule has both events
     let all_events = handle.list_events();
-    let model_call_events: Vec<_> = all_events
+    let model_call_count = all_events
         .iter()
         .filter(|e| e.event_type == EventType::ModelCallEnvelope)
-        .collect();
+        .count();
     assert_eq!(
-        model_call_events.len(),
-        2,
+        model_call_count, 2,
         "Source should have 2 model call events"
     );
 
@@ -6268,15 +6241,11 @@ fn test_import_mv2_happy_path() {
 
     // Verify CapsuleImported event was emitted
     let events = workspace_handle.list_events();
-    let import_events: Vec<_> = events
+    let import_count = events
         .iter()
         .filter(|e| e.event_type == EventType::CapsuleImported)
-        .collect();
-    assert_eq!(
-        import_events.len(),
-        1,
-        "should have one CapsuleImported event"
-    );
+        .count();
+    assert_eq!(import_count, 1, "should have one CapsuleImported event");
 }
 
 /// P0-5: Import .mv2e encrypted capsule happy path.
@@ -6499,7 +6468,7 @@ fn test_gc_retention_deletes_old_preserves_new() {
     // Set mtimes: old = 40 days ago, new = 1 day ago
     let now = std::time::SystemTime::now();
     let old_time = now - std::time::Duration::from_secs(40 * 86400);
-    let new_time = now - std::time::Duration::from_secs(1 * 86400);
+    let new_time = now - std::time::Duration::from_secs(86400);
     set_file_mtime(&old_export, FileTime::from_system_time(old_time)).expect("set old mtime");
     set_file_mtime(&new_export, FileTime::from_system_time(new_time)).expect("set new mtime");
 
@@ -6622,20 +6591,16 @@ fn test_gc_audit_event_persisted() {
     // Reopen and verify audit event persisted
     let handle2 = CapsuleHandle::open(config).expect("reopen capsule");
     let events = handle2.list_events();
-    let gc_events: Vec<_> = events
-        .iter()
-        .filter(|e| {
-            e.event_type == EventType::GateDecision
-                && e.payload
-                    .get("gate_name")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s == "CapsuleGC")
-                    .unwrap_or(false)
-        })
-        .collect();
+    let has_gc_event = events.iter().any(|e| {
+        e.event_type == EventType::GateDecision
+            && e.payload
+                .get("gate_name")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| s == "CapsuleGC")
+    });
 
     assert!(
-        !gc_events.is_empty(),
+        has_gc_event,
         "GC audit event (GateDecision with gate_name=CapsuleGC) should be persisted after reopen"
     );
 }
@@ -6738,15 +6703,11 @@ fn test_import_creates_mount_file_and_registry() {
 
     // Verify CapsuleImported event was emitted
     let events = workspace_handle.list_events();
-    let import_events: Vec<_> = events
+    let import_count = events
         .iter()
         .filter(|e| e.event_type == EventType::CapsuleImported)
-        .collect();
-    assert_eq!(
-        import_events.len(),
-        1,
-        "should have one CapsuleImported event"
-    );
+        .count();
+    assert_eq!(import_count, 1, "should have one CapsuleImported event");
 }
 
 /// S974-mount: Invalid mount name (path traversal) fails without creating files.
@@ -6908,13 +6869,12 @@ fn test_import_idempotent_same_hash() {
 
     // Verify only ONE CapsuleImported event (from first import)
     let events = workspace_handle.list_events();
-    let import_events: Vec<_> = events
+    let import_count = events
         .iter()
         .filter(|e| e.event_type == EventType::CapsuleImported)
-        .collect();
+        .count();
     assert_eq!(
-        import_events.len(),
-        1,
+        import_count, 1,
         "Should have exactly one CapsuleImported event"
     );
 }

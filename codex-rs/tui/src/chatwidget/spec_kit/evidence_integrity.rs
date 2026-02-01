@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 // ============================================================================
@@ -172,7 +172,7 @@ fn collect_files_with_checksums(root: &Path, base: &Path) -> io::Result<Vec<File
         } else {
             let relative_path = path
                 .strip_prefix(base)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+                .map_err(io::Error::other)?
                 .to_string_lossy()
                 .to_string();
 
@@ -242,8 +242,7 @@ pub fn create_archive_with_checksum(
     }
 
     // Serialize and add manifest
-    let manifest_json = serde_json::to_string_pretty(&manifest)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let manifest_json = serde_json::to_string_pretty(&manifest).map_err(io::Error::other)?;
 
     let manifest_bytes = manifest_json.as_bytes();
     let mut header = tar::Header::new_gnu();

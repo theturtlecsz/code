@@ -262,7 +262,7 @@ impl BranchId {
     }
 
     /// Create a BranchId from a string (for deserialization).
-    pub fn from_str(s: &str) -> Self {
+    pub fn new(s: &str) -> Self {
         BranchId(s.to_string())
     }
 
@@ -434,7 +434,7 @@ impl EventType {
     /// Parse event type from string.
     ///
     /// Used for CLI filtering (e.g., `--type ToolCall`).
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "StageTransition" => Some(EventType::StageTransition),
             "PolicySnapshotRef" => Some(EventType::PolicySnapshotRef),
@@ -835,7 +835,7 @@ impl UriIndex {
     ///
     /// Used during scan_and_rebuild to restore historical snapshots.
     pub fn import_snapshot(&mut self, snapshot: UriIndexSnapshot) {
-        let branch = BranchId::from_str(&snapshot.branch_id);
+        let branch = BranchId::new(&snapshot.branch_id);
         let checkpoint = CheckpointId::new(snapshot.checkpoint_id);
         let key = (branch, checkpoint);
 
@@ -925,7 +925,7 @@ impl UriIndex {
         for cp in checkpoints {
             // Determine branch from checkpoint metadata
             let branch = if let Some(ref branch_str) = cp.branch_id {
-                BranchId::from_str(branch_str)
+                BranchId::new(branch_str)
             } else if let Some(ref run_id) = cp.run_id {
                 // Fallback for older checkpoints without explicit branch_id
                 BranchId::for_run(run_id)
@@ -974,10 +974,11 @@ pub struct PhysicalPointer {
 /// ## CRITICAL: Use curated|full, NOT squash|ff
 /// Per architect feedback: "define a shared enum/type used by CLI/TUI + adapter
 /// so nobody reintroduces squash|ff in code."
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MergeMode {
     /// Default: promote curated artifacts + graph deltas + summary events.
     /// Debug/telemetry stays run-isolated.
+    #[default]
     Curated,
 
     /// Escape hatch: promote everything (deep audit / incident review).
@@ -990,12 +991,6 @@ impl MergeMode {
             MergeMode::Curated => "curated",
             MergeMode::Full => "full",
         }
-    }
-}
-
-impl Default for MergeMode {
-    fn default() -> Self {
-        MergeMode::Curated
     }
 }
 
@@ -1101,7 +1096,7 @@ impl LLMCaptureMode {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "none" => Some(LLMCaptureMode::None),
             "prompts_only" => Some(LLMCaptureMode::PromptsOnly),
@@ -1284,7 +1279,7 @@ impl BreakerState {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "closed" => Some(BreakerState::Closed),
             "open" => Some(BreakerState::Open),
@@ -1608,7 +1603,7 @@ impl CardType {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "spec" => Some(CardType::Spec),
             "decision" => Some(CardType::Decision),
@@ -1671,7 +1666,7 @@ impl EdgeType {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "depends_on" => Some(EdgeType::DependsOn),
             "blocks" => Some(EdgeType::Blocks),
@@ -2008,7 +2003,7 @@ mod type_tests {
         // Verify each variant can be parsed
         for variant_str in variants {
             assert!(
-                EventType::from_str(variant_str).is_some(),
+                EventType::parse(variant_str).is_some(),
                 "Failed to parse variant: {}",
                 variant_str
             );
@@ -2082,7 +2077,7 @@ mod type_tests {
             LLMCaptureMode::FullIo,
         ] {
             let s = mode.as_str();
-            let parsed = LLMCaptureMode::from_str(s);
+            let parsed = LLMCaptureMode::parse(s);
             assert_eq!(parsed, Some(*mode), "Round-trip failed for {:?}", mode);
         }
     }
@@ -2090,19 +2085,16 @@ mod type_tests {
     #[test]
     fn llm_capture_mode_backward_compat() {
         // Old values should map to new enum variants
-        assert_eq!(LLMCaptureMode::from_str("off"), Some(LLMCaptureMode::None));
+        assert_eq!(LLMCaptureMode::parse("off"), Some(LLMCaptureMode::None));
         assert_eq!(
-            LLMCaptureMode::from_str("hash"),
+            LLMCaptureMode::parse("hash"),
             Some(LLMCaptureMode::PromptsOnly)
         );
         assert_eq!(
-            LLMCaptureMode::from_str("summary"),
+            LLMCaptureMode::parse("summary"),
             Some(LLMCaptureMode::PromptsOnly)
         );
-        assert_eq!(
-            LLMCaptureMode::from_str("full"),
-            Some(LLMCaptureMode::FullIo)
-        );
+        assert_eq!(LLMCaptureMode::parse("full"), Some(LLMCaptureMode::FullIo));
     }
 
     #[test]

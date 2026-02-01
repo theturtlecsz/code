@@ -639,6 +639,7 @@ fn rebuild_vision_projection(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
     use tempfile::TempDir;
 
     #[test]

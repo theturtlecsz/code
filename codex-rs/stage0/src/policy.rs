@@ -335,7 +335,7 @@ impl GovernancePolicy {
     pub fn from_toml(content: &str) -> Result<Self, String> {
         // Parse as generic toml::Value first
         let value: toml::Value =
-            toml::from_str(content).map_err(|e| format!("TOML parse error: {}", e))?;
+            toml::from_str(content).map_err(|e| format!("TOML parse error: {e}"))?;
 
         // Extract sections with defaults for missing fields
         let meta = Self::parse_meta(&value);
@@ -390,7 +390,7 @@ impl GovernancePolicy {
                 .to_string(),
             fallback_enabled: sor
                 .and_then(|s| s.get("fallback_enabled"))
-                .and_then(|v| v.as_bool())
+                .and_then(toml::Value::as_bool)
                 .unwrap_or(true),
         }
     }
@@ -450,42 +450,42 @@ impl GovernancePolicy {
             reflex: ReflexRouting {
                 enabled: reflex
                     .and_then(|r| r.get("enabled"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(false),
                 endpoint: reflex
                     .and_then(|r| r.get("endpoint"))
-                    .and_then(|v| v.as_str())
+                    .and_then(toml::Value::as_str)
                     .unwrap_or("http://127.0.0.1:3009/v1")
                     .to_string(),
                 model: reflex
                     .and_then(|r| r.get("model"))
-                    .and_then(|v| v.as_str())
+                    .and_then(toml::Value::as_str)
                     .unwrap_or("")
                     .to_string(),
                 timeout_ms: reflex
                     .and_then(|r| r.get("timeout_ms"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(1500) as u64,
                 json_schema_required: reflex
                     .and_then(|r| r.get("json_schema_required"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(true),
                 fallback_to_cloud: reflex
                     .and_then(|r| r.get("fallback_to_cloud"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(true),
                 thresholds: ReflexThresholds {
                     p95_latency_ms: thresholds
                         .and_then(|t| t.get("p95_latency_ms"))
-                        .and_then(|v| v.as_integer())
+                        .and_then(toml::Value::as_integer)
                         .unwrap_or(2000) as u64,
                     success_parity_percent: thresholds
                         .and_then(|t| t.get("success_parity_percent"))
-                        .and_then(|v| v.as_integer())
+                        .and_then(toml::Value::as_integer)
                         .unwrap_or(85) as u8,
                     json_schema_compliance_percent: thresholds
                         .and_then(|t| t.get("json_schema_compliance_percent"))
-                        .and_then(|v| v.as_integer())
+                        .and_then(toml::Value::as_integer)
                         .unwrap_or(100) as u8,
                 },
             },
@@ -502,7 +502,7 @@ impl GovernancePolicy {
                 .to_string(),
             store_embeddings: capture
                 .and_then(|c| c.get("store_embeddings"))
-                .and_then(|v| v.as_bool())
+                .and_then(toml::Value::as_bool)
                 .unwrap_or(true),
         }
     }
@@ -516,45 +516,45 @@ impl GovernancePolicy {
             tokens: TokenBudgets {
                 plan: tokens
                     .and_then(|t| t.get("plan"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(8000) as u32,
                 tasks: tokens
                     .and_then(|t| t.get("tasks"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(4000) as u32,
                 implement: tokens
                     .and_then(|t| t.get("implement"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(6000) as u32,
                 validate: tokens
                     .and_then(|t| t.get("validate"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(4000) as u32,
                 audit: tokens
                     .and_then(|t| t.get("audit"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(4000) as u32,
                 unlock: tokens
                     .and_then(|t| t.get("unlock"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(2000) as u32,
             },
             cost: CostBudgets {
                 warn_threshold: cost
                     .and_then(|c| c.get("warn_threshold"))
-                    .and_then(|v| v.as_float())
+                    .and_then(toml::Value::as_float)
                     .unwrap_or(5.0),
                 confirm_threshold: cost
                     .and_then(|c| c.get("confirm_threshold"))
-                    .and_then(|v| v.as_float())
+                    .and_then(toml::Value::as_float)
                     .unwrap_or(10.0),
                 hard_limit: cost
                     .and_then(|c| c.get("hard_limit"))
-                    .and_then(|v| v.as_float())
+                    .and_then(toml::Value::as_float)
                     .unwrap_or(25.0),
                 hard_limit_enabled: cost
                     .and_then(|c| c.get("hard_limit_enabled"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(false),
             },
         }
@@ -565,27 +565,27 @@ impl GovernancePolicy {
         ScoringConfig {
             usage: scoring
                 .and_then(|s| s.get("usage"))
-                .and_then(|v| v.as_float())
+                .and_then(toml::Value::as_float)
                 .unwrap_or(0.30) as f32,
             recency: scoring
                 .and_then(|s| s.get("recency"))
-                .and_then(|v| v.as_float())
+                .and_then(toml::Value::as_float)
                 .unwrap_or(0.30) as f32,
             priority: scoring
                 .and_then(|s| s.get("priority"))
-                .and_then(|v| v.as_float())
+                .and_then(toml::Value::as_float)
                 .unwrap_or(0.25) as f32,
             decay: scoring
                 .and_then(|s| s.get("decay"))
-                .and_then(|v| v.as_float())
+                .and_then(toml::Value::as_float)
                 .unwrap_or(0.15) as f32,
             vector_weight: scoring
                 .and_then(|s| s.get("vector_weight"))
-                .and_then(|v| v.as_float())
+                .and_then(toml::Value::as_float)
                 .unwrap_or(0.6) as f32,
             lexical_weight: scoring
                 .and_then(|s| s.get("lexical_weight"))
-                .and_then(|v| v.as_float())
+                .and_then(toml::Value::as_float)
                 .unwrap_or(0.4) as f32,
         }
     }
@@ -599,42 +599,42 @@ impl GovernancePolicy {
             reflex_promotion: ReflexPromotionGate {
                 p95_latency_ms: reflex
                     .and_then(|r| r.get("p95_latency_ms"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(2000) as u64,
                 success_parity_percent: reflex
                     .and_then(|r| r.get("success_parity_percent"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(85) as u8,
                 json_schema_compliance_percent: reflex
                     .and_then(|r| r.get("json_schema_compliance_percent"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(100) as u8,
                 golden_query_regression_allowed: reflex
                     .and_then(|r| r.get("golden_query_regression_allowed"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(false),
             },
             local_memory_sunset: LocalMemorySunsetGate {
                 // SPEC-KIT-979: Current sunset phase (0=active, 1=warning, 2=force-required, 3=removed)
                 current_phase: lm_sunset
                     .and_then(|l| l.get("current_phase"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(0) as u8,
                 retrieval_p95_parity: lm_sunset
                     .and_then(|l| l.get("retrieval_p95_parity"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(true),
                 search_quality_parity: lm_sunset
                     .and_then(|l| l.get("search_quality_parity"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(true),
                 stability_days: lm_sunset
                     .and_then(|l| l.get("stability_days"))
-                    .and_then(|v| v.as_integer())
+                    .and_then(toml::Value::as_integer)
                     .unwrap_or(30) as u32,
                 zero_fallback_activations: lm_sunset
                     .and_then(|l| l.get("zero_fallback_activations"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(true),
             },
         }
@@ -669,15 +669,15 @@ impl GovernancePolicy {
             export: ExportConfig {
                 require_explicit_action: export
                     .and_then(|e| e.get("require_explicit_action"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(true),
                 allow_no_export_marking: export
                     .and_then(|e| e.get("allow_no_export_marking"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(true),
                 encrypt_at_rest: export
                     .and_then(|e| e.get("encrypt_at_rest"))
-                    .and_then(|v| v.as_bool())
+                    .and_then(toml::Value::as_bool)
                     .unwrap_or(false),
             },
         }
@@ -936,12 +936,11 @@ impl PolicyStore {
             let entry = entry?;
             let path = entry.path();
 
-            if path.extension().map(|e| e == "json").unwrap_or(false) {
-                if let Ok(json) = std::fs::read_to_string(&path) {
-                    if let Ok(snapshot) = PolicySnapshot::from_json(&json) {
-                        infos.push(snapshot.info());
-                    }
-                }
+            if path.extension().map(|e| e == "json").unwrap_or(false)
+                && let Ok(json) = std::fs::read_to_string(&path)
+                && let Ok(snapshot) = PolicySnapshot::from_json(&json)
+            {
+                infos.push(snapshot.info());
             }
         }
 
@@ -1168,8 +1167,8 @@ impl PolicyDiff {
         Self::diff_weights(&a.weights, &b.weights, &mut changes);
 
         // Source files changes (as a single field)
-        let a_sources: Vec<&str> = a.source_files.iter().map(|s| s.as_str()).collect();
-        let b_sources: Vec<&str> = b.source_files.iter().map(|s| s.as_str()).collect();
+        let a_sources: Vec<&str> = a.source_files.iter().map(String::as_str).collect();
+        let b_sources: Vec<&str> = b.source_files.iter().map(String::as_str).collect();
         if a_sources != b_sources {
             changes.push(PolicyFieldChange {
                 path: "source_files".to_string(),
@@ -1461,7 +1460,7 @@ impl PolicyDiff {
 
         output.push_str("Changed keys:\n");
         for key in self.changed_keys() {
-            output.push_str(&format!("  - {}\n", key));
+            output.push_str(&format!("  - {key}\n"));
         }
 
         output

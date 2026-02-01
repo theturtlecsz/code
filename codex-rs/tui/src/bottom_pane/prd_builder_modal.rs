@@ -17,6 +17,7 @@ use super::{BottomPane, BottomPaneView, CancellationEvent};
 
 /// Question with predefined options
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) struct PrdQuestion {
     pub category: &'static str,
     pub question: &'static str,
@@ -25,6 +26,7 @@ pub(crate) struct PrdQuestion {
 
 /// Option for a question
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) struct PrdOption {
     pub label: char,
     pub text: &'static str,

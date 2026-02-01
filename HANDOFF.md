@@ -1,3 +1,47 @@
+# HANDOFF: MAINT-930 Post-Fix Clippy Cleanup
+
+**Generated:** 2026-02-01
+**Audience:** Next session
+**Scope:** `codex-rs` / Clippy warning cleanup after MAINT-930 strict gates
+
+***
+
+## TL;DR (Current State)
+
+**Phase 1-2: Dead Code Triage & Fixes - 100% COMPLETE**
+**Phase 3: Clippy Lints - 100% COMPLETE**
+
+Build Status: COMPILING CLEANLY (clippy passes with -D warnings)
+
+## Restart Prompt
+
+```
+Continue MAINT-930 on branch fix/warnings-post-maint-930.
+
+## Status
+Clippy cleanup complete. Final validation before PR.
+
+## Validation Commands
+1. cd codex-rs && cargo fmt --all -- --check
+2. cd codex-rs && cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings
+3. cd codex-rs && cargo clippy -p codex-tui2 --lib -- -D warnings
+4. cd codex-rs && cargo test -p codex-cli --test speckit
+5. cd codex-rs && cargo test -p codex-tui --test evidence_archival_tests --test evidence_integrity_tests --test stage0_integration_tests
+6. cd codex-rs && cargo build -p codex-tui2
+
+## Notes
+- tui2 library builds and passes clippy; tests gated by `tui2-legacy-tests` feature due to ~475 API drift errors
+- ARB Pass2 registry updated: tests 11-13 now active (MAINT-930)
+- user_approval_widget tests converted to async with try_recv() drain pattern
+
+## If All Pass
+Create PR to main, merge, delete branch.
+```
+
+***
+
+# Previous Handoff Content (SPEC-KIT-981/982)
+
 # HANDOFF: SPEC-KIT-981/982 Implementation Progress
 
 **Generated:** 2026-01-31

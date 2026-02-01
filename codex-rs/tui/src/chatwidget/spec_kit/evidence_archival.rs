@@ -58,7 +58,7 @@ impl MockClock {
 
     /// Advance the clock by the specified duration.
     pub fn advance(&mut self, duration: Duration) {
-        self.current_time = self.current_time + duration;
+        self.current_time += duration;
     }
 }
 
@@ -418,7 +418,7 @@ pub fn validate_archive_before_purge(
         .filter(|s| s.status == ArchivalStatus::Purgeable)
         .filter_map(|s| {
             // Check if archive exists for this SPEC
-            let archive_pattern = evidence_root
+            let _archive_pattern = evidence_root
                 .join("archives")
                 .join(format!("{}-*.tar.gz", s.spec_id));
             // Simple check: if archives/ dir exists and contains this spec's archive

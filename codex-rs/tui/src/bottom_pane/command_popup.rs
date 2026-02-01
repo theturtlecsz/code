@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn filter_includes_init_when_typing_prefix() {
-        let mut popup = CommandPopup::new(Vec::new());
+        let mut popup = CommandPopup::new();
         // Simulate the composer line starting with '/in' so the popup filters
         // matching commands by prefix.
         popup.on_composer_text_change("/in".to_string());
@@ -291,7 +291,7 @@ mod tests {
         let matches = popup.filtered_items();
         let has_init = matches.iter().any(|item| match item {
             CommandItem::Builtin(cmd) => cmd.command() == "init",
-            CommandItem::UserPrompt(_) => false,
+            CommandItem::UserPrompt(_) | CommandItem::Subagent(_) => false,
         });
         assert!(
             has_init,
@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn selecting_init_by_exact_match() {
-        let mut popup = CommandPopup::new(Vec::new());
+        let mut popup = CommandPopup::new();
         popup.on_composer_text_change("/init".to_string());
 
         // When an exact match exists, the selected command should be that
@@ -309,7 +309,9 @@ mod tests {
         let selected = popup.selected_item();
         match selected {
             Some(CommandItem::Builtin(cmd)) => assert_eq!(cmd.command(), "init"),
-            Some(CommandItem::UserPrompt(_)) => panic!("unexpected prompt selected for '/init'"),
+            Some(CommandItem::UserPrompt(_) | CommandItem::Subagent(_)) => {
+                panic!("unexpected item selected for '/init'")
+            }
             None => panic!("expected a selected command for exact match"),
         }
     }
@@ -328,7 +330,8 @@ mod tests {
                 content: "hello from bar".to_string(),
             },
         ];
-        let popup = CommandPopup::new(prompts);
+        let mut popup = CommandPopup::new();
+        popup.set_prompts(prompts);
         let items = popup.filtered_items();
         let mut prompt_names: Vec<String> = items
             .into_iter()
@@ -344,7 +347,8 @@ mod tests {
     #[test]
     fn prompt_name_collision_with_builtin_is_ignored() {
         // Create a prompt named like a builtin (e.g. "init").
-        let popup = CommandPopup::new(vec![CustomPrompt {
+        let mut popup = CommandPopup::new();
+        popup.set_prompts(vec![CustomPrompt {
             name: "init".to_string(),
             path: "/tmp/init.md".to_string().into(),
             content: "should be ignored".to_string(),

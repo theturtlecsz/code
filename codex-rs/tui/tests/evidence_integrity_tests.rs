@@ -19,7 +19,7 @@ use codex_tui::evidence_integrity::{
     create_archive_with_checksum, create_manifest, extract_manifest, restore_archive,
     verify_archive_contents, verify_archive_integrity,
 };
-use std::fs::{self, File};
+use std::fs;
 use std::io::Write;
 use tempfile::TempDir;
 
@@ -56,7 +56,7 @@ fn create_valid_archive(
     let evidence_root = temp_dir.path();
     create_test_evidence(evidence_root, spec_id);
 
-    let archive_path = temp_dir.path().join(format!("{}.tar.gz", spec_id));
+    let archive_path = temp_dir.path().join(format!("{spec_id}.tar.gz"));
     let manifest = create_archive_with_checksum(spec_id, evidence_root, &archive_path).unwrap();
 
     (archive_path, manifest)
@@ -204,14 +204,13 @@ fn test_verify_valid_archive_succeeds() {
 
     // Verify archive checksum
     let result = verify_archive_integrity(&archive_path, &manifest.archive_checksum).unwrap();
-    assert!(result.is_valid(), "Valid archive should pass: {:?}", result);
+    assert!(result.is_valid(), "Valid archive should pass: {result:?}");
 
     // Verify all file contents
     let contents_result = verify_archive_contents(&archive_path).unwrap();
     assert!(
         contents_result.is_valid(),
-        "Valid archive contents should pass: {:?}",
-        contents_result
+        "Valid archive contents should pass: {contents_result:?}"
     );
 }
 
@@ -249,8 +248,7 @@ fn test_verify_corrupted_archive_fails() {
 
     assert!(
         matches!(result, IntegrityResult::ChecksumMismatch { .. }),
-        "Corrupted archive should fail checksum: {:?}",
-        result
+        "Corrupted archive should fail checksum: {result:?}"
     );
 }
 
@@ -265,8 +263,7 @@ fn test_verify_nonexistent_archive() {
 
     assert!(
         matches!(result, IntegrityResult::Corrupted { .. }),
-        "Nonexistent archive should return Corrupted: {:?}",
-        result
+        "Nonexistent archive should return Corrupted: {result:?}"
     );
 }
 
@@ -285,7 +282,7 @@ fn test_verify_wrong_checksum() {
             assert_eq!(expected, wrong_checksum);
             assert_ne!(actual, wrong_checksum);
         }
-        _ => panic!("Expected ChecksumMismatch, got {:?}", result),
+        _ => panic!("Expected ChecksumMismatch, got {result:?}"),
     }
 }
 
@@ -306,7 +303,7 @@ fn test_restore_rejects_checksum_mismatch() {
     // Corrupt the archive content by overwriting bytes in the middle
     // This will corrupt either the gzip header or the tar content
     let original_content = fs::read(&archive_path).unwrap();
-    let mut corrupted = original_content.clone();
+    let mut corrupted = original_content;
     if corrupted.len() > 100 {
         // Overwrite some bytes in the middle (affects gzip/tar parsing)
         corrupted[50] = 0xFF;

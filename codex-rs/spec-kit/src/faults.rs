@@ -17,7 +17,7 @@
 //!
 //! Pattern source: Auto Drive `faults.rs`
 
-#![cfg(feature = "dev-faults")]
+// Note: #[cfg(feature = "dev-faults")] is specified at the module inclusion site (lib.rs)
 #![allow(clippy::unwrap_used)] // Fault injection: panicking on poisoned lock is acceptable
 
 use anyhow::anyhow;
@@ -86,10 +86,10 @@ fn parse_reset_hint() -> Option<FaultReset> {
     }
 
     // Try parsing as "now+Ns" format
-    if let Some(stripped) = value.strip_prefix("now+") {
-        if let Ok(seconds) = stripped.trim_end_matches('s').parse::<u64>() {
-            return Some(FaultReset::Seconds(seconds));
-        }
+    if let Some(stripped) = value.strip_prefix("now+")
+        && let Ok(seconds) = stripped.trim_end_matches('s').parse::<u64>()
+    {
+        return Some(FaultReset::Seconds(seconds));
     }
 
     // Try parsing as RFC3339 timestamp
@@ -116,45 +116,45 @@ fn parse_timeout_duration() -> u64 {
 fn init_config() -> HashMap<FaultScope, FaultConfig> {
     let mut map = HashMap::new();
 
-    if let Some(scope) = parse_fault_scope() {
-        if let Ok(spec) = std::env::var("CODEX_FAULTS") {
-            let cfg = FaultConfig::default();
-            let timeout_ms = parse_timeout_duration();
-            cfg.timeout_duration_ms
-                .store(timeout_ms as usize, Ordering::Relaxed);
+    if let Some(scope) = parse_fault_scope()
+        && let Ok(spec) = std::env::var("CODEX_FAULTS")
+    {
+        let cfg = FaultConfig::default();
+        let timeout_ms = parse_timeout_duration();
+        cfg.timeout_duration_ms
+            .store(timeout_ms as usize, Ordering::Relaxed);
 
-            for entry in spec.split(',').map(str::trim).filter(|s| !s.is_empty()) {
-                if let Some((label, count)) = entry.split_once(':') {
-                    if let Ok(num) = count.parse::<usize>() {
-                        match label {
-                            "disconnect" => cfg.disconnect.store(num, Ordering::Relaxed),
-                            "429" | "rate_limit" => cfg.rate_limit.store(num, Ordering::Relaxed),
-                            "timeout" => cfg.timeout.store(num, Ordering::Relaxed),
-                            _ => {
-                                tracing::warn!("[faults] Unknown fault type: {}", label);
-                            }
-                        }
+        for entry in spec.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            if let Some((label, count)) = entry.split_once(':')
+                && let Ok(num) = count.parse::<usize>()
+            {
+                match label {
+                    "disconnect" => cfg.disconnect.store(num, Ordering::Relaxed),
+                    "429" | "rate_limit" => cfg.rate_limit.store(num, Ordering::Relaxed),
+                    "timeout" => cfg.timeout.store(num, Ordering::Relaxed),
+                    _ => {
+                        tracing::warn!("[faults] Unknown fault type: {}", label);
                     }
                 }
             }
-
-            *cfg.rate_limit_reset.lock().unwrap() = parse_reset_hint();
-
-            // Log before moving into map
-            let disconnect_count = cfg.disconnect.load(Ordering::Relaxed);
-            let rate_limit_count = cfg.rate_limit.load(Ordering::Relaxed);
-            let timeout_count = cfg.timeout.load(Ordering::Relaxed);
-
-            map.insert(scope, cfg);
-
-            tracing::info!(
-                "[faults] Initialized for {:?}: disconnect={}, rate_limit={}, timeout={}",
-                scope,
-                disconnect_count,
-                rate_limit_count,
-                timeout_count
-            );
         }
+
+        *cfg.rate_limit_reset.lock().unwrap() = parse_reset_hint();
+
+        // Log before moving into map
+        let disconnect_count = cfg.disconnect.load(Ordering::Relaxed);
+        let rate_limit_count = cfg.rate_limit.load(Ordering::Relaxed);
+        let timeout_count = cfg.timeout.load(Ordering::Relaxed);
+
+        map.insert(scope, cfg);
+
+        tracing::info!(
+            "[faults] Initialized for {:?}: disconnect={}, rate_limit={}, timeout={}",
+            scope,
+            disconnect_count,
+            rate_limit_count,
+            timeout_count
+        );
     }
 
     map
@@ -314,6 +314,7 @@ mod tests {
         let fault = InjectedFault::RateLimit {
             reset_hint: Some(FaultReset::Seconds(60)),
         };
+        #[allow(clippy::redundant_clone)]
         let cloned = fault.clone();
         match cloned {
             InjectedFault::RateLimit {

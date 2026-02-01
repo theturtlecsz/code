@@ -8,6 +8,12 @@
 //! - 2: Hard fail (escalation / missing artifacts in strict mode)
 //! - 3: Infrastructure error
 
+// MAINT-930: Allow format string flexibility in test assertions
+#![allow(
+    clippy::uninlined_format_args,
+    clippy::redundant_closure_for_method_calls
+)]
+
 use std::fs;
 use std::path::Path;
 
@@ -3388,7 +3394,10 @@ fn capsule_checkpoints_json_returns_valid_schema() -> Result<()> {
     assert!(checkpoints.is_some(), "checkpoints should be an array");
 
     // Fresh capsule should have 0 checkpoints
-    let count = json.get("count").and_then(|v| v.as_u64()).unwrap_or(999);
+    let count = json
+        .get("count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(999);
     assert_eq!(count, 0, "Fresh capsule should have 0 checkpoints");
 
     Ok(())
@@ -3432,7 +3441,7 @@ fn capsule_commit_creates_checkpoint() -> Result<()> {
 
     let created = json
         .get("created")
-        .and_then(|v| v.as_bool())
+        .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
     assert!(created, "Checkpoint should be created");
 
@@ -3446,7 +3455,10 @@ fn capsule_commit_creates_checkpoint() -> Result<()> {
         .output()?;
 
     let json: JsonValue = serde_json::from_slice(&output.stdout)?;
-    let count = json.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+    let count = json
+        .get("count")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
     assert_eq!(count, 1, "Should have 1 checkpoint after commit");
 
     Ok(())
@@ -3545,10 +3557,7 @@ fn setup_spec_with_prd(repo_root: &Path, spec_id: &str) -> std::io::Result<std::
     )?;
     fs::write(
         spec_dir.join("spec.md"),
-        &format!(
-            "# {}\n\n## Overview\n\nTest spec for headless execution.\n",
-            spec_id
-        ),
+        format!("# {spec_id}\n\n## Overview\n\nTest spec for headless execution.\n"),
     )?;
 
     // Create minimal prompts.json for headless tests
@@ -3831,7 +3840,7 @@ fn test_run_with_execute_invokes_headless_runner() -> Result<()> {
     );
 
     // SPEC-KIT-900: Execute path should fail fast and honestly when agent config is missing
-    let exit_code = json.get("exit_code").and_then(|v| v.as_i64());
+    let exit_code = json.get("exit_code").and_then(serde_json::Value::as_i64);
     assert_eq!(
         exit_code,
         Some(3),
@@ -3842,8 +3851,7 @@ fn test_run_with_execute_invokes_headless_runner() -> Result<()> {
     let error = json.get("error").and_then(|v| v.as_str()).unwrap_or("");
     assert!(
         error.contains("Agent config") && error.contains("config.toml"),
-        "Error should mention missing agent config, got: {}",
-        error
+        "Error should mention missing agent config, got: {error}"
     );
 
     Ok(())
@@ -3909,7 +3917,9 @@ fn test_execute_and_validation_have_different_outputs() -> Result<()> {
     assert!(has_mode_execute, "Execute path should have mode=execute");
 
     // Execute returns exit code 3 (INFRA_ERROR) - prevents false-green when no artifacts
-    let exec_exit_code = json_exec.get("exit_code").and_then(|v| v.as_i64());
+    let exec_exit_code = json_exec
+        .get("exit_code")
+        .and_then(serde_json::Value::as_i64);
     assert_eq!(
         exec_exit_code,
         Some(3),
@@ -4016,7 +4026,7 @@ enabled = false
     )?;
 
     let current_path = std::env::var_os("PATH").unwrap_or_default();
-    let paths: Vec<_> = std::iter::once(bin_dir.clone())
+    let paths: Vec<_> = std::iter::once(bin_dir)
         .chain(std::env::split_paths(&current_path))
         .collect();
     let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
@@ -4055,8 +4065,7 @@ enabled = false
     // If a prompt was attempted, the process would have panicked
     assert!(
         !stderr.contains("CODEX_TEST_PANIC_ON_PROMPT"),
-        "Should not panic from prompt attempt in headless mode. stderr: {}",
-        stderr
+        "Should not panic from prompt attempt in headless mode. stderr: {stderr}"
     );
 
     // Parse JSON to verify execution completed
@@ -4070,7 +4079,10 @@ enabled = false
     })?;
 
     // Verify either success (0) or prompt_attempted (13) but NOT a panic
-    let exit_code = json.get("exit_code").and_then(|v| v.as_i64()).unwrap_or(-1);
+    let exit_code = json
+        .get("exit_code")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(-1);
     assert!(
         exit_code == 0 || exit_code == 13,
         "Expected exit_code 0 (success) or 13 (prompt_attempted), got {}\nJSON: {}\nstderr: {}",
@@ -4179,7 +4191,7 @@ enabled = false
     )?;
 
     let current_path = std::env::var_os("PATH").unwrap_or_default();
-    let paths: Vec<_> = std::iter::once(bin_dir.clone())
+    let paths: Vec<_> = std::iter::once(bin_dir)
         .chain(std::env::split_paths(&current_path))
         .collect();
     let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
@@ -4231,7 +4243,10 @@ enabled = false
     })?;
 
     // MAINT-930-B: Verify exit code 11 (NEEDS_APPROVAL)
-    let exit_code = json.get("exit_code").and_then(|v| v.as_i64()).unwrap_or(-1);
+    let exit_code = json
+        .get("exit_code")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(-1);
     assert_eq!(
         exit_code,
         11,
@@ -4346,7 +4361,7 @@ enabled = false
     )?;
 
     let current_path = std::env::var_os("PATH").unwrap_or_default();
-    let paths: Vec<_> = std::iter::once(bin_dir.clone())
+    let paths: Vec<_> = std::iter::once(bin_dir)
         .chain(std::env::split_paths(&current_path))
         .collect();
     let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
@@ -4423,7 +4438,7 @@ enabled = false
 
     let exit_code1 = json1
         .get("exit_code")
-        .and_then(|v| v.as_i64())
+        .and_then(serde_json::Value::as_i64)
         .unwrap_or(-1);
     assert_eq!(
         exit_code1, 0,
@@ -4605,7 +4620,7 @@ enabled = false
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     // Prepend bin/ to PATH so our gemini shim is found (portable across platforms)
     let current_path = std::env::var_os("PATH").unwrap_or_default();
-    let mut paths: Vec<_> = std::iter::once(bin_dir.clone())
+    let paths: Vec<_> = std::iter::once(bin_dir)
         .chain(std::env::split_paths(&current_path))
         .collect();
     let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
@@ -4655,7 +4670,7 @@ enabled = false
 
     // Verify exit code 0 (success)
     assert_eq!(
-        json.get("exit_code").and_then(|v| v.as_i64()),
+        json.get("exit_code").and_then(serde_json::Value::as_i64),
         Some(0),
         "Expected exit_code=0, got: {}\nstderr: {}",
         serde_json::to_string_pretty(&json).unwrap_or_default(),
@@ -4820,7 +4835,7 @@ enabled = false
 
     let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
     let current_path = std::env::var_os("PATH").unwrap_or_default();
-    let paths: Vec<_> = std::iter::once(bin_dir.clone())
+    let paths: Vec<_> = std::iter::once(bin_dir)
         .chain(std::env::split_paths(&current_path))
         .collect();
     let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
@@ -4864,7 +4879,7 @@ enabled = false
 
     // Verify exit code 0 (success)
     assert_eq!(
-        json.get("exit_code").and_then(|v| v.as_i64()),
+        json.get("exit_code").and_then(serde_json::Value::as_i64),
         Some(0),
         "Expected exit_code=0 for plan --execute, got: {}\nstderr: {}",
         serde_json::to_string_pretty(&json).unwrap_or_default(),
@@ -4978,7 +4993,7 @@ fn test_speckit_plan_headless_requires_maieutic() -> Result<()> {
     // Verify JSON contains NEEDS_INPUT exit reason
     let stdout = String::from_utf8_lossy(&output.stdout);
     if let Ok(json) = serde_json::from_str::<JsonValue>(&stdout) {
-        let exit_code = json.get("exit_code").and_then(|v| v.as_i64());
+        let exit_code = json.get("exit_code").and_then(serde_json::Value::as_i64);
         assert_eq!(
             exit_code,
             Some(10),
@@ -5031,7 +5046,7 @@ fn test_all_stages_headless_require_maieutic() -> Result<()> {
         let stdout = String::from_utf8_lossy(&output.stdout);
         if let Ok(json) = serde_json::from_str::<JsonValue>(&stdout) {
             assert_eq!(
-                json.get("exit_code").and_then(|v| v.as_i64()),
+                json.get("exit_code").and_then(serde_json::Value::as_i64),
                 Some(10),
                 "Stage '{}': JSON exit_code should be 10",
                 stage

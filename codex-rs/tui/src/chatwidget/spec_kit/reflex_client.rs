@@ -88,9 +88,11 @@ struct StreamChunk {
     choices: Vec<StreamChoice>,
 }
 
+// Serde: complete API response structure
 #[derive(Debug, Deserialize)]
 struct StreamChoice {
     delta: DeltaContent,
+    #[allow(dead_code)]
     finish_reason: Option<String>,
 }
 

@@ -36,7 +36,7 @@ impl SpecKitCommand for ProjectionsCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        let parts: Vec<&str> = args.trim().split_whitespace().collect();
+        let parts: Vec<&str> = args.split_whitespace().collect();
         let subcommand = parts.first().copied().unwrap_or("help");
 
         match subcommand {

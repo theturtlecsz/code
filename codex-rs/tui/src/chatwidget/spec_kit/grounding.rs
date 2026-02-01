@@ -1,5 +1,8 @@
 //! SPEC-KIT Phase 3B: Deep Grounding Capture
 //!
+// NOTE: Module contains planned infrastructure; allow dead_code during development.
+#![allow(dead_code)]
+//!
 //! Captures grounding artifacts (Architect Harvest + Stage0 Project Intel) during
 //! deep intake flows and persists them to capsule for replay/audit linking.
 //!
@@ -39,6 +42,7 @@ pub const GROUNDING_ARTIFACT_SCHEMA_VERSION: &str = "grounding_artifact@1.0";
 
 /// Progress updates for TUI feedback during grounding capture.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum GroundingProgress {
     /// Grounding capture starting
     Starting,
@@ -347,7 +351,7 @@ async fn run_architect_harvest_internal(
 // Internal: Project Intel
 // =============================================================================
 
-fn run_project_intel_internal(cwd: &Path) -> Result<ProjectIntelArtifacts, String> {
+fn run_project_intel_internal(_cwd: &Path) -> Result<ProjectIntelArtifacts, String> {
     let config = SnapshotConfig::default();
     let builder = ProjectSnapshotBuilder::new(config, "codex-rs");
 

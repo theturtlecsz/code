@@ -25,8 +25,8 @@ pub enum ProjectType {
 }
 
 impl ProjectType {
-    /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse from string representation
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "rust" | "rs" => Some(Self::Rust),
             "python" | "py" => Some(Self::Python),
@@ -1052,23 +1052,23 @@ mod tests {
 
     #[test]
     fn test_project_type_from_str() {
-        assert_eq!(ProjectType::from_str("rust"), Some(ProjectType::Rust));
-        assert_eq!(ProjectType::from_str("rs"), Some(ProjectType::Rust));
-        assert_eq!(ProjectType::from_str("RUST"), Some(ProjectType::Rust));
-        assert_eq!(ProjectType::from_str("python"), Some(ProjectType::Python));
-        assert_eq!(ProjectType::from_str("py"), Some(ProjectType::Python));
+        assert_eq!(ProjectType::parse("rust"), Some(ProjectType::Rust));
+        assert_eq!(ProjectType::parse("rs"), Some(ProjectType::Rust));
+        assert_eq!(ProjectType::parse("RUST"), Some(ProjectType::Rust));
+        assert_eq!(ProjectType::parse("python"), Some(ProjectType::Python));
+        assert_eq!(ProjectType::parse("py"), Some(ProjectType::Python));
         assert_eq!(
-            ProjectType::from_str("typescript"),
+            ProjectType::parse("typescript"),
             Some(ProjectType::TypeScript)
         );
-        assert_eq!(ProjectType::from_str("ts"), Some(ProjectType::TypeScript));
+        assert_eq!(ProjectType::parse("ts"), Some(ProjectType::TypeScript));
         // SPEC-KIT-961 Phase 6: Go project type
-        assert_eq!(ProjectType::from_str("go"), Some(ProjectType::Go));
-        assert_eq!(ProjectType::from_str("golang"), Some(ProjectType::Go));
-        assert_eq!(ProjectType::from_str("GO"), Some(ProjectType::Go));
-        assert_eq!(ProjectType::from_str("generic"), Some(ProjectType::Generic));
-        assert_eq!(ProjectType::from_str("gen"), Some(ProjectType::Generic));
-        assert_eq!(ProjectType::from_str("invalid"), None);
+        assert_eq!(ProjectType::parse("go"), Some(ProjectType::Go));
+        assert_eq!(ProjectType::parse("golang"), Some(ProjectType::Go));
+        assert_eq!(ProjectType::parse("GO"), Some(ProjectType::Go));
+        assert_eq!(ProjectType::parse("generic"), Some(ProjectType::Generic));
+        assert_eq!(ProjectType::parse("gen"), Some(ProjectType::Generic));
+        assert_eq!(ProjectType::parse("invalid"), None);
     }
 
     #[test]

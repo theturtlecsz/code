@@ -231,10 +231,7 @@ impl ProductKnowledgeEvidencePack {
         let hash = hasher.finalize();
 
         // Convert to hex string without extra dependencies
-        self.integrity.pack_sha256 = hash
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<String>();
+        self.integrity.pack_sha256 = hash.iter().map(|b| format!("{b:02x}")).collect::<String>();
     }
 }
 
@@ -1171,10 +1168,10 @@ pub fn filter_product_knowledge_results(
 /// Extract importance value from tags
 fn extract_importance_from_tags(tags: &[String]) -> Option<u8> {
     for tag in tags {
-        if let Some(val) = tag.strip_prefix("importance:") {
-            if let Ok(imp) = val.parse::<u8>() {
-                return Some(imp);
-            }
+        if let Some(val) = tag.strip_prefix("importance:")
+            && let Ok(imp) = val.parse::<u8>()
+        {
+            return Some(imp);
         }
     }
     None
@@ -1183,10 +1180,10 @@ fn extract_importance_from_tags(tags: &[String]) -> Option<u8> {
 /// Infer canonical type from tags
 fn infer_product_knowledge_type(tags: &[String]) -> Option<String> {
     for tag in tags {
-        if let Some(type_val) = tag.strip_prefix("type:") {
-            if PRODUCT_KNOWLEDGE_CANONICAL_TYPES.contains(&type_val) {
-                return Some(type_val.to_string());
-            }
+        if let Some(type_val) = tag.strip_prefix("type:")
+            && PRODUCT_KNOWLEDGE_CANONICAL_TYPES.contains(&type_val)
+        {
+            return Some(type_val.to_string());
         }
     }
     None
@@ -1243,7 +1240,7 @@ pub fn precheck_product_knowledge(
     let max_relevance = candidates
         .iter()
         .map(|c| c.relevance_score)
-        .fold(0.0_f64, |a, b| a.max(b));
+        .fold(0.0_f64, f64::max);
 
     // Determine if this is a hit
     let hit = !candidates.is_empty() && max_relevance >= threshold;
@@ -1313,7 +1310,7 @@ pub fn assemble_product_knowledge_lane(
             candidate.importance,
             candidate.tags.join(", ")
         ));
-        out.push_str(&format!("- **Why:** {}\n\n", why_included));
+        out.push_str(&format!("- **Why:** {why_included}\n\n"));
         out.push_str(&truncated_content);
         out.push_str("\n\n");
 
@@ -1321,10 +1318,7 @@ pub fn assemble_product_knowledge_lane(
         let mut hasher = Sha256::new();
         hasher.update(candidate.content.as_bytes());
         let hash = hasher.finalize();
-        let content_sha256 = hash
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<String>();
+        let content_sha256 = hash.iter().map(|b| format!("{b:02x}")).collect::<String>();
 
         // Build evidence item
         items.push(ProductKnowledgeItem {
@@ -1572,6 +1566,7 @@ type ConstitutionMeta = (u32, Option<String>, Option<DateTime<Utc>>);
 /// Follows docs/stage0/STAGE0_TASK_BRIEF_TEMPLATE.md structure with P85 Code Context.
 /// P90: Adds Section 0 (Project Constitution Summary) before Section 1.
 /// ADR-003: Adds Product Knowledge section after Code Context when enabled.
+#[allow(clippy::too_many_arguments)]
 fn assemble_task_brief(
     spec_id: &str,
     spec_content: &str,
@@ -2938,7 +2933,7 @@ mod tests {
         LocalMemorySummary {
             id: id.to_string(),
             domain: Some("codex-product".to_string()),
-            tags: tags.into_iter().map(|t| t.to_string()).collect(),
+            tags: tags.into_iter().map(str::to_string).collect(),
             created_at: Some(Utc::now()),
             snippet: snippet.to_string(),
             similarity_score: score,
@@ -3195,12 +3190,14 @@ mod tests {
     #[test]
     fn test_query_builder_deterministic() {
         // Create a test IQO with keywords
-        let mut iqo = Iqo::default();
-        iqo.keywords = vec![
-            "stage0".to_string(),
-            "context".to_string(),
-            "compilation".to_string(),
-        ];
+        let iqo = Iqo {
+            keywords: vec![
+                "stage0".to_string(),
+                "context".to_string(),
+                "compilation".to_string(),
+            ],
+            ..Default::default()
+        };
 
         let spec_content = "SPEC-001: Implement Stage0 context compilation for spec-kit";
 
@@ -3258,21 +3255,20 @@ mod tests {
         // Create many candidates
         let candidates: Vec<ProductKnowledgeCandidate> = (0..20)
             .map(|i| ProductKnowledgeCandidate {
-                id: format!("pk-{:03}", i),
+                id: format!("pk-{i:03}"),
                 item_type: "decision".to_string(),
                 importance: 8,
                 tags: vec!["type:decision".to_string()],
-                content: format!(
-                    "Content for item {} with some filler text to make it longer",
-                    i
-                ),
+                content: format!("Content for item {i} with some filler text to make it longer"),
                 relevance_score: 0.9 - (i as f64 * 0.01),
             })
             .collect();
 
-        let mut cfg = ProductKnowledgeConfig::default();
-        cfg.max_items = 5;
-        cfg.max_total_chars = 1000;
+        let cfg = ProductKnowledgeConfig {
+            max_items: 5,
+            max_total_chars: 1000,
+            ..Default::default()
+        };
 
         let result = assemble_product_knowledge_lane(&candidates, &cfg);
         assert!(result.is_some());
@@ -3302,8 +3298,7 @@ mod tests {
         for expected in expected_types {
             assert!(
                 PRODUCT_KNOWLEDGE_CANONICAL_TYPES.contains(&expected),
-                "Missing canonical type: {}",
-                expected
+                "Missing canonical type: {expected}"
             );
         }
 

@@ -14,10 +14,10 @@
 // SPEC-957: Allow test code flexibility
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use chrono::{Duration, Utc};
+use chrono::Duration;
 use codex_tui::evidence_archival::{
-    ArchivalConfig, ArchivalStatus, MockClock, get_archivable_specs, get_purgeable_specs,
-    get_spec_archival_info, is_spec_in_progress, validate_archive_before_purge,
+    ArchivalConfig, ArchivalStatus, MockClock, get_archivable_specs, get_spec_archival_info,
+    is_spec_in_progress, validate_archive_before_purge,
 };
 use std::fs;
 use tempfile::TempDir;
@@ -248,11 +248,12 @@ fn test_invalid_purge_before_archive_config() {
     fs::create_dir_all(evidence_root.join("commands")).unwrap();
 
     let clock = MockClock::fixed();
-    let mut config = ArchivalConfig::default();
-
     // Invalid: purge before archive
-    config.archive_after_days = 90;
-    config.purge_after_days = 30;
+    let config = ArchivalConfig {
+        archive_after_days: 90,
+        purge_after_days: 30,
+        ..Default::default()
+    };
 
     let result = validate_archive_before_purge(&clock, &config, evidence_root).unwrap();
     assert!(

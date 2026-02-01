@@ -38,8 +38,8 @@ impl SpecKitCommand for SpecKitPolicyCommand {
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
-        let parts: Vec<&str> = args.trim().split_whitespace().collect();
-        let subcommand = parts.first().map(|s| *s).unwrap_or("help");
+        let parts: Vec<&str> = args.split_whitespace().collect();
+        let subcommand = parts.first().copied().unwrap_or("help");
 
         match subcommand {
             "list" => execute_list(widget),

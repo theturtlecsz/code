@@ -18,6 +18,7 @@ use std::process::Command;
 
 /// Result of a successful stage commit.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct StageCommitResult {
     /// Short commit hash (7-8 chars)
     pub commit_hash: String,
@@ -240,10 +241,7 @@ pub fn get_head_commit_hash(cwd: &Path) -> Result<String> {
 // SPEC-KIT-971: Capsule Checkpoint Integration
 // =============================================================================
 
-use crate::memvid_adapter::{
-    BranchId, CapsuleConfig, CapsuleHandle, CheckpointId, DEFAULT_WORKSPACE_ID,
-    default_capsule_config,
-};
+use crate::memvid_adapter::{BranchId, CapsuleHandle, CheckpointId, default_capsule_config};
 
 /// Create a capsule checkpoint after stage completion.
 ///
@@ -409,6 +407,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>",
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memvid_adapter::{CapsuleConfig, DEFAULT_WORKSPACE_ID};
 
     #[test]
     fn test_format_stage_commit_message() {
@@ -616,7 +615,7 @@ mod tests {
         let expected_branch = format!("run/{}", run_id);
 
         // Create checkpoint (this internally switches to run branch)
-        let checkpoint_id =
+        let _checkpoint_id =
             create_capsule_checkpoint(spec_id, run_id, SpecStage::Plan, Some("abc1234"), cwd)
                 .expect("create checkpoint");
 

@@ -105,8 +105,7 @@ impl BakeoffReport {
         let md_path = eval_dir.join(format!("reflex-bakeoff-{}.md", timestamp_str));
 
         // Write JSON report
-        let json_content = serde_json::to_string_pretty(self)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let json_content = serde_json::to_string_pretty(self).map_err(std::io::Error::other)?;
         std::fs::write(&json_path, &json_content)?;
 
         // Write Markdown report
@@ -159,7 +158,7 @@ impl BakeoffReport {
             "| JSON Compliance Threshold | {}% |\n",
             self.config.json_compliance_threshold_pct
         ));
-        md.push_str("\n");
+        md.push('\n');
 
         // Threshold Checks
         md.push_str("## Threshold Checks\n\n");
@@ -177,7 +176,7 @@ impl BakeoffReport {
                 check.name, status, check.actual, check.threshold
             ));
         }
-        md.push_str("\n");
+        md.push('\n');
 
         // Statistics by mode
         md.push_str("## Statistics\n\n");
@@ -212,7 +211,7 @@ impl BakeoffReport {
                 "- **JSON Compliance Delta:** {:.1}%\n",
                 reflex.json_compliance_rate - cloud.json_compliance_rate
             ));
-            md.push_str("\n");
+            md.push('\n');
         }
 
         // Trial details
@@ -258,7 +257,7 @@ fn format_mode_stats(stats: &ModeStats) -> String {
     s.push_str(&format!("| P99 Latency | {}ms |\n", stats.p99_latency_ms));
     s.push_str(&format!("| Min Latency | {}ms |\n", stats.min_latency_ms));
     s.push_str(&format!("| Max Latency | {}ms |\n", stats.max_latency_ms));
-    s.push_str("\n");
+    s.push('\n');
     s
 }
 

@@ -26,7 +26,7 @@ members = [
     "spec-kit",  # MAINT-10: New crate (foundation phase)
     "stage0",  # SPEC-KIT-102: Stage 0 overlay engine
     "tui",
-    "tui2",  # SYNC-028: Viewport-based TUI
+    "tui2",
     "utils/absolute-path",  # SYNC-028: Path utilities for tui2
     "utils/readiness",
     "utils/string",  # SYNC-015: UTF-8 string utilities

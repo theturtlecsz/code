@@ -40,6 +40,8 @@ pub enum Stage0Progress {
     /// Querying Tier2 (NotebookLM)
     QueryingTier2,
     /// Tier2 query completed (with duration in ms)
+    /// Note: Reserved for progress reporting enhancement (ADR-003 Phase 2)
+    #[allow(dead_code)]
     Tier2Complete(u64),
     /// Finished with result summary
     Finished {
@@ -62,9 +64,12 @@ pub struct Stage0PendingOperation {
     pub result_rx: mpsc::Receiver<Stage0ExecutionResult>,
     /// Spec ID being processed
     pub spec_id: String,
+    // ADR-003 Phase 2: Reserved for async operation diagnostics
     /// Spec content
+    #[allow(dead_code)]
     pub spec_content: String,
     /// Stage0 execution config
+    #[allow(dead_code)]
     pub config: Stage0ExecutionConfig,
 }
 
@@ -130,13 +135,16 @@ pub struct Stage0ExecutionResult {
     /// CONVERGENCE: Tier2 skip reason (for diagnostics and pointer memory)
     pub tier2_skip_reason: Option<String>,
     // ─────────────────────────────────────────────────────────────────────────────
-    // ADR-003 Prompt F: Pre-check + Curation telemetry
+    // ADR-003 Prompt F: Pre-check + Curation telemetry (Phase 2 - not yet wired)
     // ─────────────────────────────────────────────────────────────────────────────
     /// Whether pre-check against codex-product hit (skipped Tier2)
+    #[allow(dead_code)]
     pub precheck_hit: bool,
     /// Number of pre-check candidates found
+    #[allow(dead_code)]
     pub precheck_candidates_found: usize,
     /// Number of insights curated after Tier2 (if curation enabled)
+    #[allow(dead_code)]
     pub curated_insights_count: usize,
     /// Pre-check trace for capsule event emission (Phase 2 ADR-003)
     pub precheck_trace: Option<PrecheckTrace>,
@@ -503,7 +511,7 @@ pub fn run_stage0_for_spec(
                             id: r.memory.id.clone()?,
                             domain: r.memory.domain.clone(),
                             tags: r.memory.tags.clone().unwrap_or_default(),
-                            created_at: r.memory.created_at.clone(),
+                            created_at: r.memory.created_at,
                             snippet: if r.memory.content.len() > 200 {
                                 format!("{}...", &r.memory.content[..200])
                             } else {
@@ -1120,7 +1128,7 @@ fn check_tier2_service_health(base_url: &str) -> Result<(), String> {
     // FILE-BASED TRACE: Tier2 health check (SPEC-DOGFOOD-001 S29)
     // SPEC-KIT-900 FIX: Use block_in_place to allow blocking reqwest calls
     // within an async tokio context.
-    let result = tokio::task::block_in_place(|| {
+    tokio::task::block_in_place(|| {
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(2))
             .build()
@@ -1133,9 +1141,7 @@ fn check_tier2_service_health(base_url: &str) -> Result<(), String> {
             Err(e) if e.is_connect() => Err("NotebookLM service not running".to_string()),
             Err(e) => Err(format!("NotebookLM service unreachable: {e}")),
         }
-    });
-
-    result
+    })
 }
 
 /// CONVERGENCE: Store Stage0 system pointer memory after artifacts are written

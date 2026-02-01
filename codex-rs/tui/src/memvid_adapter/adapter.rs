@@ -1302,7 +1302,7 @@ mod adapter_tests {
     // SPEC-KIT-972: Search tests
     // =========================================================================
 
-    use codex_stage0::dcc::{Iqo, LocalMemoryClient as _};
+    use codex_stage0::dcc::Iqo;
 
     #[tokio::test]
     async fn test_search_memories_basic_keyword_search() {
@@ -1745,7 +1745,7 @@ mod adapter_tests {
 
         let results = adapter.search_memories(params).await.unwrap();
 
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         // The one with more "Rust" mentions should score higher
         assert_eq!(results[0].id, "mem-high");
         assert!(results[0].similarity_score > 0.0);

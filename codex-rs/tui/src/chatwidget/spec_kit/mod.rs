@@ -168,17 +168,14 @@ pub(crate) use spec_intake_handler::{on_spec_intake_cancelled, on_spec_intake_su
 // Re-export project intake handler functions
 pub(crate) use project_intake_handler::{on_project_intake_cancelled, on_project_intake_submitted};
 
-pub(crate) use pipeline_coordinator::{
-    PendingIntakeBackfill, PendingMaieutic, cancel_pipeline_after_intake_backfill,
-    cancel_pipeline_after_maieutic, resume_pipeline_after_intake_backfill,
-    resume_pipeline_after_maieutic,
-};
+pub(crate) use pipeline_coordinator::{PendingIntakeBackfill, PendingMaieutic};
 
 // Re-export projectnew state types
-pub(crate) use commands::projectnew::{PendingProjectNew, ProjectNewPhase};
+pub(crate) use commands::projectnew::PendingProjectNew;
 
 // Re-export event emitter types (SPEC-KIT-975)
-pub use event_emitter::{AuditEventEmitter, RunContext};
+#[allow(unused_imports)]
+pub use event_emitter::AuditEventEmitter;
 
 // Re-export quality gate functions
 pub use quality::{

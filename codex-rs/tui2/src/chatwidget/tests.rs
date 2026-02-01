@@ -12,8 +12,8 @@ use codex_common::approval_presets::builtin_approval_presets;
 use codex_core::AuthManager;
 use codex_core::CodexAuth;
 use codex_core::config::Config;
-use codex_core::config::ConfigBuilder;
-use codex_core::config::Constrained;
+use codex_core::config::ConfigOverrides;
+use codex_core::config::ConfigToml;
 use codex_core::protocol::AgentMessageDeltaEvent;
 use codex_core::protocol::AgentMessageEvent;
 use codex_core::protocol::AgentReasoningDeltaEvent;
@@ -73,14 +73,16 @@ fn set_windows_sandbox_enabled(enabled: bool) {
     codex_core::set_windows_sandbox_enabled(enabled);
 }
 
-async fn test_config() -> Config {
+fn test_config() -> Config {
     // Use base defaults to avoid depending on host state.
-    let codex_home = std::env::temp_dir();
-    ConfigBuilder::default()
-        .codex_home(codex_home.clone())
-        .build()
-        .await
-        .expect("config")
+    let mut overrides = ConfigOverrides::default();
+    overrides.cwd = Some(std::env::temp_dir());
+    Config::load_from_base_config_with_overrides(
+        ConfigToml::default(),
+        overrides,
+        std::env::temp_dir(),
+    )
+    .expect("config")
 }
 
 fn snapshot(percent: f64) -> RateLimitSnapshot {
@@ -310,7 +312,7 @@ async fn context_indicator_shows_used_tokens_when_window_unknown() {
 async fn helpers_are_available_and_do_not_panic() {
     let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
     let tx = AppEventSender::new(tx_raw);
-    let cfg = test_config().await;
+    let cfg = test_config();
     let resolved_model = ModelsManager::get_model_offline(cfg.model.as_deref());
     let model_family = ModelsManager::construct_model_family_offline(&resolved_model, &cfg);
     let conversation_manager = Arc::new(ConversationManager::with_models_provider(
@@ -347,7 +349,7 @@ async fn make_chatwidget_manual(
     let (tx_raw, rx) = unbounded_channel::<AppEvent>();
     let app_event_tx = AppEventSender::new(tx_raw);
     let (op_tx, op_rx) = unbounded_channel::<Op>();
-    let mut cfg = test_config().await;
+    let mut cfg = test_config();
     let resolved_model = model_override
         .map(str::to_owned)
         .unwrap_or_else(|| ModelsManager::get_model_offline(cfg.model.as_deref()));

@@ -1,5 +1,8 @@
 //! Maieutic elicitation module for mandatory pre-execution clarification (D130)
 //!
+// NOTE: Module contains planned infrastructure; allow dead_code during development.
+#![allow(dead_code)]
+//!
 //! This module implements the mandatory maieutic step that runs before automation proceeds.
 //! The maieutic step collects structured clarifications that form the delegation contract.
 //!
@@ -476,9 +479,9 @@ pub fn persist_maieutic_spec(
 }
 
 /// Check if maieutic elicitation has been completed for a spec/run
-pub fn has_maieutic_completed(spec_id: &str, run_id: &str, cwd: &std::path::Path) -> bool {
+pub fn has_maieutic_completed(spec_id: &str, _run_id: &str, cwd: &std::path::Path) -> bool {
     let evidence_dir = super::evidence::evidence_base_for_spec(cwd, spec_id);
-    let pattern = format!("maieutic_spec_");
+    let pattern = "maieutic_spec_";
 
     // Check if any maieutic spec file exists for this run
     std::fs::read_dir(&evidence_dir)
@@ -488,7 +491,7 @@ pub fn has_maieutic_completed(spec_id: &str, run_id: &str, cwd: &std::path::Path
                 entry
                     .file_name()
                     .to_str()
-                    .map(|n| n.starts_with(&pattern) && n.ends_with(".json"))
+                    .map(|n| n.starts_with(pattern) && n.ends_with(".json"))
                     .unwrap_or(false)
             })
         })

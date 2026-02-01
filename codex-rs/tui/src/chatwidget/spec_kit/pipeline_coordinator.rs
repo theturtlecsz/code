@@ -245,7 +245,7 @@ pub fn handle_spec_auto(
     // D131: Load capture mode from governance policy for ship gate validation
     let capture_mode = codex_stage0::GovernancePolicy::load(None)
         .ok()
-        .and_then(|gov| LLMCaptureMode::from_str(&gov.capture.mode))
+        .and_then(|gov| LLMCaptureMode::parse(&gov.capture.mode))
         .unwrap_or(LLMCaptureMode::PromptsOnly);
 
     let lifecycle = widget.ensure_validate_lifecycle(&spec_id);
@@ -3187,7 +3187,7 @@ fn run_maieutic_gate(
     // D131: Load capture mode from governance policy for maieutic persistence
     let capture_mode = codex_stage0::GovernancePolicy::load(None)
         .ok()
-        .and_then(|gov| LLMCaptureMode::from_str(&gov.capture.mode))
+        .and_then(|gov| LLMCaptureMode::parse(&gov.capture.mode))
         .unwrap_or(LLMCaptureMode::PromptsOnly);
 
     // Store pending maieutic state for resumption after modal completes

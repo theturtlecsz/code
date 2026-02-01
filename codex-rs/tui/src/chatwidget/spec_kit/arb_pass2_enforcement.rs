@@ -47,9 +47,9 @@
 //! | 8 | D133 | cli/speckit.rs | test_headless_validation_without_execute_succeeds | Active |
 //! | 9 | D133 | cli/speckit.rs | test_headless_invalid_maieutic_json_exits_3 | Active |
 //! | 10 | D133 | cli/speckit.rs | test_headless_missing_maieutic_file_exits_3 | Active |
-//! | 11 | D133 | cli/speckit.rs | test_headless_never_prompts | IGNORED |
-//! | 12 | D133 | cli/speckit.rs | test_headless_needs_approval_exit_code | IGNORED |
-//! | 13 | D133 | cli/speckit.rs | test_shared_executor_same_core_artifacts | IGNORED |
+//! | 11 | D133 | cli/speckit.rs | test_headless_never_prompts | Active |
+//! | 12 | D133 | cli/speckit.rs | test_headless_needs_approval_exit_code | Active |
+//! | 13 | D133 | cli/speckit.rs | test_shared_executor_same_core_artifacts | Active |
 //! | 14 | D134 | ace_reflector.rs | test_ace_frame_schema_generation_stable | Active |
 //! | 15 | D134 | ace_reflector.rs | test_ace_frame_examples_validate | Active |
 //! | 16 | D134 | ace_reflector.rs | test_schema_version_field_required | Active |
@@ -78,10 +78,10 @@
 pub const ARB_PASS2_TEST_COUNT: usize = 18;
 
 /// Active (non-ignored) enforcement tests
-pub const ARB_PASS2_ACTIVE_COUNT: usize = 15;
+pub const ARB_PASS2_ACTIVE_COUNT: usize = 18;
 
-/// Ignored tests pending infrastructure work (SPEC-KIT-930)
-pub const ARB_PASS2_IGNORED_COUNT: usize = 3;
+/// All tests now active after MAINT-930 infrastructure
+pub const ARB_PASS2_IGNORED_COUNT: usize = 0;
 
 // ============================================================================
 // E.3/E.4 Evidence Capability Tests (G2 Gap Closure)
@@ -161,25 +161,20 @@ pub mod decisions {
     /// Rule: Headless execution requires `--maieutic` input; headless never prompts.
     /// Enforcement: Exit codes 10 (NEEDS_INPUT), 11 (NEEDS_APPROVAL), 3 (INFRA_ERROR).
     ///
-    /// Note: Tests 11-13 are IGNORED pending mock infrastructure (SPEC-KIT-930).
+    /// Note: Tests 11-13 now active after MAINT-930 infrastructure implementation.
     pub const D133_TESTS: &[&str] = &[
-        // Active tests
         "test_headless_requires_maieutic_input",
         "test_headless_validation_without_execute_succeeds",
         "test_headless_invalid_maieutic_json_exits_3",
         "test_headless_missing_maieutic_file_exits_3",
-        // Ignored tests (need infrastructure)
+        // Now active (MAINT-930)
         "test_headless_never_prompts",
         "test_headless_needs_approval_exit_code",
         "test_shared_executor_same_core_artifacts",
     ];
 
-    /// D133 ignored tests requiring mock infrastructure
-    pub const D133_IGNORED_TESTS: &[&str] = &[
-        "test_headless_never_prompts",
-        "test_headless_needs_approval_exit_code",
-        "test_shared_executor_same_core_artifacts",
-    ];
+    /// D133 ignored tests (none remaining after MAINT-930)
+    pub const D133_IGNORED_TESTS: &[&str] = &[];
 
     /// D134: ACE Frame schema versioning
     ///
@@ -236,6 +231,7 @@ mod validation_tests {
 
     /// Validate that each decision group is non-empty
     #[test]
+    #[allow(clippy::const_is_empty)]
     fn test_all_decisions_have_tests() {
         assert!(
             !decisions::D130_TESTS.is_empty(),
@@ -281,6 +277,7 @@ mod validation_tests {
 
     /// Validate E.3/E.4 test groups are non-empty
     #[test]
+    #[allow(clippy::const_is_empty)]
     fn test_evidence_capabilities_have_tests() {
         assert!(
             !evidence_capabilities::E3_ARCHIVAL_TESTS.is_empty(),

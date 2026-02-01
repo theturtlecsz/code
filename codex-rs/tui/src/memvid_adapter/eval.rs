@@ -357,8 +357,7 @@ impl ABReport {
 
     /// Save report as JSON.
     pub fn save_json(&self, path: &Path) -> std::io::Result<()> {
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let json = serde_json::to_string_pretty(self).map_err(|e| std::io::Error::other(e))?;
         std::fs::write(path, json)
     }
 
@@ -879,8 +878,7 @@ pub fn load_golden_queries(path: &Path) -> std::io::Result<Vec<GoldenQuery>> {
 
 /// Save a golden query suite to JSON file.
 pub fn save_golden_queries(queries: &[GoldenQuery], path: &Path) -> std::io::Result<()> {
-    let json = serde_json::to_string_pretty(queries)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let json = serde_json::to_string_pretty(queries).map_err(|e| std::io::Error::other(e))?;
     std::fs::write(path, json)
 }
 
@@ -1157,6 +1155,7 @@ mod tests {
         }
 
         /// Print as JSON to stdout
+        #[allow(clippy::print_stdout)]
         fn print(&self) {
             println!(
                 "{}",
@@ -1246,6 +1245,8 @@ mod tests {
     /// Test mode for parity gates: real backends or synthetic.
     enum ParityTestMode {
         /// Real backends available - results are certified
+        /// Note: Reserved for when real backends are available in test environment
+        #[allow(dead_code)]
         Real {
             baseline: Arc<dyn LocalMemoryClient>,
             experiment: Arc<dyn LocalMemoryClient>,
@@ -2058,10 +2059,10 @@ mod tests {
         let (report, source) = if let Some(path) = report_path {
             // Load external report
             let content = std::fs::read_to_string(&path)
-                .expect(&format!("read stability report from {}", path));
+                .unwrap_or_else(|_| panic!("read stability report from {path}"));
             let report: StabilityReport = serde_json::from_str(&content)
-                .expect(&format!("parse stability report from {}", path));
-            (report, format!("external file: {}", path))
+                .unwrap_or_else(|_| panic!("parse stability report from {path}"));
+            (report, format!("external file: {path}"))
         } else {
             // Use mock report for format validation
             (

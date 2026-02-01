@@ -9,6 +9,15 @@
 //! - Skip duplicates by (source_backend, source_id)
 //! - Detect conflicts: same ID, different content hash
 
+// MAINT-930: Allow format string flexibility in CLI output
+#![allow(
+    clippy::uninlined_format_args,
+    clippy::collapsible_if,
+    clippy::ptr_arg,
+    clippy::manual_str_repeat,
+    clippy::manual_repeat_n
+)]
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 

@@ -5,6 +5,10 @@
 //! - D18: Stage boundary checkpoints
 //! - D2: Canonical capsule path: `./.speckit/memvid/workspace.mv2`
 //!
+//! Note: `result_large_err` is allowed because CapsuleError::LockedByWriter
+//! intentionally contains full LockMetadata for debugging contention issues.
+#![allow(clippy::result_large_err)]
+
 //! ## On-Disk Format (Minimal Persistence)
 //! ```text
 //! [Header: "MV2\x00\x01" (5 bytes)]
@@ -234,9 +238,13 @@ pub struct CapsuleHandle {
 
     /// Cross-process exclusive lock (SPEC-KIT-971)
     /// Holds the lock file handle; released on drop
+    // Stored for Drop/RAII - not read directly
+    #[allow(dead_code)]
     cross_process_lock: Option<CapsuleLock>,
 
     /// In-process write lock - single writer at a time
+    // Stored for Drop/RAII - not read directly
+    #[allow(dead_code)]
     write_lock: Arc<Mutex<WriteLock>>,
 
     /// URI index for resolution
@@ -299,6 +307,8 @@ pub struct CurrentPolicyInfo {
 }
 
 /// Write lock state.
+// Diagnostic fields - reserved for future lock contention debugging
+#[allow(dead_code)]
 struct WriteLock {
     holder: Option<std::thread::ThreadId>,
     acquired_at: Option<std::time::Instant>,
@@ -669,7 +679,7 @@ impl CapsuleHandle {
                                     .uri
                                     .as_str()
                                     .split('/')
-                                    .last()
+                                    .next_back()
                                     .and_then(|s| s.parse::<u64>().ok())
                                 {
                                     max_event_seq = max_event_seq.max(seq_num);
@@ -1352,7 +1362,7 @@ impl CapsuleHandle {
                     "full" | "Full" => MergeMode::Full,
                     _ => return None,
                 };
-                Some((BranchId::from_str(from_branch), mode))
+                Some((BranchId::new(from_branch), mode))
             })
             .collect()
     }
@@ -2022,7 +2032,7 @@ impl CapsuleHandle {
             // Verify checkpoint is on the target branch (if checkpoint has branch info)
             let cp = checkpoint.unwrap();
             if let Some(ref cp_branch_str) = cp.branch_id {
-                let cp_branch = BranchId::from_str(cp_branch_str);
+                let cp_branch = BranchId::new(cp_branch_str);
                 if target_branch != &cp_branch {
                     return Err(CapsuleError::InvalidOperation {
                         reason: format!(
@@ -2447,7 +2457,7 @@ impl CapsuleHandle {
         } else {
             let mut path = options.output_path.clone();
             // Ensure .mv2 extension for unencrypted
-            if path.extension().map_or(true, |e| e != "mv2") {
+            if path.extension().is_none_or(|e| e != "mv2") {
                 path.set_extension("mv2");
             }
             path
@@ -3460,9 +3470,9 @@ impl CapsuleHandle {
         writer.write_all(&manifest_json)?;
 
         // Update hash
-        hasher.update(&(manifest_record_len as u32).to_le_bytes());
-        hasher.update(&[RecordKind::Manifest as u8]);
-        hasher.update(&(manifest_meta_bytes.len() as u32).to_le_bytes());
+        hasher.update((manifest_record_len as u32).to_le_bytes());
+        hasher.update([RecordKind::Manifest as u8]);
+        hasher.update((manifest_meta_bytes.len() as u32).to_le_bytes());
         hasher.update(&manifest_meta_bytes);
         hasher.update(&manifest_json);
 
@@ -3487,9 +3497,9 @@ impl CapsuleHandle {
             writer.write_all(&payload)?;
 
             // Update hash
-            hasher.update(&(record_len as u32).to_le_bytes());
-            hasher.update(&[record.kind as u8]);
-            hasher.update(&(meta_bytes.len() as u32).to_le_bytes());
+            hasher.update((record_len as u32).to_le_bytes());
+            hasher.update([record.kind as u8]);
+            hasher.update((meta_bytes.len() as u32).to_le_bytes());
             hasher.update(&meta_bytes);
             hasher.update(&payload);
         }
@@ -3506,9 +3516,9 @@ impl CapsuleHandle {
             writer.write_all(&(cp_meta_bytes.len() as u32).to_le_bytes())?;
             writer.write_all(&cp_meta_bytes)?;
 
-            hasher.update(&(record_len as u32).to_le_bytes());
-            hasher.update(&[RecordKind::Checkpoint as u8]);
-            hasher.update(&(cp_meta_bytes.len() as u32).to_le_bytes());
+            hasher.update((record_len as u32).to_le_bytes());
+            hasher.update([RecordKind::Checkpoint as u8]);
+            hasher.update((cp_meta_bytes.len() as u32).to_le_bytes());
             hasher.update(&cp_meta_bytes);
         }
 
@@ -3524,9 +3534,9 @@ impl CapsuleHandle {
             writer.write_all(&(ev_meta_bytes.len() as u32).to_le_bytes())?;
             writer.write_all(&ev_meta_bytes)?;
 
-            hasher.update(&(record_len as u32).to_le_bytes());
-            hasher.update(&[RecordKind::Event as u8]);
-            hasher.update(&(ev_meta_bytes.len() as u32).to_le_bytes());
+            hasher.update((record_len as u32).to_le_bytes());
+            hasher.update([RecordKind::Event as u8]);
+            hasher.update((ev_meta_bytes.len() as u32).to_le_bytes());
             hasher.update(&ev_meta_bytes);
         }
 

@@ -179,7 +179,7 @@ fn execute_timeline(widget: &mut ChatWidget, args: &str) {
         match parts[i] {
             "--branch" => {
                 if i + 1 < parts.len() {
-                    branch = Some(BranchId::from_str(parts[i + 1]));
+                    branch = Some(BranchId::new(parts[i + 1]));
                     i += 2;
                 } else {
                     i += 1;
