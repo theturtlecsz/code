@@ -115,6 +115,7 @@ These invariants MUST NOT be violated:
 | Spec                | Completion Date | Key Deliverables                                                                              |
 | ------------------- | --------------- | --------------------------------------------------------------------------------------------- |
 | SPEC-KIT-983        | 2026-02-01      | Stage→agent defaults modal + root-only persistence with user-visible errors                   |
+| MAINT-17            | 2026-02-01      | Fix codex-cli hermetic speckit tests to set \[speckit.stage\_agents] under GPT defaults       |
 | MAINT-16            | 2026-01-31      | Headless ACE init + runtime-safe fetch + git repo-root parity (D113/D133)                     |
 | SPEC-KIT-982        | 2026-01-31      | ACE + maieutic injection into per-agent prompts via unified builder (D113/D133 parity)        |
 | SPEC-KIT-981        | 2026-01-31      | Config-driven stage→agent mapping with GPT-5.2 defaults, TUI/headless parity                  |

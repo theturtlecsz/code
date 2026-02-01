@@ -4087,7 +4087,7 @@ EOF
     }
 
     // Create config.toml with both gemini and claude agents pointing to our shims
-    // D113/D133: Plan uses gemini, Tasks uses claude (preferred_agent_for_stage)
+    // Hermetic tests pin stage routing via [speckit.stage_agents] to shim agents.
     let config_path = codex_home.path().join("config.toml");
     fs::write(
         &config_path,
@@ -4103,6 +4103,10 @@ name = "claude"
 command = "claude"
 args = []
 enabled = true
+
+[speckit.stage_agents]
+plan = "gemini"
+tasks = "claude"
 "#,
     )?;
 
@@ -4306,6 +4310,7 @@ EOF
     }
 
     // Create config.toml with gemini agent
+    // Hermetic tests pin stage routing via [speckit.stage_agents] to shim agents.
     let config_path = codex_home.path().join("config.toml");
     fs::write(
         &config_path,
@@ -4315,6 +4320,9 @@ name = "gemini"
 command = "gemini"
 args = []
 enabled = true
+
+[speckit.stage_agents]
+plan = "gemini"
 "#,
     )?;
 
