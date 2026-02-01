@@ -21,7 +21,9 @@ use super::backend::{AgentBackend, DefaultAgentBackend};
 use super::output::{HeadlessOutput, Stage0Info};
 use super::prompt_builder::{build_headless_prompt, get_agents_for_stage};
 use crate::chatwidget::spec_kit::ace_client::PlaybookBullet;
-use crate::chatwidget::spec_kit::ace_prompt_injector::{command_to_scope, should_use_ace, stage_to_ace_command};
+use crate::chatwidget::spec_kit::ace_prompt_injector::{
+    command_to_scope, should_use_ace, stage_to_ace_command,
+};
 use crate::chatwidget::spec_kit::maieutic::MaieuticSpec;
 use crate::chatwidget::spec_kit::native_guardrail::run_native_guardrail;
 use crate::chatwidget::spec_kit::stage0_integration::{
@@ -835,8 +837,8 @@ impl HeadlessPipelineRunner {
         };
 
         // MAINT-16: Use git root (not cwd) for ACE query parity with TUI
-        let repo_root = get_repo_root_sync(&self.cwd)
-            .unwrap_or_else(|| self.cwd.to_string_lossy().to_string());
+        let repo_root =
+            get_repo_root_sync(&self.cwd).unwrap_or_else(|| self.cwd.to_string_lossy().to_string());
         let branch = get_current_branch_sync(&self.cwd).unwrap_or_else(|| "main".to_string());
 
         // MAINT-16: Use block_on_sync for safe async/sync bridge

@@ -2844,7 +2844,10 @@ implement = "gpt_codex"
             toml::from_str(toml_str).expect("underscore stage_agents should parse");
         let speckit = parsed.speckit.expect("speckit section should exist");
         assert_eq!(speckit.stage_agents.plan, Some("claude".to_string()));
-        assert_eq!(speckit.stage_agents.implement, Some("gpt_codex".to_string()));
+        assert_eq!(
+            speckit.stage_agents.implement,
+            Some("gpt_codex".to_string())
+        );
     }
 
     /// SPEC-KIT-981: Verify [speckit.stage-agents] parses with kebab-case (alias)

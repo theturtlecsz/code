@@ -41,6 +41,7 @@ mod quality_gate_modal;
 mod scroll_state;
 mod selection_popup_common;
 pub(crate) mod spec_intake_modal;
+mod spec_kit_stage_agents_view;
 pub(crate) mod vision_builder_modal;
 pub(crate) use custom_prompt_view::CustomPromptView;
 pub(crate) use list_selection_view::SelectionAction;
@@ -631,6 +632,20 @@ impl BottomPane<'_> {
     ) {
         let view =
             PipelineConfiguratorView::new(spec_id, initial_config, self.app_event_tx.clone());
+        self.active_view = Some(Box::new(view));
+        self.status_view_active = false;
+        self.request_redraw();
+    }
+
+    /// Show stage agents configurator modal for global defaults (SPEC-KIT-983)
+    pub fn show_spec_kit_stage_agents(
+        &mut self,
+        current: codex_core::config_types::SpecKitStageAgents,
+    ) {
+        let view = spec_kit_stage_agents_view::SpecKitStageAgentsView::new(
+            current,
+            self.app_event_tx.clone(),
+        );
         self.active_view = Some(Box::new(view));
         self.status_view_active = false;
         self.request_redraw();

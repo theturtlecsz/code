@@ -8823,6 +8823,14 @@ impl ChatWidget<'_> {
             .retain(|c| !c.name.eq_ignore_ascii_case(name));
     }
 
+    /// SPEC-KIT-983: Update stage→agent defaults from modal.
+    pub(crate) fn update_speckit_stage_agents(
+        &mut self,
+        new_config: codex_core::config_types::SpecKitStageAgents,
+    ) {
+        self.config.speckit_stage_agents = new_config;
+    }
+
     pub(crate) fn apply_agent_update(
         &mut self,
         name: &str,
@@ -16900,5 +16908,11 @@ impl ChatWidget<'_> {
     ) {
         self.bottom_pane
             .show_pipeline_configurator(spec_id, initial_config);
+    }
+
+    /// Show stage agents modal for global defaults (SPEC-KIT-983)
+    pub(crate) fn show_spec_kit_stage_agents_modal(&mut self) {
+        self.bottom_pane
+            .show_spec_kit_stage_agents(self.config.speckit_stage_agents.clone());
     }
 }

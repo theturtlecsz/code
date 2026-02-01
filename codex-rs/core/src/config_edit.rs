@@ -15,6 +15,15 @@ enum NoneBehavior {
     Remove,
 }
 
+/// Controls whether profile scoping is applied when persisting.
+#[derive(Copy, Clone)]
+enum ProfileScope {
+    /// Auto-detect profile from config.toml or use explicit profile parameter.
+    Auto,
+    /// Force writes to root, ignoring any active profile.
+    ForceRoot,
+}
+
 /// Persist overrides into `config.toml` using explicit key segments per
 /// override. This avoids ambiguity with keys that contain dots or spaces.
 pub async fn persist_overrides(
@@ -27,7 +36,14 @@ pub async fn persist_overrides(
         .map(|(segments, value)| (*segments, Some(*value)))
         .collect();
 
-    persist_overrides_with_behavior(codex_home, profile, &with_options, NoneBehavior::Skip).await
+    persist_overrides_with_behavior(
+        codex_home,
+        profile,
+        &with_options,
+        NoneBehavior::Skip,
+        ProfileScope::Auto,
+    )
+    .await
 }
 
 /// Persist overrides where values may be optional. Any entries with `None`
@@ -38,7 +54,14 @@ pub async fn persist_non_null_overrides(
     profile: Option<&str>,
     overrides: &[(&[&str], Option<&str>)],
 ) -> Result<()> {
-    persist_overrides_with_behavior(codex_home, profile, overrides, NoneBehavior::Skip).await
+    persist_overrides_with_behavior(
+        codex_home,
+        profile,
+        overrides,
+        NoneBehavior::Skip,
+        ProfileScope::Auto,
+    )
+    .await
 }
 
 /// Persist overrides where `None` values clear any existing values from the
@@ -48,7 +71,34 @@ pub async fn persist_overrides_and_clear_if_none(
     profile: Option<&str>,
     overrides: &[(&[&str], Option<&str>)],
 ) -> Result<()> {
-    persist_overrides_with_behavior(codex_home, profile, overrides, NoneBehavior::Remove).await
+    persist_overrides_with_behavior(
+        codex_home,
+        profile,
+        overrides,
+        NoneBehavior::Remove,
+        ProfileScope::Auto,
+    )
+    .await
+}
+
+/// Persist overrides to root config, ignoring any active profile.
+///
+/// Use this for global settings (like `[speckit.stage_agents]`) that should NOT
+/// be scoped under `[profiles.<name>]` even when a profile is active.
+///
+/// `None` values clear any existing values from the configuration file.
+pub async fn persist_overrides_root_only_and_clear_if_none(
+    codex_home: &Path,
+    overrides: &[(&[&str], Option<&str>)],
+) -> Result<()> {
+    persist_overrides_with_behavior(
+        codex_home,
+        None,
+        overrides,
+        NoneBehavior::Remove,
+        ProfileScope::ForceRoot,
+    )
+    .await
 }
 
 /// Apply a single override onto a `toml_edit` document while preserving
@@ -383,6 +433,7 @@ async fn persist_overrides_with_behavior(
     profile: Option<&str>,
     overrides: &[(&[&str], Option<&str>)],
     none_behavior: NoneBehavior,
+    profile_scope: ProfileScope,
 ) -> Result<()> {
     if overrides.is_empty() {
         return Ok(());
@@ -415,12 +466,19 @@ async fn persist_overrides_with_behavior(
         Err(e) => return Err(e.into()),
     };
 
-    let effective_profile = if let Some(p) = profile {
-        Some(p.to_owned())
-    } else {
-        doc.get("profile")
-            .and_then(|i| i.as_str())
-            .map(std::string::ToString::to_string)
+    // When ForceRoot is set, skip profile detection entirely to ensure writes
+    // go to root config, not under [profiles.<name>].
+    let effective_profile = match profile_scope {
+        ProfileScope::ForceRoot => None,
+        ProfileScope::Auto => {
+            if let Some(p) = profile {
+                Some(p.to_owned())
+            } else {
+                doc.get("profile")
+                    .and_then(|i| i.as_str())
+                    .map(std::string::ToString::to_string)
+            }
+        }
     };
 
     let mut mutated = false;
@@ -1051,6 +1109,91 @@ model_reasoning_effort = "high"
             .expect("persist");
 
         assert!(!codex_home.join(CONFIG_TOML_FILE).exists());
+    }
+
+    /// SPEC-KIT-983: Verify root-only persist ignores active profile.
+    /// Even with `profile = "o3"` in config, writes should go to root.
+    #[tokio::test]
+    async fn root_only_ignores_active_profile() {
+        let tmpdir = tempdir().expect("tmp");
+        let codex_home = tmpdir.path();
+        set_test_codex_home(codex_home);
+
+        // Seed config with a profile selection
+        let seed = "profile = \"o3\"\n";
+        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+            .await
+            .expect("seed write");
+
+        // Write to root using root-only function
+        persist_overrides_root_only_and_clear_if_none(
+            codex_home,
+            &[
+                (&["speckit", "stage_agents", "plan"], Some("claude")),
+                (&["speckit", "stage_agents", "implement"], Some("gpt_codex")),
+            ],
+        )
+        .await
+        .expect("persist");
+
+        let contents = read_config(codex_home).await;
+        // Should NOT be under [profiles.o3.speckit.stage_agents]
+        assert!(
+            !contents.contains("[profiles.o3"),
+            "root-only should not create profiles section"
+        );
+        // Should be at root [speckit.stage_agents]
+        assert!(
+            contents.contains("[speckit.stage_agents]"),
+            "should create root speckit.stage_agents section"
+        );
+        assert!(
+            contents.contains("plan = \"claude\""),
+            "should set plan agent"
+        );
+        assert!(
+            contents.contains("implement = \"gpt_codex\""),
+            "should set implement agent"
+        );
+    }
+
+    /// SPEC-KIT-983: Verify root-only with None values clears keys.
+    #[tokio::test]
+    async fn root_only_clears_key_with_none() {
+        let tmpdir = tempdir().expect("tmp");
+        let codex_home = tmpdir.path();
+        set_test_codex_home(codex_home);
+
+        // Seed config with existing stage agent setting
+        let seed = r#"profile = "o3"
+
+[speckit.stage_agents]
+plan = "claude"
+implement = "gpt_codex"
+"#;
+        tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), seed)
+            .await
+            .expect("seed write");
+
+        // Clear the plan key using None
+        persist_overrides_root_only_and_clear_if_none(
+            codex_home,
+            &[(&["speckit", "stage_agents", "plan"], None)],
+        )
+        .await
+        .expect("persist");
+
+        let contents = read_config(codex_home).await;
+        // plan should be removed
+        assert!(
+            !contents.contains("plan"),
+            "plan key should be removed when set to None"
+        );
+        // implement should still exist
+        assert!(
+            contents.contains("implement = \"gpt_codex\""),
+            "implement should remain"
+        );
     }
 
     // Test helper moved to bottom per review guidance.

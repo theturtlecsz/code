@@ -1319,7 +1319,9 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
     let ace_bullets = {
         let ace_config = &widget.config.ace;
         if ace_config.enabled {
-            use super::ace_prompt_injector::{command_to_scope, should_use_ace, stage_to_ace_command};
+            use super::ace_prompt_injector::{
+                command_to_scope, should_use_ace, stage_to_ace_command,
+            };
             use super::routing::{get_current_branch, get_repo_root};
 
             // SPEC-KIT-982: Use normalized ACE command name for consistent matching
@@ -1565,9 +1567,7 @@ pub fn auto_submit_spec_stage_prompt(widget: &mut ChatWidget, stage: SpecStage, 
                         .config
                         .agents
                         .iter()
-                        .find(|cfg| {
-                            cfg.enabled && agent_matches_canonical_key(cfg, &canonical)
-                        })
+                        .find(|cfg| cfg.enabled && agent_matches_canonical_key(cfg, &canonical))
                         .map(|_| canonical)
                 })
                 .collect();

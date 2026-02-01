@@ -157,6 +157,7 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     registry.register(Box::new(SpecKitCancelCommand)); // SPEC-DOGFOOD-001
     registry.register(Box::new(SpecKitStatusCommand));
     registry.register(Box::new(SpecKitConfigureCommand)); // SPEC-947 Phase 4
+    registry.register(Box::new(SpecKitStageAgentsCommand)); // SPEC-KIT-983: Stage→agent defaults
     registry.register(Box::new(SpecKitProjectCommand)); // SPEC-KIT-960
     registry.register(Box::new(SpecKitProjectNewCommand)); // /speckit.projectnew - full project setup
     registry.register(Box::new(VerifyCommand));
@@ -348,7 +349,8 @@ mod tests {
         // SPEC-KIT-977: Added speckit.policy (1 new)
         // SPEC-KIT-978: Added speckit.reflex (already counted above)
         // SPEC-KIT-981: Additional commands may have been added - update as needed
-        assert_eq!(registry.len(), 50, "Registry should have 50 commands");
+        // SPEC-KIT-983: Added speckit.stage-agents (1 new)
+        assert_eq!(registry.len(), 51, "Registry should have 51 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());

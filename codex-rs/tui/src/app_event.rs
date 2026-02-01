@@ -256,6 +256,9 @@ pub(crate) enum AppEvent {
     UpdateSubagentCommand(codex_core::config_types::SubagentCommandConfig),
     /// Remove a subagent command from memory (UI already deleted from config.toml)
     DeleteSubagentCommand(String),
+    /// Update stage→agent defaults from modal (SPEC-KIT-983)
+    /// Persists to root config.toml under [speckit.stage_agents]
+    UpdateSpecKitStageAgents(codex_core::config_types::SpecKitStageAgents),
     /// Return to the Agents settings list view
     // ShowAgentsSettings removed; overview replaces it
     /// Return to the Agents overview (Agents + Commands)

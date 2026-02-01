@@ -2041,6 +2041,7 @@ impl App<'_> {
                         | SlashCommand::SpecKitStatus
                         | SlashCommand::SpecKitCancel
                         | SlashCommand::SpecKitConfigure
+                        | SlashCommand::SpecKitStageAgents  // SPEC-KIT-983
                         | SlashCommand::SpecKitConstitution
                         | SlashCommand::SpecKitAceStatus
                         | SlashCommand::SpecKitProject
@@ -2414,6 +2415,51 @@ impl App<'_> {
                 AppEvent::DeleteSubagentCommand(name) => {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         widget.delete_subagent_by_name(&name);
+                    }
+                }
+                // SPEC-KIT-983: Handle stage agents update from modal
+                AppEvent::UpdateSpecKitStageAgents(new_config) => {
+                    if let AppState::Chat { widget } = &mut self.app_state {
+                        // Update in-memory config via method
+                        widget.update_speckit_stage_agents(new_config.clone());
+
+                        // Persist to root config.toml (not under profiles)
+                        match codex_core::config::find_codex_home() {
+                            Ok(home) => {
+                                let app_event_tx = self.app_event_tx.clone();
+                                tokio::spawn(async move {
+                                    let overrides = build_stage_agents_overrides(&new_config);
+                                    if let Err(e) = codex_core::config_edit::persist_overrides_root_only_and_clear_if_none(
+                                        &home,
+                                        &overrides,
+                                    ).await {
+                                        tracing::error!("Failed to persist stage agents: {}", e);
+                                        // Send user-visible error
+                                        use ratatui::style::{Modifier, Style};
+                                        use ratatui::text::Line;
+                                        let lines: Vec<Line<'static>> = vec![
+                                            Line::styled(
+                                                "error",
+                                                Style::default()
+                                                    .fg(crate::colors::error())
+                                                    .add_modifier(Modifier::BOLD),
+                                            ),
+                                            Line::styled(
+                                                format!("Failed to save stage→agent defaults: {e}"),
+                                                Style::default().fg(crate::colors::error()),
+                                            ),
+                                        ];
+                                        app_event_tx.send(AppEvent::InsertHistory(lines));
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                // User-visible error for config directory resolution failure
+                                widget.history_push(crate::history_cell::new_error_event(format!(
+                                    "Failed to resolve config directory: {e}"
+                                )));
+                            }
+                        }
                     }
                 }
                 // ShowAgentsSettings removed
@@ -3922,4 +3968,50 @@ impl TimingStats {
             kf_p95,
         )
     }
+}
+
+/// SPEC-KIT-983: Build overrides array for stage agents persistence.
+/// Returns segments and optional values for each stage.
+fn build_stage_agents_overrides(
+    config: &codex_core::config_types::SpecKitStageAgents,
+) -> Vec<(&'static [&'static str], Option<&str>)> {
+    vec![
+        (
+            &["speckit", "stage_agents", "specify"] as &[&str],
+            config.specify.as_deref(),
+        ),
+        (&["speckit", "stage_agents", "plan"], config.plan.as_deref()),
+        (
+            &["speckit", "stage_agents", "tasks"],
+            config.tasks.as_deref(),
+        ),
+        (
+            &["speckit", "stage_agents", "implement"],
+            config.implement.as_deref(),
+        ),
+        (
+            &["speckit", "stage_agents", "validate"],
+            config.validate.as_deref(),
+        ),
+        (
+            &["speckit", "stage_agents", "audit"],
+            config.audit.as_deref(),
+        ),
+        (
+            &["speckit", "stage_agents", "unlock"],
+            config.unlock.as_deref(),
+        ),
+        (
+            &["speckit", "stage_agents", "clarify"],
+            config.clarify.as_deref(),
+        ),
+        (
+            &["speckit", "stage_agents", "analyze"],
+            config.analyze.as_deref(),
+        ),
+        (
+            &["speckit", "stage_agents", "checklist"],
+            config.checklist.as_deref(),
+        ),
+    ]
 }

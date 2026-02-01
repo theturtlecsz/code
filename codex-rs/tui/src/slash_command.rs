@@ -151,6 +151,9 @@ pub enum SlashCommand {
     SpecKitCancel,
     #[strum(serialize = "speckit.configure")]
     SpecKitConfigure,
+    // SPEC-KIT-983: Stage→agent defaults
+    #[strum(serialize = "speckit.stage-agents")]
+    SpecKitStageAgents,
     #[strum(serialize = "speckit.constitution")]
     SpecKitConstitution,
     #[strum(serialize = "speckit.ace-status")]
@@ -241,6 +244,7 @@ impl SlashCommand {
             SlashCommand::SpecKitStatus => "show progress dashboard (native)",
             SlashCommand::SpecKitCancel => "clear stale pipeline state (native)",
             SlashCommand::SpecKitConfigure => "configure pipeline stages (interactive modal)",
+            SlashCommand::SpecKitStageAgents => "configure stage→agent defaults (TUI modal)",
             SlashCommand::SpecKitConstitution => "extract ACE bullets (native)",
             SlashCommand::SpecKitAceStatus => "show ACE stats (native)",
             SlashCommand::SpecKitProject => {

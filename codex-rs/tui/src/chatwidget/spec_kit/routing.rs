@@ -122,6 +122,7 @@ pub fn try_dispatch_spec_kit_command(
         | "speckit.status"         // Status dashboard
         | "speckit.constitution"   // ACE constitution extraction
         | "speckit.ace-status"     // ACE playbook status
+        | "speckit.stage-agents"   // SPEC-KIT-983: Stage→agent UI
         // Legacy aliases
         | "spec-auto"
         | "spec-cancel"            // SPEC-DOGFOOD-001
