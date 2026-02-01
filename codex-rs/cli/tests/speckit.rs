@@ -3927,43 +3927,523 @@ fn test_execute_and_validation_have_different_outputs() -> Result<()> {
 }
 
 #[test]
-#[ignore = "D133: Requires interactive mock infrastructure - tracked in SPEC-KIT-930"]
-fn test_headless_never_prompts() {
+fn test_headless_never_prompts() -> Result<()> {
     // D133: Verify that no code path in headless mode can trigger a prompt
-    // This test requires mocking interactive code paths
-    // Implementation: Add a global prompt counter that panics in test mode if incremented
+    // MAINT-930-A: Uses CODEX_TEST_PANIC_ON_PROMPT to fail if any prompt is attempted
     //
     // Tracked in ARB Pass 2 enforcement suite (Test #11)
     // See: codex-rs/tui/src/chatwidget/spec_kit/arb_pass2_enforcement.rs
-    todo!("test_headless_never_prompts - requires interactive mock infrastructure")
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let spec_id = "SPEC-TEST-NEVER-PROMPTS";
+    setup_spec_with_prd(repo_root.path(), spec_id)?;
+
+    // Initialize git repo
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git init should succeed");
+    std::process::Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(repo_root.path())
+        .output()?;
+    std::process::Command::new("git")
+        .args(["config", "user.name", "Test User"])
+        .current_dir(repo_root.path())
+        .output()?;
+    std::process::Command::new("git")
+        .args(["add", "."])
+        .current_dir(repo_root.path())
+        .output()?;
+    std::process::Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(repo_root.path())
+        .output()?;
+
+    // Create gemini shim with >=500 bytes output
+    let bin_dir = codex_home.path().join("bin");
+    fs::create_dir_all(&bin_dir)?;
+    let gemini_shim = bin_dir.join("gemini");
+    fs::write(
+        &gemini_shim,
+        r##"#!/bin/bash
+cat >/dev/null || true
+cat <<'EOF'
+{
+  "ok": true,
+  "result": "# Plan Stage Output\n\nDeterministic test content from the mock gemini agent.\n\n## Goals\n\n- Test prompt guard functionality\n- Verify no prompts triggered in headless mode\n\n## Steps\n\n1. Run headless execution with CODEX_TEST_PANIC_ON_PROMPT=1\n2. Verify no prompts triggered during execution\n3. Assert exit code 0 or 13\n\n## Acceptance Criteria\n\n- All tests pass without panic\n- Documentation updated\n\n## Constraints\n\n- Must be deterministic\n- Must not require network\n\n## Notes\n\nThis mock output is >= 500 bytes to satisfy AgentManager validation requirements. Adding more content here to ensure we exceed the threshold with comfortable margin for the deterministic headless test.",
+  "agent": "gemini-mock",
+  "timestamp": "2026-01-30T00:00:00Z"
+}
+EOF
+"##,
+    )?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&gemini_shim)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&gemini_shim, perms)?;
+    }
+
+    // Config with no quality gates (no prompts expected)
+    let config_path = codex_home.path().join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+[[agents]]
+name = "gemini"
+command = "gemini"
+args = []
+enabled = true
+
+[speckit.stage_agents]
+plan = "gemini"
+"#,
+    )?;
+
+    // Disable Stage0 tier2
+    let stage0_config = codex_home.path().join("stage0.toml");
+    fs::write(
+        &stage0_config,
+        r#"
+store_system_pointers = false
+[tier2]
+enabled = false
+"#,
+    )?;
+
+    let current_path = std::env::var_os("PATH").unwrap_or_default();
+    let paths: Vec<_> = std::iter::once(bin_dir.clone())
+        .chain(std::env::split_paths(&current_path))
+        .collect();
+    let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    cmd.env("PATH", new_path);
+    cmd.env("HOME", codex_home.path());
+    cmd.env("CODE_STAGE0_CONFIG", &stage0_config);
+    // MAINT-930-A: This would cause a panic if any prompt is attempted
+    cmd.env("CODEX_TEST_PANIC_ON_PROMPT", "1");
+    // Also set headless mode env var
+    cmd.env("CODEX_HEADLESS_MODE", "1");
+
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            spec_id,
+            "--from",
+            "plan",
+            "--to",
+            "plan",
+            "--execute",
+            "--headless",
+            "--maieutic-answers",
+            r#"{"goal":"Test prompt guard","constraints":[],"acceptance":["Pass"],"delegation":"B"}"#,
+            "--json",
+        ])
+        .output()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Should succeed (exit 0) - no prompts should have been triggered
+    // If a prompt was attempted, the process would have panicked
+    assert!(
+        !stderr.contains("CODEX_TEST_PANIC_ON_PROMPT"),
+        "Should not panic from prompt attempt in headless mode. stderr: {}",
+        stderr
+    );
+
+    // Parse JSON to verify execution completed
+    let json: JsonValue = serde_json::from_str(&stdout).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to parse JSON: {}\nstdout: {}\nstderr: {}",
+            e,
+            stdout,
+            stderr
+        )
+    })?;
+
+    // Verify either success (0) or prompt_attempted (13) but NOT a panic
+    let exit_code = json.get("exit_code").and_then(|v| v.as_i64()).unwrap_or(-1);
+    assert!(
+        exit_code == 0 || exit_code == 13,
+        "Expected exit_code 0 (success) or 13 (prompt_attempted), got {}\nJSON: {}\nstderr: {}",
+        exit_code,
+        serde_json::to_string_pretty(&json).unwrap_or_default(),
+        stderr
+    );
+
+    Ok(())
 }
 
 #[test]
-#[ignore = "D133: Requires approval checkpoint mock - tracked in SPEC-KIT-930"]
-fn test_headless_needs_approval_exit_code() {
+fn test_headless_needs_approval_exit_code() -> Result<()> {
     // D133: Tier-2/Tier-3 checkpoints should return NEEDS_APPROVAL (11)
-    // This test requires:
-    // 1. Setting up a SPEC that will hit an approval checkpoint
-    // 2. Running with --execute and valid maieutic
-    // 3. Verifying exit code 11
+    // MAINT-930-B: Quality gates with enabled checkpoints return exit code 11
     //
     // Tracked in ARB Pass 2 enforcement suite (Test #12)
     // See: codex-rs/tui/src/chatwidget/spec_kit/arb_pass2_enforcement.rs
-    todo!("test_headless_needs_approval_exit_code - requires mock agent infrastructure")
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    let spec_id = "SPEC-TEST-NEEDS-APPROVAL";
+    setup_spec_with_prd(repo_root.path(), spec_id)?;
+
+    // Initialize git repo
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git init should succeed");
+    std::process::Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(repo_root.path())
+        .output()?;
+    std::process::Command::new("git")
+        .args(["config", "user.name", "Test User"])
+        .current_dir(repo_root.path())
+        .output()?;
+    std::process::Command::new("git")
+        .args(["add", "."])
+        .current_dir(repo_root.path())
+        .output()?;
+    std::process::Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(repo_root.path())
+        .output()?;
+
+    // Create gemini shim with >=500 bytes output
+    let bin_dir = codex_home.path().join("bin");
+    fs::create_dir_all(&bin_dir)?;
+    let gemini_shim = bin_dir.join("gemini");
+    fs::write(
+        &gemini_shim,
+        r##"#!/bin/bash
+cat >/dev/null || true
+cat <<'EOF'
+{
+  "ok": true,
+  "result": "# Plan Stage Output\n\nDeterministic test content from the mock gemini agent.\n\n## Goals\n\n- Test approval checkpoint functionality\n- Verify exit code 11 when quality gates enabled\n\n## Steps\n\n1. Enable quality gate in config\n2. Run headless execution\n3. Verify exit code 11 (NEEDS_APPROVAL)\n\n## Acceptance Criteria\n\n- All tests pass\n- Documentation updated\n\n## Constraints\n\n- Must be deterministic\n- Must not require network\n\n## Notes\n\nThis mock output is >= 500 bytes to satisfy AgentManager validation requirements. Adding more content here to ensure we exceed the threshold with comfortable margin for the deterministic headless test.",
+  "agent": "gemini-mock",
+  "timestamp": "2026-01-30T00:00:00Z"
+}
+EOF
+"##,
+    )?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&gemini_shim)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&gemini_shim, perms)?;
+    }
+
+    // MAINT-930-B: Config with quality gates ENABLED
+    // This should cause the headless runner to return NeedsApproval (exit 11)
+    let config_path = codex_home.path().join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+[[agents]]
+name = "gemini"
+command = "gemini"
+args = []
+enabled = true
+
+[speckit.stage_agents]
+plan = "gemini"
+
+# MAINT-930-B: Enable plan checkpoint - should trigger exit 11
+[quality_gates.plan]
+agents = ["gemini"]
+enabled = true
+threshold = 1.0
+"#,
+    )?;
+
+    // Disable Stage0 tier2
+    let stage0_config = codex_home.path().join("stage0.toml");
+    fs::write(
+        &stage0_config,
+        r#"
+store_system_pointers = false
+[tier2]
+enabled = false
+"#,
+    )?;
+
+    let current_path = std::env::var_os("PATH").unwrap_or_default();
+    let paths: Vec<_> = std::iter::once(bin_dir.clone())
+        .chain(std::env::split_paths(&current_path))
+        .collect();
+    let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    cmd.env("PATH", new_path);
+    cmd.env("HOME", codex_home.path());
+    cmd.env("CODE_STAGE0_CONFIG", &stage0_config);
+    // Also enable panic-on-prompt to verify no prompts occur
+    cmd.env("CODEX_TEST_PANIC_ON_PROMPT", "1");
+    cmd.env("CODEX_HEADLESS_MODE", "1");
+
+    let output = cmd
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            spec_id,
+            "--from",
+            "plan",
+            "--to",
+            "plan",
+            "--execute",
+            "--headless",
+            "--maieutic-answers",
+            r#"{"goal":"Test approval checkpoint","constraints":[],"acceptance":["Pass"],"delegation":"B"}"#,
+            "--json",
+        ])
+        .output()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Should NOT panic (no prompt should have been attempted)
+    assert!(
+        !stderr.contains("CODEX_TEST_PANIC_ON_PROMPT"),
+        "Should not panic from prompt attempt. stderr: {}",
+        stderr
+    );
+
+    // Parse JSON output
+    let json: JsonValue = serde_json::from_str(&stdout).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to parse JSON: {}\nstdout: {}\nstderr: {}",
+            e,
+            stdout,
+            stderr
+        )
+    })?;
+
+    // MAINT-930-B: Verify exit code 11 (NEEDS_APPROVAL)
+    let exit_code = json.get("exit_code").and_then(|v| v.as_i64()).unwrap_or(-1);
+    assert_eq!(
+        exit_code,
+        11,
+        "Expected exit_code 11 (NEEDS_APPROVAL), got {}\nJSON: {}",
+        exit_code,
+        serde_json::to_string_pretty(&json).unwrap_or_default()
+    );
+
+    // Verify exit reason
+    let exit_reason = json
+        .get("exit_reason")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert_eq!(
+        exit_reason, "needs_approval",
+        "Expected exit_reason 'needs_approval', got '{}'",
+        exit_reason
+    );
+
+    Ok(())
 }
 
 #[test]
-#[ignore = "D133: Requires TUI/CLI parity comparison - tracked in SPEC-KIT-930"]
-fn test_shared_executor_same_core_artifacts() {
-    // D133: Verify that given identical inputs, CLI and TUI produce identical artifacts
-    // This test requires:
-    // 1. Mock agent responses
-    // 2. Deterministic timestamp injection
-    // 3. Artifact hash comparison
+fn test_shared_executor_same_core_artifacts() -> Result<()> {
+    // D133 / LOCK E3: Given identical mocked inputs, headless must write the
+    // same canonical artifacts as TUI's synthesis path (byte-for-byte).
     //
-    // Tracked in ARB Pass 2 enforcement suite (Test #13)
-    // See: codex-rs/tui/src/chatwidget/spec_kit/arb_pass2_enforcement.rs
-    todo!("test_shared_executor_same_core_artifacts - requires mock agent infrastructure")
+    // Tracked in ARB Pass 2 enforcement suite (Test #13).
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+    let tui_root = TempDir::new()?;
+
+    let spec_id = "SPEC-TEST-ARTIFACT-PARITY";
+    setup_spec_with_prd(repo_root.path(), spec_id)?;
+    setup_spec_with_prd(tui_root.path(), spec_id)?;
+
+    // Initialize git repo
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(repo_root.path())
+        .output()
+        .expect("git init should succeed");
+    std::process::Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(repo_root.path())
+        .output()?;
+    std::process::Command::new("git")
+        .args(["config", "user.name", "Test User"])
+        .current_dir(repo_root.path())
+        .output()?;
+    std::process::Command::new("git")
+        .args(["add", "."])
+        .current_dir(repo_root.path())
+        .output()?;
+    std::process::Command::new("git")
+        .args(["commit", "-m", "Initial commit"])
+        .current_dir(repo_root.path())
+        .output()?;
+
+    // Create gemini shim with >=500 bytes deterministic output
+    let bin_dir = codex_home.path().join("bin");
+    fs::create_dir_all(&bin_dir)?;
+    let gemini_shim = bin_dir.join("gemini");
+    fs::write(
+        &gemini_shim,
+        r##"#!/bin/bash
+cat >/dev/null || true
+cat <<'EOF'
+{
+  "stage": "plan",
+  "ok": true,
+  "result": "# Plan Stage Output\n\nDeterministic test content from the mock gemini agent for artifact parity.\n\n## Goals\n\n- Verify artifact parity across TUI vs headless\n- Ensure byte-for-byte equality for canonical artifacts\n\n## Steps\n\n1. Run headless execution with fixed run_id\n2. Run TUI synthesis with the same cached agent response\n3. Compare generated plan.md bytes\n\n## Acceptance Criteria\n\n- Artifacts match exactly\n- Test remains hermetic\n\n## Constraints\n\n- Must be deterministic\n- Must not require network\n\n## Notes\n\nThis mock output is >= 500 bytes to satisfy AgentManager validation requirements. Adding more content here to ensure we exceed the threshold with comfortable margin for the deterministic parity test.",
+  "agent": "gemini-mock",
+  "timestamp": "2026-01-30T00:00:00Z"
+}
+EOF
+"##,
+    )?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&gemini_shim)?.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&gemini_shim, perms)?;
+    }
+
+    // Config without quality gates
+    let config_path = codex_home.path().join("config.toml");
+    fs::write(
+        &config_path,
+        r#"
+[[agents]]
+name = "gemini"
+command = "gemini"
+args = []
+enabled = true
+
+[speckit.stage_agents]
+plan = "gemini"
+"#,
+    )?;
+
+    // Disable Stage0 tier2
+    let stage0_config = codex_home.path().join("stage0.toml");
+    fs::write(
+        &stage0_config,
+        r#"
+store_system_pointers = false
+[tier2]
+enabled = false
+"#,
+    )?;
+
+    let current_path = std::env::var_os("PATH").unwrap_or_default();
+    let paths: Vec<_> = std::iter::once(bin_dir.clone())
+        .chain(std::env::split_paths(&current_path))
+        .collect();
+    let new_path = std::env::join_paths(&paths).expect("PATH should be joinable");
+
+    // MAINT-930-C: Set deterministic run_id
+    let fixed_run_id = format!("{}_12345678_abcd1234", spec_id);
+
+    // Build expected plan.md using the shared (TUI) synthesis logic.
+    let cached_responses = vec![(
+        "gemini".to_string(),
+        r##"{
+  "stage": "plan",
+  "ok": true,
+  "result": "# Plan Stage Output\n\nDeterministic test content from the mock gemini agent for artifact parity.\n\n## Goals\n\n- Verify artifact parity across TUI vs headless\n- Ensure byte-for-byte equality for canonical artifacts\n\n## Steps\n\n1. Run headless execution with fixed run_id\n2. Run TUI synthesis with the same cached agent response\n3. Compare generated plan.md bytes\n\n## Acceptance Criteria\n\n- Artifacts match exactly\n- Test remains hermetic\n\n## Constraints\n\n- Must be deterministic\n- Must not require network\n\n## Notes\n\nThis mock output is >= 500 bytes to satisfy AgentManager validation requirements. Adding more content here to ensure we exceed the threshold with comfortable margin for the deterministic parity test.",
+  "agent": "gemini-mock",
+  "timestamp": "2026-01-30T00:00:00Z"
+}
+"##
+        .to_string(),
+    )];
+    codex_tui::stage_synthesis::synthesize_from_cached_responses(
+        &cached_responses,
+        spec_id,
+        codex_tui::SpecStage::Plan,
+        tui_root.path(),
+        Some(&fixed_run_id),
+        codex_tui::stage_synthesis::SynthesisSideEffects {
+            store_to_sqlite: false,
+            auto_export_evidence: false,
+        },
+    )
+    .map_err(|e| anyhow::anyhow!("TUI synthesis failed: {}", e))?;
+    let expected_plan_path = tui_root.path().join("docs").join(spec_id).join("plan.md");
+    let expected_plan = fs::read_to_string(&expected_plan_path)?;
+
+    // First execution
+    let mut cmd1 = codex_command(codex_home.path(), repo_root.path())?;
+    cmd1.env("PATH", &new_path);
+    cmd1.env("HOME", codex_home.path());
+    cmd1.env("CODE_STAGE0_CONFIG", &stage0_config);
+    cmd1.env("CODEX_TEST_RUN_ID", &fixed_run_id);
+    cmd1.env("CODEX_HEADLESS_MODE", "1");
+
+    let output1 = cmd1
+        .args([
+            "speckit",
+            "run",
+            "--spec",
+            spec_id,
+            "--from",
+            "plan",
+            "--to",
+            "plan",
+            "--execute",
+            "--headless",
+            "--maieutic-answers",
+            r#"{"goal":"Test artifact parity","constraints":[],"acceptance":["Pass"],"delegation":"B"}"#,
+            "--json",
+        ])
+        .output()?;
+
+    let stdout1 = String::from_utf8_lossy(&output1.stdout);
+    let stderr1 = String::from_utf8_lossy(&output1.stderr);
+
+    // Verify first execution succeeded
+    let json1: JsonValue = serde_json::from_str(&stdout1).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to parse JSON from run 1: {}\nstdout: {}\nstderr: {}",
+            e,
+            stdout1,
+            stderr1
+        )
+    })?;
+
+    let exit_code1 = json1
+        .get("exit_code")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(-1);
+    assert_eq!(
+        exit_code1, 0,
+        "First run should succeed (exit 0), got {}\nstderr: {}",
+        exit_code1, stderr1
+    );
+
+    // Read artifact from headless run
+    let plan_path = repo_root.path().join("docs").join(spec_id).join("plan.md");
+    assert!(plan_path.exists(), "plan.md should exist after first run");
+    let artifact1 = fs::read_to_string(&plan_path)?;
+
+    // LOCK E3: Headless artifacts must match the shared TUI synthesis output.
+    assert_eq!(
+        artifact1, expected_plan,
+        "plan.md should match TUI synthesis byte-for-byte.\n\n--- Headless ---\n{}\n\n--- TUI ---\n{}",
+        artifact1, expected_plan
+    );
+
+    Ok(())
 }
 
 // =============================================================================

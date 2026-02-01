@@ -1891,12 +1891,13 @@ pub(crate) fn check_consensus_and_advance_spec_auto(widget: &mut ChatWidget) {
             .spec_auto_state
             .as_ref()
             .and_then(|s| s.run_id.as_deref());
-        match synthesize_from_cached_responses(
+        match super::stage_synthesis::synthesize_from_cached_responses(
             &cached,
             &spec_id,
             current_stage,
             &widget.config.cwd,
             run_id_for_synthesis,
+            super::stage_synthesis::SynthesisSideEffects::default(),
         ) {
             Ok(output_path) => {
                 tracing::warn!(
@@ -2317,6 +2318,7 @@ fn check_evidence_size_limit(spec_id: &str, cwd: &std::path::Path) -> super::err
 /// 3. Mixed content with tool outputs
 ///
 /// This synthesizer extracts structured data where possible and creates plan.md.
+#[allow(dead_code)] // Replaced by stage_synthesis::synthesize_from_cached_responses (MAINT-930 / LOCK E3)
 fn synthesize_from_cached_responses(
     cached_responses: &[(String, String)],
     spec_id: &str,
@@ -2648,52 +2650,7 @@ fn synthesize_from_cached_responses(
 
 /// Extract JSON from agent response (handles code blocks, tool output, etc.)
 pub(super) fn extract_json_from_agent_response(text: &str) -> Option<String> {
-    // Look for JSON in markdown code blocks
-    if let Some(start) = text.find("```json\n")
-        && let Some(end) = text[start + 8..].find("\n```")
-    {
-        return Some(text[start + 8..start + 8 + end].to_string());
-    }
-
-    // Look for JSON in plain code blocks (agents use this format)
-    if let Some(start) = text.find("│ {\n│   \"stage\"") {
-        // Extract JSON from piped format (│ prefix on each line)
-        let from_start = &text[start..];
-        if let Some(end) = from_start.find("\n│\n│ Ran for") {
-            let json_block = &from_start[2..end]; // Skip "│ " prefix
-            let cleaned = json_block
-                .lines()
-                .map(|line| {
-                    line.strip_prefix("│   ")
-                        .or_else(|| line.strip_prefix("│ "))
-                        .unwrap_or(line)
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            return Some(cleaned);
-        }
-    }
-
-    // Look for raw JSON objects (Python output format)
-    for pattern in &["{\n  \"stage\":", "{\n\"stage\":"] {
-        if let Some(start) = text.find(pattern) {
-            let from_start = &text[start..];
-            let mut depth = 0;
-            for (i, ch) in from_start.char_indices() {
-                if ch == '{' {
-                    depth += 1;
-                }
-                if ch == '}' {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(from_start[..=i].to_string());
-                    }
-                }
-            }
-        }
-    }
-
-    None
+    super::stage_synthesis::extract_json_from_agent_response(text)
 }
 
 /// SPEC-948 Task 2.2: Convert SpecStage to StageType for pipeline config lookups

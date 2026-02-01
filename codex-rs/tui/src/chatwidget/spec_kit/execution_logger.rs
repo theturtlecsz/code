@@ -20,7 +20,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub type RunId = String;
 
 /// Generate a run ID with timestamp
+///
+/// Supports deterministic testing via CODEX_TEST_RUN_ID env var (MAINT-930-C).
 pub fn generate_run_id(spec_id: &str) -> RunId {
+    // MAINT-930-C: Support deterministic run_id for hermetic testing
+    if let Ok(test_run_id) = std::env::var("CODEX_TEST_RUN_ID") {
+        return test_run_id;
+    }
+
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

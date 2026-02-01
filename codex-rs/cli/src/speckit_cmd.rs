@@ -3477,8 +3477,21 @@ fn run_headless_pipeline(
     };
 
     // Create headless config
+    // MAINT-930-B: Derive quality_gates_enabled from planner_config
+    let quality_gates_enabled = planner_config
+        .quality_gates
+        .as_ref()
+        .map(|qg| {
+            qg.plan.enabled
+                || qg.tasks.enabled
+                || qg.validate.enabled
+                || qg.audit.enabled
+                || qg.unlock.enabled
+        })
+        .unwrap_or(false);
     let config = HeadlessConfig {
         json_output: args.json,
+        quality_gates_enabled,
         ..Default::default()
     };
 

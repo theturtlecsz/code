@@ -516,9 +516,38 @@ fn process_quality_gate_agent_results(
             crate::history_cell::HistoryCellType::Notice,
         ));
 
-        widget
-            .bottom_pane
-            .show_quality_gate_modal(checkpoint, escalated_questions.clone());
+        // MAINT-930-A: Guard against prompts in headless/test mode
+        use super::prompt_guard::{GuardMode, PromptGuardResult, guard_prompt};
+        match guard_prompt(GuardMode::from_env(), || {
+            widget
+                .bottom_pane
+                .show_quality_gate_modal(checkpoint, escalated_questions.clone());
+        }) {
+            PromptGuardResult::Allowed(()) => {
+                // Modal shown successfully, continue to set phase
+            }
+            PromptGuardResult::BlockedHeadless => {
+                // In headless mode, can't prompt - halt with approval needed message
+                tracing::warn!(
+                    checkpoint = %checkpoint.name(),
+                    questions = escalated_questions.len(),
+                    "Quality gate requires human input but prompts are blocked (D133)"
+                );
+                if let Some(state) = widget.spec_auto_state.as_mut() {
+                    state.quality_gate_processing = None;
+                }
+                super::handler::halt_spec_auto_with_error(
+                    widget,
+                    format!(
+                        "Quality gate {} needs approval: {} questions require human input (headless mode)",
+                        checkpoint.name(),
+                        escalated_questions.len()
+                    ),
+                );
+                return;
+            }
+            PromptGuardResult::Panicked => unreachable!("panic should have occurred"),
+        }
 
         if let Some(state) = widget.spec_auto_state.as_mut() {
             state.quality_gate_processing = None;

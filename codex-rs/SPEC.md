@@ -114,6 +114,7 @@ These invariants MUST NOT be violated:
 
 | Spec                | Completion Date | Key Deliverables                                                                              |
 | ------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| MAINT-930           | 2026-02-01      | D133 enforcement: prompt guard, needs-approval gates (LOCK E2), TUI/headless artifact parity (LOCK E3) |
 | SPEC-KIT-983        | 2026-02-01      | Stage→agent defaults modal + root-only persistence with user-visible errors                   |
 | MAINT-17            | 2026-02-01      | Fix codex-cli hermetic speckit tests to set \[speckit.stage\_agents] under GPT defaults       |
 | MAINT-16            | 2026-01-31      | Headless ACE init + runtime-safe fetch + git repo-root parity (D113/D133)                     |

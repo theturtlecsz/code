@@ -299,6 +299,7 @@ pub use chatwidget::spec_kit::headless;
 pub use chatwidget::spec_kit::maieutic::{
     DelegationBounds, ElicitationMode, MAIEUTIC_SPEC_VERSION, MaieuticSpec,
 };
+pub use chatwidget::spec_kit::stage_synthesis;
 
 // Re-export supporting types for E2E testing (T87)
 pub use slash_command::{HalMode, SlashCommand};

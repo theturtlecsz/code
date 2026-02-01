@@ -62,6 +62,7 @@ pub mod prd_builder_handler; // SPEC-KIT-970: PRD builder modal event handlers
 pub mod project_detector; // SPEC-KIT-971: Project type detection for context-aware questions
 pub mod project_intake_handler; // /speckit.projectnew project intake handlers
 pub mod project_native; // SPEC-KIT-960: Native project scaffolding
+pub mod prompt_guard; // MAINT-930-A: Prompt guard for headless/test mode
 pub(crate) mod prompt_vars;
 pub mod rebuild_projections;
 pub mod spec_directory;
@@ -70,6 +71,7 @@ pub mod stage0_integration; // SPEC-KIT-102: Stage 0 context injection for /spec
 pub mod stage0_seeding;
 pub mod stage_details; // SPEC-947 Phase 3: Stage details widget (right pane)
 pub mod stage_selector;
+pub mod stage_synthesis; // Shared stage artifact synthesis (TUI + headless)
 pub mod vision_builder_handler; // P93/SPEC-KIT-105: Vision builder modal event handlers // SPEC-947 Phase 3: Stage selector widget (checkbox list) // SPEC-KIT-900 Session 3: ACID-compliant SPEC directory resolution // MAINT-3 Phase 5: Pipeline state machine (extracted from handler.rs) // SPEC-KIT-102: Shadow Notebook Seeder for NotebookLM
 pub mod vision_core; // CLI headless vision persistence (extracted from vision_builder_handler) // WP-A: Projection rebuild from capsule/OverlayDb SoR
 // FORK-SPECIFIC (just-every/code): local_memory_client.rs deleted 2025-10-18
