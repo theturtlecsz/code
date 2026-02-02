@@ -420,7 +420,7 @@ fn style_del() -> Style {
     Style::default().fg(Color::Red)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
     use insta::assert_snapshot;

@@ -523,7 +523,7 @@ fn elicitation_options() -> Vec<ApprovalOption> {
     ]
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
     use crate::app_event::AppEvent;

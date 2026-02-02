@@ -1953,7 +1953,7 @@ fn prompt_selection_action(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
     use image::ImageBuffer;

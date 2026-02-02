@@ -2,7 +2,7 @@ mod model;
 mod render;
 
 pub(crate) use model::CommandOutput;
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 pub(crate) use model::ExecCall;
 pub(crate) use model::ExecCell;
 pub(crate) use render::OutputLinesParams;

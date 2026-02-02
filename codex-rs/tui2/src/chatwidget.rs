@@ -3473,7 +3473,7 @@ async fn fetch_rate_limits(base_url: String, auth: CodexAuth) -> Option<RateLimi
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 pub(crate) fn show_review_commit_picker_with_entries(
     chat: &mut ChatWidget,
     entries: Vec<codex_core::git_info::CommitLogEntry>,

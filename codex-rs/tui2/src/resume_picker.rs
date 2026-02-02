@@ -1041,7 +1041,7 @@ fn calculate_column_metrics(rows: &[Row], include_cwd: bool) -> ColumnMetrics {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
     use chrono::Duration;

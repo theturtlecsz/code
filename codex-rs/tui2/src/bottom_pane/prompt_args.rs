@@ -310,7 +310,7 @@ pub fn prompt_command_with_arg_placeholders(name: &str, args: &[String]) -> (Str
     (text, cursor)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
 

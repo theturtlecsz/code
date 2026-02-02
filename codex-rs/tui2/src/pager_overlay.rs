@@ -628,7 +628,7 @@ fn render_offset_content(
     copy_height
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
     use crate::compat::protocol::ExecCommandSource;

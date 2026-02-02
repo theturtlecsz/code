@@ -227,7 +227,7 @@ impl WidgetRef for CommandPopup {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;

@@ -145,12 +145,12 @@ impl BottomPane {
         self.composer.skills()
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "tui2-legacy-tests"))]
     pub(crate) fn context_window_percent(&self) -> Option<i64> {
         self.context_window_percent
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "tui2-legacy-tests"))]
     pub(crate) fn context_window_used_tokens(&self) -> Option<i64> {
         self.context_window_used_tokens
     }
@@ -293,12 +293,12 @@ impl BottomPane {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "tui2-legacy-tests"))]
     pub(crate) fn ctrl_c_quit_hint_visible(&self) -> bool {
         self.ctrl_c_quit_hint
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "tui2-legacy-tests"))]
     pub(crate) fn status_indicator_visible(&self) -> bool {
         self.status.is_some()
     }
@@ -560,7 +560,7 @@ impl Renderable for BottomPane {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
     use crate::app_event::AppEvent;

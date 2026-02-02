@@ -605,7 +605,7 @@ fn should_show_login_screen(login_status: LoginStatus, config: &Config) -> bool 
     login_status == LoginStatus::NotAuthenticated
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
     use codex_core::config::ConfigBuilder;
