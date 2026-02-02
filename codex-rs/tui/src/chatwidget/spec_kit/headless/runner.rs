@@ -32,6 +32,9 @@ use crate::chatwidget::spec_kit::stage0_integration::{
 };
 use crate::spec_prompts::SpecStage;
 
+// MAINT-930: Import agent resolver for preflight validation
+use crate::chatwidget::spec_kit::agent_resolver::resolve_agent_config_name;
+
 // MAINT-16: Import safe sync→async bridge for ACE fetching
 use super::super::consensus_coordinator::block_on_sync;
 
@@ -353,6 +356,48 @@ impl HeadlessPipelineRunner {
         }
     }
 
+    /// Preflight: validate all required agents are configured (MAINT-930)
+    ///
+    /// Checks that every stage in the range has a resolvable agent config.
+    /// Returns early with InfraError if any agent is missing, avoiding Stage0 timeout.
+    /// This ensures "fail fast and honestly" when CODEX_HOME has no agent configs.
+    fn validate_required_agents(&self) -> Result<(), HeadlessError> {
+        // 1. Compute stage range
+        let stages = Stage::range(self.from_stage, self.to_stage).ok_or_else(|| {
+            HeadlessError::InfraError(format!(
+                "Invalid stage range: {} > {}",
+                self.from_stage.as_str(),
+                self.to_stage.as_str()
+            ))
+        })?;
+
+        // 2. For each stage, validate agent config exists
+        for stage in &stages {
+            let agents = get_agents_for_stage(
+                &self.cwd,
+                stage.as_str(),
+                Some(&self.planner_config.speckit_stage_agents),
+            )?;
+
+            for agent_name in &agents {
+                // 3. Validate agent is configured and enabled
+                if resolve_agent_config_name(agent_name, &self.planner_config.agents).is_err() {
+                    return Err(HeadlessError::InfraError(format!(
+                        "Agent config '{}' not found in config.toml",
+                        agent_name
+                    )));
+                }
+            }
+        }
+
+        tracing::debug!(
+            from = %self.from_stage.as_str(),
+            to = %self.to_stage.as_str(),
+            "All required agents validated successfully"
+        );
+        Ok(())
+    }
+
     /// Run the pipeline (main entry point)
     pub fn run(&mut self) -> HeadlessResult {
         tracing::info!(
@@ -368,6 +413,12 @@ impl HeadlessPipelineRunner {
                 HeadlessError::NeedsInput(e.to_string()),
                 self.stages_completed.clone(),
             );
+        }
+
+        // MAINT-930: Preflight agent config validation
+        // Fail fast before Stage0 if any required agent is missing
+        if let Err(e) = self.validate_required_agents() {
+            return HeadlessResult::error(e, self.stages_completed.clone());
         }
 
         // MAINT-16: Initialize ACE client before pipeline runs
