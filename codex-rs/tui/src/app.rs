@@ -3210,9 +3210,10 @@ impl App<'_> {
                 AppEvent::PrdBuilderSubmitted {
                     description,
                     answers,
+                    area,
                 } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
-                        spec_kit::on_prd_builder_submitted(widget, description, answers);
+                        spec_kit::on_prd_builder_submitted(widget, description, answers, area);
                     }
                 }
                 AppEvent::PrdBuilderCancelled { description } => {
@@ -3239,6 +3240,7 @@ impl App<'_> {
                     deep,
                     answers,
                     existing_spec_id,
+                    area,
                 } => {
                     if let AppState::Chat { widget } = &mut self.app_state {
                         spec_kit::on_spec_intake_submitted(
@@ -3247,6 +3249,7 @@ impl App<'_> {
                             deep,
                             answers,
                             existing_spec_id,
+                            area,
                         );
                     }
                 }

@@ -1,271 +1,180 @@
-# HANDOFF: MAINT-930 Post-Fix Clippy Cleanup
+# HANDOFF: SPECKIT-TASK-0001 Area-Scoped Feature IDs
 
-**Generated:** 2026-02-01
+**Generated:** 2026-02-03
 **Audience:** Next session
-**Scope:** `codex-rs` / Clippy warning cleanup after MAINT-930 strict gates
+**Scope:** `codex-rs` / Area-scoped feature IDs + docs layout
 
 ***
 
 ## TL;DR (Current State)
 
-**Phase 1-2: Dead Code Triage & Fixes - 100% COMPLETE**
-**Phase 3: Clippy Lints - 100% COMPLETE**
+**Implementation: \~95% Complete**
 
-Build Status: COMPILING CLEANLY (clippy passes with -D warnings)
+* All code changes done
+* Compilation passes (with expected deprecation warnings)
+* Tests need to be run and verified
 
-## Restart Prompt
-
-```
-Continue MAINT-930 on branch fix/warnings-post-maint-930.
-
-## Status
-Clippy cleanup complete. Final validation before PR.
-
-## Validation Commands
-1. cd codex-rs && cargo fmt --all -- --check
-2. cd codex-rs && cargo clippy --workspace --all-targets --exclude codex-tui2 -- -D warnings
-3. cd codex-rs && cargo clippy -p codex-tui2 --lib -- -D warnings
-4. cd codex-rs && cargo test -p codex-cli --test speckit
-5. cd codex-rs && cargo test -p codex-tui --test evidence_archival_tests --test evidence_integrity_tests --test stage0_integration_tests
-6. cd codex-rs && cargo build -p codex-tui2
-
-## Notes
-- tui2 library builds and passes clippy; tests gated by `tui2-legacy-tests` feature due to ~475 API drift errors
-- ARB Pass2 registry updated: tests 11-13 now active (MAINT-930)
-- user_approval_widget tests converted to async with try_recv() drain pattern
-
-## If All Pass
-Create PR to main, merge, delete branch.
-```
+**Build Status:** `cargo check -p codex-tui` PASSES
 
 ***
 
-# Previous Handoff Content (SPEC-KIT-981/982)
+## Resume Prompt
 
-# HANDOFF: SPEC-KIT-981/982 Implementation Progress
+Copy this to start the next session:
 
-**Generated:** 2026-01-31
-**Audience:** Next session
-**Scope:** `codex-rs` / Spec-Kit config-driven agent mapping + unified prompt builder
+```
+Continue SPECKIT-TASK-0001: Area-scoped feature IDs
 
-***
+## Current State
+Implementation is ~95% complete. All code changes done, compilation passes.
 
-## TL;DR (Current State)
+## Immediate Next Steps
+1. Run the test suite:
+   cd codex-rs
+   cargo test -p codex-tui spec_id_generator
+   cargo test -p codex-tui spec_id_generator_integration
 
-**SPEC-KIT-981: Config-Driven Stage→Agent Mapping - 100% COMPLETE**
+2. Fix any test failures (if needed)
 
-All 7 tasks finished:
+3. Final verification:
+   cargo fmt --all -- --check
+   cargo clippy -p codex-tui -- -D warnings
 
-* Config surface added (`[speckit.stage_agents]`)
-* Defaults changed to GPT (gpt\_pro/gpt\_codex)
-* GPT prompts added for clarify/analyze/checklist
-* TUI/headless parity bug fixed (shared agent\_resolver)
-* Guard test added
+4. If all passes, git diff --stat and summarize for commit
 
-**SPEC-KIT-982: Unified Prompt-Vars Builder - 80% COMPLETE**
+## Key Implementation Summary
+- /speckit.new <AREA> <description> [--deep] syntax
+- Default areas: CORE, CLI, TUI, STAGE0, SPECKIT
+- ID format: AREA-FEAT-#### (4-digit zero-padded)
+- tasks/ subdirectory created in each feature directory
+- Legacy SPEC-* and MAINT-* formats still accepted by guardrails
+- Deprecated generate_next_spec_id() for backward compat (warnings expected)
 
-Core builder created with tests. Wiring into TUI/headless pending.
+## Stashed Work
+Previous PLATFORM-TASK-0001 stash can be dropped - this supersedes it:
+git stash drop  # if stash contains "PLATFORM-TASK-0001"
 
-**Build Status:** `cargo check -p codex-tui` PASSES (74 warnings, 0 errors)
+## Reference Files
+- Plan: ~/.claude/plans/buzzing-crunching-acorn.md
+- Handoff: /home/thetu/code/HANDOFF.md
+```
 
 ***
 
 ## What Was Implemented
 
-### SPEC-KIT-981 (Complete)
+### 1. spec\_id\_generator.rs (Complete)
 
-1. **Config Types** (`codex-rs/core/src/config_types.rs:287-349`)
-   * Added `SpecKitStageAgents` struct with fields for all 10 stages
-   * Added `get_agent_for_stage()` method
+New functions:
 
-2. **Config Parsing** (`codex-rs/core/src/config.rs`)
-   * Added `SpecKitConfig` struct for `[speckit]` section
-   * Added `speckit_stage_agents` field to `Config` struct
-   * Updated 4 test fixtures with new field
+* `validate_area(area)` - Validates `^[A-Z][A-Z0-9]*$` format
+* `get_available_areas(cwd)` - Returns DEFAULT\_AREAS + discovered from docs/
+* `generate_next_feature_id(cwd, area)` - Generates `AREA-FEAT-####`
+* `generate_feature_directory_name(cwd, area, desc)` - Full dir name
+* `DEFAULT_AREAS` constant: `["CORE", "CLI", "TUI", "STAGE0", "SPECKIT"]`
 
-3. **Agent Defaults** (`codex-rs/tui/src/chatwidget/spec_kit/gate_evaluation.rs:248-299`)
-   * Updated `preferred_agent_for_stage()`:
-     * All stages → GptPro (except Implement)
-     * Implement → GptCodex
-   * Added `agent_for_stage()` config-aware selector
+Legacy functions marked `#[deprecated]`:
 
-4. **Prompts** (`docs/spec-kit/prompts.json`)
-   * Added `gpt_pro` entries for: spec-clarify, spec-analyze, spec-checklist
+* `generate_next_spec_id(cwd)` - Still works for backward compat
+* `generate_spec_directory_name(cwd, desc)` - Still works
 
-5. **Parity Bug Fix** (NEW: `codex-rs/tui/src/chatwidget/spec_kit/agent_resolver.rs`)
-   * Created shared `resolve_agent_config_name()` function
-   * Uses canonical\_name fallback with error reporting
-   * Updated `agent_orchestrator.rs` (lines \~515 and \~850)
-   * Updated `headless/backend.rs` (line \~48)
+### 2. Command Parsing (special.rs)
 
-6. **Config Examples**
-   * `codex-rs/config.toml.example`: Added canonical\_name to GPT agents, added `[speckit.stage_agents]`
-   * Root `config.toml.example`: Same updates
+* `/speckit.new <AREA> <description> [--deep]` syntax
+* Missing AREA → error with available areas list
+* Invalid AREA → format validation error
+* `parse_new_spec_args()` function extracts area/description/deep
 
-7. **Guard Test** (`codex-rs/tui/src/spec_prompts.rs:1322-1366`)
-   * Added `all_stages_have_prompts_for_default_agents()` test
+### 3. Modal/Event Pipeline
 
-### SPEC-KIT-982 (Partial)
+| File                     | Change                                     |
+| ------------------------ | ------------------------------------------ |
+| `spec_intake_modal.rs`   | Added `area: Option<String>` field         |
+| `app_event.rs`           | Added `area` to `SpecIntakeSubmitted`      |
+| `chatwidget/mod.rs`      | Updated `show_spec_intake_modal` signature |
+| `bottom_pane/mod.rs`     | Updated `show_spec_intake_modal` signature |
+| `spec_intake_handler.rs` | Threads area to generator                  |
+| `app.rs`                 | Updated event handler                      |
 
-1. **Unified Builder** (NEW: `codex-rs/tui/src/chatwidget/spec_kit/prompt_vars.rs`)
-   * Created `build_prompt_context()` function
-   * Deterministic section order: Stage0 → Maieutic → ACE → spec/plan/tasks
-   * Budget enforcement: ACE 4KB, Maieutic 4KB, per-file 20KB
-   * ACE bullet deduplication and ID tracking
-   * 7 unit tests included
+### 4. Additional Features
 
-**NOT YET DONE:**
+| File                        | Change                                   |
+| --------------------------- | ---------------------------------------- |
+| `intake_core.rs`            | Creates `tasks/` subdirectory            |
+| `native_guardrail.rs`       | Accepts both legacy and `AREA-FEAT-####` |
+| `project_intake_handler.rs` | Defaults to "CORE" area                  |
 
-* Wire `prompt_vars::build_prompt_context()` into `agent_orchestrator.rs`
-* Wire into `headless/prompt_builder.rs`
+### 5. Tests
 
-### Documentation Updates
-
-1. **codex-rs/SPEC.md** - Added SPEC-KIT-981/982/983 tracking
-2. **docs/POLICY.md** - Added Section 2.8 "Stage→Agent Routing"
+* Unit tests in `spec_id_generator.rs` - All new functions tested
+* Integration tests rewritten in `spec_id_generator_integration.rs`
 
 ***
 
-## Files Changed
+## Files Modified
 
 ```
-Modified:
-  codex-rs/SPEC.md
-  codex-rs/core/src/config.rs
-  codex-rs/core/src/config_types.rs
-  codex-rs/tui/src/chatwidget/spec_kit/mod.rs
-  codex-rs/tui/src/chatwidget/spec_kit/gate_evaluation.rs
-  codex-rs/tui/src/chatwidget/spec_kit/agent_orchestrator.rs
-  codex-rs/tui/src/chatwidget/spec_kit/headless/backend.rs
-  codex-rs/tui/src/spec_prompts.rs
-  codex-rs/config.toml.example
-  config.toml.example
-  docs/spec-kit/prompts.json
-  docs/POLICY.md
-
-New:
-  codex-rs/tui/src/chatwidget/spec_kit/agent_resolver.rs
-  codex-rs/tui/src/chatwidget/spec_kit/prompt_vars.rs
+codex-rs/tui/src/chatwidget/spec_kit/spec_id_generator.rs
+codex-rs/tui/src/chatwidget/spec_kit/commands/special.rs
+codex-rs/tui/src/bottom_pane/spec_intake_modal.rs
+codex-rs/tui/src/app_event.rs
+codex-rs/tui/src/chatwidget/mod.rs
+codex-rs/tui/src/bottom_pane/mod.rs
+codex-rs/tui/src/chatwidget/spec_kit/spec_intake_handler.rs
+codex-rs/tui/src/chatwidget/spec_kit/intake_core.rs
+codex-rs/tui/src/chatwidget/spec_kit/native_guardrail.rs
+codex-rs/tui/src/chatwidget/spec_kit/project_intake_handler.rs
+codex-rs/tui/src/app.rs
+codex-rs/tui/tests/spec_id_generator_integration.rs
 ```
 
 ***
 
-## Remaining Work
+## Acceptance Criteria Status
 
-1. **Wire unified builder into TUI** (`agent_orchestrator.rs`):
-   * Refactor `build_individual_agent_prompt()` to call `prompt_vars::build_prompt_context()`
-   * Return `(prompt, ace_bullet_ids)` tuple
-   * Update callers to track `ace_bullet_ids_used`
-
-2. **Wire unified builder into headless** (`headless/prompt_builder.rs`):
-   * Refactor `build_headless_prompt()` to use unified builder
-   * Add optional ACE client integration (safe fallback)
-
-3. **Run validation suite**:
-   ```bash
-   cd codex-rs
-   cargo fmt --all -- --check
-   cargo clippy --workspace --all-targets -- -D warnings
-   cargo test -p codex-tui
-   cargo test -p codex-cli --test speckit
-   python3 scripts/doc_lint.py
-   ```
-
-4. **Commit** (if validation passes):
-   ```
-   feat(spec-kit): SPEC-KIT-981/982 config-driven stage agents + unified prompt builder
-
-   - Add [speckit.stage_agents] config for per-stage agent override
-   - Change defaults to GPT (gpt_pro for all, gpt_codex for implement)
-   - Add gpt_pro prompts for clarify/analyze/checklist
-   - Fix TUI/headless parity bug with shared agent_resolver
-   - Create unified prompt_vars builder with ACE + maieutic sections
-   ```
+* [x] `/speckit.new` without AREA → error with available areas list
+* [x] `/speckit.new CORE "Add feature"` → creates `docs/CORE-FEAT-0001-add-feature/`
+* [x] Feature directory contains `tasks/` subdirectory
+* [x] Legacy `SPEC-KIT-*` directories pass guardrail validation
+* [x] New `AREA-FEAT-####` directories pass guardrail validation
+* [ ] All tests pass (needs verification)
 
 ***
 
-## Session Restart Prompt
+## Stashed Work
 
-Copy everything below the line into the first message of the next session:
+Previous work (PLATFORM-TASK-0001) is stashed and can be dropped:
 
-***
-
-Continue SPEC-KIT-981/982 implementation from HANDOFF.md
-
-## Status
-
-* **SPEC-KIT-981**: COMPLETE (config, defaults, prompts, parity fix, tests)
-* **SPEC-KIT-982**: 80% - unified `prompt_vars.rs` builder created with 7 tests, wiring pending
-
-## First, read:
-
-* `HANDOFF.md` (shows exactly what was done)
-* `codex-rs/tui/src/chatwidget/spec_kit/prompt_vars.rs` (new unified builder)
-* `codex-rs/tui/src/chatwidget/spec_kit/agent_resolver.rs` (shared resolver)
-
-## Remaining Tasks
-
-1. **Wire unified builder into TUI `agent_orchestrator.rs`**:
-   * In `build_individual_agent_prompt()`, call `prompt_vars::build_prompt_context()`
-   * Pass maieutic\_spec and ace\_bullets (if available)
-   * Return `(prompt, ace_bullet_ids)` to caller
-
-2. **Wire unified builder into headless `prompt_builder.rs`**:
-   * In `build_headless_prompt()`, call shared `prompt_vars::build_prompt_context()`
-   * Handle ACE client safely (log and fallback if unavailable)
-
-3. **Run validation**:
-   ```bash
-   cd codex-rs
-   cargo fmt --all -- --check
-   cargo test -p codex-tui
-   python3 scripts/doc_lint.py
-   ```
-
-4. **If all passes, commit with**:
-   ```
-   feat(spec-kit): SPEC-KIT-981/982 config-driven stage agents + unified prompt builder
-   ```
-
-## Key Files
-
-* `codex-rs/tui/src/chatwidget/spec_kit/agent_orchestrator.rs` (lines \~110-311 build\_individual\_agent\_prompt)
-* `codex-rs/tui/src/chatwidget/spec_kit/headless/prompt_builder.rs` (lines \~34-192 build\_headless\_prompt)
-* `codex-rs/tui/src/chatwidget/spec_kit/prompt_vars.rs` (new unified builder)
+```bash
+git stash list  # Shows "PLATFORM-TASK-0001: SPECKIT-FEAT-#### migration (uncommitted)"
+git stash drop  # Safe to drop - SPECKIT-TASK-0001 supersedes it
+```
 
 ***
 
-### MAINT-16 (Complete)
+## Remaining Verification Commands
 
-Headless ACE init + runtime-safe fetch + git repo-root parity:
-
-1. **Runtime Safety Fix** (`runner.rs:837-880`)
-   * Replaced unsafe `handle.block_on()` with `block_on_sync()` pattern
-   * Uses `tokio::task::block_in_place` when inside runtime
-   * Falls back to `new_current_thread()` when outside runtime
-
-2. **ACE Client Init** (`runner.rs:315-349`)
-   * Added `maybe_init_ace_client()` method
-   * Called at start of `run()` before Stage0
-   * Matches TUI's `lib.rs:621-637` pattern
-
-3. **Repo-Root Semantics** (`runner.rs:837-839`)
-   * Added `get_repo_root_sync()` helper
-   * Uses `git rev-parse --show-toplevel` like TUI
-   * Falls back to cwd if not in git repo
-
-4. **CLI Comment Fix** (`speckit_cmd.rs:3486`)
-   * Updated stale comment about ACE implementation
-
-5. **Regression Test** (`runner.rs` tests module)
-   * `ace_fetch_under_runtime_does_not_panic`
-
-**D113/D133 Parity Verified**: TUI, CLI, and headless now use identical:
-
-* Runtime bridging pattern (`block_on_sync`)
-* Repo-root resolution (`git rev-parse --show-toplevel`)
-* ACE client initialization sequence
+```bash
+cd codex-rs
+cargo test -p codex-tui spec_id_generator
+cargo test -p codex-tui spec_id_generator_integration
+cargo fmt --all -- --check
+cargo clippy -p codex-tui -- -D warnings
+```
 
 ***
 
-*Generated by Claude Code session 2026-01-31*
+*Generated by Claude Code session 2026-02-03*
+
+***
+
+***
+
+# Previous Handoffs (Archive)
+
+## MAINT-930 Post-Fix Clippy Cleanup
+
+**Generated:** 2026-02-01
+**Status:** COMPLETE
+
+... (previous content truncated for brevity)

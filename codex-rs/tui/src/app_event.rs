@@ -614,6 +614,8 @@ pub(crate) enum AppEvent {
     PrdBuilderSubmitted {
         description: String,
         answers: std::collections::HashMap<String, String>,
+        /// Area for spec (e.g., "CORE", "TUI")
+        area: String,
     },
 
     /// PRD builder was cancelled by user (SPEC-KIT-970)
@@ -637,6 +639,8 @@ pub(crate) enum AppEvent {
         answers: std::collections::HashMap<String, String>,
         /// If Some, this is a backfill for existing spec (don't generate new ID)
         existing_spec_id: Option<String>,
+        /// Area for new spec (e.g., "CORE", "TUI"). None for backfill mode.
+        area: Option<String>,
     },
 
     /// Spec intake cancelled (Architect-in-a-box)

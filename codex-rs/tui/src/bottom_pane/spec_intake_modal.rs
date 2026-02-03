@@ -33,6 +33,8 @@ pub(crate) struct SpecIntakeOption {
 pub(crate) struct SpecIntakeModal {
     description: String,
     deep: bool,
+    /// Area for new spec (e.g., "CORE", "TUI"). None for backfill mode.
+    area: Option<String>,
     questions: Vec<SpecIntakeQuestion>,
     current_index: usize,
     answers: Vec<String>,
@@ -46,23 +48,32 @@ pub(crate) struct SpecIntakeModal {
 
 impl SpecIntakeModal {
     /// Create a new spec intake modal for creating a new spec
-    pub fn new(description: String, deep: bool, app_event_tx: AppEventSender) -> Self {
-        Self::new_with_spec_id(description, deep, app_event_tx, None)
+    /// Requires area (e.g., "CORE", "TUI") for new feature ID generation
+    pub fn new(
+        description: String,
+        deep: bool,
+        area: String,
+        app_event_tx: AppEventSender,
+    ) -> Self {
+        Self::new_internal(description, deep, Some(area), app_event_tx, None)
     }
 
     /// Create a new spec intake modal for backfilling an existing spec
+    /// No area needed - existing spec already has an ID
     pub fn new_backfill(spec_id: String, app_event_tx: AppEventSender) -> Self {
-        Self::new_with_spec_id(
+        Self::new_internal(
             format!("Backfill intake for {}", spec_id),
             false, // backfill uses baseline questions only
+            None,  // no area for backfill
             app_event_tx,
             Some(spec_id),
         )
     }
 
-    fn new_with_spec_id(
+    fn new_internal(
         description: String,
         deep: bool,
+        area: Option<String>,
         app_event_tx: AppEventSender,
         existing_spec_id: Option<String>,
     ) -> Self {
@@ -74,6 +85,7 @@ impl SpecIntakeModal {
         Self {
             description,
             deep,
+            area,
             questions,
             current_index: 0,
             answers: Vec::new(),
@@ -143,6 +155,7 @@ impl SpecIntakeModal {
             deep: self.deep,
             answers: answers_by_key,
             existing_spec_id: self.existing_spec_id.clone(),
+            area: self.area.clone(),
         });
     }
 

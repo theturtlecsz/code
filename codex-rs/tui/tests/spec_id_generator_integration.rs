@@ -1,58 +1,116 @@
 //! Integration test for native SPEC-ID generation
-//! FORK-SPECIFIC (just-every/code): SPEC-KIT-070 cost optimization
+//! FORK-SPECIFIC (just-every/code): SPECKIT-TASK-0001 area-scoped feature IDs
 
 use codex_tui::spec_id_generator::{
-    create_slug, generate_next_spec_id, generate_spec_directory_name,
+    DEFAULT_AREAS, create_slug, generate_feature_directory_name, generate_next_feature_id,
+    get_available_areas, validate_area,
 };
 use std::path::PathBuf;
 
-#[test]
-fn test_generate_next_spec_id_real_repo() {
-    // This test runs against the actual repository structure
-    // Expected: SPEC-KIT-070 exists, so next should be SPEC-KIT-071
+fn get_repo_root() -> PathBuf {
     // CARGO_MANIFEST_DIR is codex-rs/tui, need to go up 2 levels
-    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent() // codex-rs/tui -> codex-rs
         .expect("Expected parent")
         .parent() // codex-rs -> repo root
         .expect("Expected repo root")
-        .to_path_buf();
-
-    let next_id = generate_next_spec_id(&repo_root).expect("Should generate ID");
-
-    // Verify format
-    assert!(next_id.starts_with("SPEC-KIT-"));
-    assert_eq!(next_id.len(), 12); // SPEC-KIT-XXX
-
-    // Verify it's >= 071 (since we know 070 exists)
-    let num_part = next_id.strip_prefix("SPEC-KIT-").unwrap();
-    let num: u32 = num_part.parse().expect("Should be valid number");
-    assert!(num >= 71, "Next ID should be at least 071, got {num}");
-
-    println!("✅ Generated next SPEC-ID: {next_id}");
+        .to_path_buf()
 }
 
 #[test]
-fn test_create_full_spec_name_real_repo() {
-    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("Expected parent")
-        .parent()
-        .expect("Expected repo root")
-        .to_path_buf();
+fn test_generate_next_feature_id_real_repo() {
+    let repo_root = get_repo_root();
 
-    let spec_name = generate_spec_directory_name(&repo_root, "Test native ID generation").unwrap();
+    // Generate ID for CORE area
+    let next_id = generate_next_feature_id(&repo_root, "CORE").expect("Should generate ID");
 
-    // Should be SPEC-KIT-071-test-native-id-generation (or higher)
-    assert!(spec_name.starts_with("SPEC-KIT-"));
-    assert!(spec_name.contains("-test-native-id-generation"));
+    // Verify format: CORE-FEAT-####
+    assert!(
+        next_id.starts_with("CORE-FEAT-"),
+        "Expected CORE-FEAT-#### format, got: {}",
+        next_id
+    );
+    assert_eq!(
+        next_id.len(),
+        14,
+        "Expected 14 chars (CORE-FEAT-####), got {} for '{}'",
+        next_id.len(),
+        next_id
+    );
 
-    println!("✅ Generated full SPEC name: {spec_name}");
+    // Verify numeric part is valid
+    let num_part = next_id.strip_prefix("CORE-FEAT-").unwrap();
+    let num: u32 = num_part.parse().expect("Should be valid number");
+    assert!(num >= 1, "Next ID should be at least 0001, got {num}");
+
+    println!("Generated next CORE feature ID: {next_id}");
+}
+
+#[test]
+fn test_generate_feature_directory_name_real_repo() {
+    let repo_root = get_repo_root();
+
+    let dir_name = generate_feature_directory_name(&repo_root, "TUI", "Test native ID generation")
+        .expect("Should generate directory name");
+
+    // Should be TUI-FEAT-####-test-native-id-generation
+    assert!(
+        dir_name.starts_with("TUI-FEAT-"),
+        "Expected TUI-FEAT-#### prefix, got: {}",
+        dir_name
+    );
+    assert!(
+        dir_name.contains("-test-native-id-generation"),
+        "Expected slug in name, got: {}",
+        dir_name
+    );
+
+    println!("Generated full feature directory name: {dir_name}");
+}
+
+#[test]
+fn test_get_available_areas_real_repo() {
+    let repo_root = get_repo_root();
+
+    let areas = get_available_areas(&repo_root);
+
+    // Should contain all default areas
+    for default in DEFAULT_AREAS {
+        assert!(
+            areas.contains(&default.to_string()),
+            "Missing default area: {}",
+            default
+        );
+    }
+
+    // Should be sorted
+    let mut sorted = areas.clone();
+    sorted.sort();
+    assert_eq!(areas, sorted, "Areas should be sorted");
+
+    println!("Available areas: {:?}", areas);
+}
+
+#[test]
+fn test_validate_area_examples() {
+    // Valid areas
+    assert!(validate_area("CORE").is_ok());
+    assert!(validate_area("TUI").is_ok());
+    assert!(validate_area("CLI").is_ok());
+    assert!(validate_area("STAGE0").is_ok());
+    assert!(validate_area("SPECKIT").is_ok());
+    assert!(validate_area("CUSTOM123").is_ok());
+
+    // Invalid areas
+    assert!(validate_area("core").is_err(), "lowercase should fail");
+    assert!(validate_area("1AREA").is_err(), "digit start should fail");
+    assert!(validate_area("AREA-X").is_err(), "dash should fail");
+    assert!(validate_area("").is_err(), "empty should fail");
 }
 
 #[test]
 fn test_slug_creation_examples() {
-    // Real-world examples from existing SPECs
+    // Real-world examples
     assert_eq!(
         create_slug("Address speckit.validate multiple agent calls"),
         "address-speckit-validate-multiple-agent-calls"
@@ -62,4 +120,21 @@ fn test_slug_creation_examples() {
         "model-cost-optimization"
     );
     assert_eq!(create_slug("Add search command"), "add-search-command");
+    assert_eq!(
+        create_slug("Area-scoped feature IDs"),
+        "area-scoped-feature-ids"
+    );
+}
+
+#[test]
+fn test_missing_area_would_error() {
+    let repo_root = get_repo_root();
+
+    // Empty area should fail
+    let result = generate_next_feature_id(&repo_root, "");
+    assert!(result.is_err(), "Empty area should fail");
+
+    // Invalid area format should fail
+    let result = generate_next_feature_id(&repo_root, "lowercase");
+    assert!(result.is_err(), "Lowercase area should fail");
 }

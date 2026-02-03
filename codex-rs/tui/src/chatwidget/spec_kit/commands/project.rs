@@ -109,7 +109,7 @@ impl SpecKitCommand for SpecKitProjectCommand {
                     Line::from(""),
                     Line::from("Switching to project directory..."),
                     Line::from(""),
-                    Line::from("Next: /speckit.new <feature description>"),
+                    Line::from("Next: /speckit.new <AREA> <feature description>"),
                     Line::from(""),
                     Line::from("Cost: $0 (zero agents, instant)"),
                 ]);

@@ -81,7 +81,7 @@ pub fn on_vision_builder_submitted(widget: &mut ChatWidget, answers: HashMap<Str
                 "   /speckit.constitution sync - Regenerate constitution.md",
             ));
             lines.push(Line::from(
-                "   /speckit.new <description> - Create a new spec (gate-ready)",
+                "   /speckit.new <AREA> <description> - Create a new spec (gate-ready)",
             ));
 
             widget.history_push(PlainHistoryCell::new(lines, HistoryCellType::Notice));

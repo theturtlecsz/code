@@ -44,6 +44,8 @@ pub(crate) struct PrdBuilderModal {
     custom_mode: bool,
     app_event_tx: AppEventSender,
     done: bool,
+    /// Area for spec (e.g., "CORE", "TUI")
+    area: String,
 }
 
 impl PrdBuilderModal {
@@ -53,6 +55,7 @@ impl PrdBuilderModal {
         project_type_display: String,
         questions: Vec<PrdQuestion>,
         app_event_tx: AppEventSender,
+        area: String,
     ) -> Self {
         Self {
             description,
@@ -64,6 +67,7 @@ impl PrdBuilderModal {
             custom_mode: false,
             app_event_tx,
             done: false,
+            area,
         }
     }
 
@@ -128,6 +132,7 @@ impl PrdBuilderModal {
         self.app_event_tx.send(AppEvent::PrdBuilderSubmitted {
             description: self.description.clone(),
             answers: answers_map,
+            area: self.area.clone(),
         });
     }
 
