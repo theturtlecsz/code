@@ -36,9 +36,11 @@ if [ -n "$DOC_CHANGES" ]; then
         echo ""
         echo "Documentation changes detected, running doc lint..."
         echo "(using canonical: codex-rs/scripts/doc_lint.py)"
-        if ! python3 scripts/doc_lint.py --warn-only; then
+        if ! python3 scripts/doc_lint.py; then
             echo ""
-            echo "⚠️  Doc lint warnings (non-blocking)"
+            echo "❌ Doc lint failed"
+            echo "Fix violations before committing, or skip with: git commit --no-verify"
+            exit 1
         fi
     fi
 fi

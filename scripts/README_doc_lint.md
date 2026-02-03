@@ -28,13 +28,13 @@ cd codex-rs && python3 scripts/doc_lint.py
 ## What it checks (V6 Docs Contract)
 
 - `SPEC.md` has the **Doc Precedence Order** and **Invariants** sections
-- Required files exist (`docs/PROGRAM_2026Q1_ACTIVE.md`, `docs/DECISION_REGISTER.md`)
-- `docs/MODEL-POLICY.md` and `model_policy.toml` exist (model policy enforcement)
+- Required files exist (`DEV_BRIEF.md`, `docs/PROGRAM.md`, `docs/DECISIONS.md`, `docs/POLICY.md`, `docs/SPEC-KIT.md`, `model_policy.toml`, etc.)
 - `model_policy.toml` has required sections (meta, system_of_record, routing, etc.)
-- Active specs 971–980 have Decision IDs sections
+- Active specs listed in `docs/PROGRAM.md` have Decision IDs sections/references
 - Merge terminology uses `curated|full` (not `squash|ff/rebase`)
 - **Replay Truth Table** exists somewhere in docs
 - Key invariants are documented (Stage0 no Memvid dep, URI immutability, etc.)
+- Warnings are treated as failures (exit code 1)
 
 ## Why this exists
 
