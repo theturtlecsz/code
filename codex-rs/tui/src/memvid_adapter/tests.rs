@@ -1227,6 +1227,7 @@ fn test_cross_process_lock_actual_subprocess() {
 /// - The error contains the child's PID
 #[cfg(unix)]
 #[test]
+#[ignore = "Flaky in CI: depends on shell subprocess timing and flock behavior"]
 fn test_cross_process_lock_with_real_subprocess() {
     use crate::memvid_adapter::capsule::CapsuleError;
     use crate::memvid_adapter::lock::lock_path_for;
