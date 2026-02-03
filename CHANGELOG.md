@@ -362,7 +362,7 @@
 
 ## [0.2.102] - 2025-09-09
 
-- CI/Triage: fetch remote before push and fall back to force-with-lease on non-fast-forward for bot-owned branches. (f4258aeb, 81dac6d6)
+- CI/Triage: fetch remote before push and fall back to force-with-lease on non-ancestor updates for bot-owned branches. (f4258aeb, 81dac6d6)
 - Agents: pre-create writable CARGO_HOME and target dirs for agent runs to avoid permission errors. (0ad69c90)
 
 ## [0.2.101] - 2025-09-09
@@ -382,7 +382,7 @@
 
 ## [0.2.99] - 2025-09-09
 
-- TUI/Branch: finalize merges default into worktree first; prefer fast-forward; start agent on conflicts. (8e1cbd20)
+- TUI/Branch: finalize merges default into worktree first; prefer curated merges; start agent on conflicts. (8e1cbd20)
 - TUI/History: cache Exec wrap counts and precompute PatchSummary layout per width to reduce measurement. (be3154b9)
 
 ## [0.2.98] - 2025-09-09
