@@ -76,6 +76,30 @@ code speckit projectnew <type> <name> --answers answers.json [--deep] [--json]
 | `--no-bootstrap-spec` | Skip bootstrap spec creation                                  |
 | `--json`              | Output JSON for scripting                                     |
 
+### `code speckit brief refresh`
+
+Generate or update the current **feature-branch session brief** at:
+
+```
+docs/briefs/<branch>.md
+```
+
+Where `<branch>` is your git branch name with `/` replaced by `__` (same rule as `.githooks/pre-commit`).
+
+```bash
+code speckit brief refresh --query "Stage0" [--domain codex-product] [--limit 10] [--ollama-model qwen2.5:3b] [--dry-run] [--json]
+```
+
+| Option                   | Description                                      |
+| ------------------------ | ------------------------------------------------ |
+| `--query <text>`         | Search query for product knowledge               |
+| `--domain <domain>`      | local-memory domain (default: `codex-product`)   |
+| `--limit <n>`            | Max results from local-memory (default: 10)      |
+| `--max-content-length n` | Max characters per memory item (default: 800)    |
+| `--ollama-model <model>` | Ollama model for synthesis (default: `qwen2.5:3b`) |
+| `--dry-run`              | Print the generated block instead of writing     |
+| `--json`                 | Output JSON for scripting                        |
+
 ### `code speckit projections rebuild`
 
 Regenerate filesystem projections from capsule SoR.

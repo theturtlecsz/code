@@ -90,8 +90,10 @@ use codex_tui::MaieuticSpec;
 use codex_tui::headless::{HeadlessPipelineRunner, format_result_json};
 // WP-A: Projection rebuild types
 use codex_tui::{RebuildRequest, rebuild_projections};
+use serde::Deserialize;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use tokio::runtime::{Builder as TokioRuntimeBuilder, Handle as TokioHandle};
 
 // =============================================================================
 // HEADLESS EXIT CODES (SPEC-KIT-920)
@@ -442,6 +444,11 @@ pub enum SpeckitSubcommand {
     /// Stores original bytes + extracted text for hybrid retrieval.
     /// PDF and DOCX support requires feature flags.
     Ingest(IngestArgs),
+
+    /// Branch/session brief utilities (per-PR session artifacts)
+    ///
+    /// Generates and updates `docs/briefs/<branch>.md` (with `/` → `__`).
+    Brief(BriefArgs),
 }
 
 /// Arguments for `speckit status` command
@@ -1771,6 +1778,65 @@ pub struct IngestArgs {
     pub json: bool,
 }
 
+// =============================================================================
+// Branch Brief CLI Commands (per PR/session)
+// =============================================================================
+
+/// Arguments for `speckit brief` command
+#[derive(Debug, Parser)]
+pub struct BriefArgs {
+    #[command(subcommand)]
+    pub command: BriefSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BriefSubcommand {
+    /// Generate or update the current branch session brief
+    Refresh(BriefRefreshArgs),
+}
+
+/// Arguments for `speckit brief refresh`
+#[derive(Debug, Parser)]
+pub struct BriefRefreshArgs {
+    /// Query used to search codex-product for relevant product knowledge
+    ///
+    /// If omitted, derived from branch name + commit subjects.
+    #[arg(long = "query", value_name = "TEXT")]
+    pub query: Option<String>,
+
+    /// Product knowledge domain to consult (default: codex-product)
+    #[arg(
+        long = "domain",
+        default_value = "codex-product",
+        value_name = "DOMAIN"
+    )]
+    pub domain: String,
+
+    /// Max search results to fetch from local-memory
+    #[arg(long = "limit", default_value = "10")]
+    pub limit: usize,
+
+    /// Maximum content length per memory item (characters)
+    #[arg(long = "max-content-length", default_value = "800")]
+    pub max_content_length: usize,
+
+    /// Ollama model to use for synthesis (must be available locally)
+    #[arg(
+        long = "ollama-model",
+        default_value = "qwen2.5:3b",
+        value_name = "MODEL"
+    )]
+    pub ollama_model: String,
+
+    /// Do not write the brief file; print output to stdout instead
+    #[arg(long = "dry-run")]
+    pub dry_run: bool,
+
+    /// Output JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
 impl SpeckitCli {
     /// Run the speckit CLI command
     pub async fn run(self) -> anyhow::Result<()> {
@@ -1811,6 +1877,11 @@ impl SpeckitCli {
         // Handle ingest command (SPEC-KIT-980, don't need executor)
         if let SpeckitSubcommand::Ingest(args) = self.command {
             return run_ingest(cwd, args);
+        }
+
+        // Handle branch brief utilities (per-PR session artifacts, don't need executor)
+        if let SpeckitSubcommand::Brief(args) = self.command {
+            return run_brief(cwd, args);
         }
 
         // Resolve policy from env/config at adapter boundary (not in executor)
@@ -1854,8 +1925,671 @@ impl SpeckitCli {
             SpeckitSubcommand::Projectnew(_) => unreachable!("Projectnew handled above"),
             SpeckitSubcommand::Projections(_) => unreachable!("Projections handled above"),
             SpeckitSubcommand::Ingest(_) => unreachable!("Ingest handled above"),
+            SpeckitSubcommand::Brief(_) => unreachable!("Brief handled above"),
         }
     }
+}
+
+// =============================================================================
+// Branch Brief (docs/briefs/<branch>.md) utilities
+// =============================================================================
+
+const BRIEF_AUTO_BEGIN: &str = "<!-- BEGIN: SPECKIT_BRIEF_REFRESH -->";
+const BRIEF_AUTO_END: &str = "<!-- END: SPECKIT_BRIEF_REFRESH -->";
+
+#[derive(Debug)]
+struct BriefFailure {
+    exit_code: i32,
+    error: String,
+    resolution: Option<String>,
+}
+
+fn run_brief(cwd: PathBuf, args: BriefArgs) -> anyhow::Result<()> {
+    match args.command {
+        BriefSubcommand::Refresh(args) => run_brief_refresh(cwd, args),
+    }
+}
+
+fn run_brief_refresh(cwd: PathBuf, args: BriefRefreshArgs) -> anyhow::Result<()> {
+    let json_output = args.json;
+    let dry_run = args.dry_run;
+    let result = block_on_detached_brief(async move { brief_refresh_impl(cwd, args).await });
+    match result {
+        Ok(output) => {
+            if json_output {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": headless_exit::SUCCESS,
+                    "exit_reason": headless_exit::exit_reason(headless_exit::SUCCESS),
+                    "repo_root": output.repo_root.display().to_string(),
+                    "branch": output.branch,
+                    "brief_path": output.brief_path.display().to_string(),
+                    "query": output.query,
+                    "domain": output.domain,
+                    "selected_memory_ids": output.selected_memory_ids,
+                    "rendered_block": output.rendered_block,
+                    "dry_run": dry_run,
+                    "wrote_file": output.wrote_file,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else if dry_run {
+                print!("{}", output.rendered_block);
+            } else if output.wrote_file {
+                println!("Updated branch brief: {}", output.brief_path.display());
+            } else {
+                println!("Dry-run: would update {}", output.brief_path.display());
+            }
+            Ok(())
+        }
+        Err(err) => {
+            if json_output {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": err.exit_code,
+                    "exit_reason": headless_exit::exit_reason(err.exit_code),
+                    "error": err.error,
+                    "resolution": err.resolution,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {}", err.error);
+                if let Some(resolution) = err.resolution.as_deref() {
+                    eprintln!("Resolution: {}", resolution);
+                }
+            }
+            std::process::exit(err.exit_code);
+        }
+    }
+}
+
+#[derive(Debug)]
+struct BriefRefreshOutput {
+    repo_root: PathBuf,
+    branch: String,
+    brief_path: PathBuf,
+    query: String,
+    domain: String,
+    selected_memory_ids: Vec<String>,
+    rendered_block: String,
+    wrote_file: bool,
+}
+
+fn block_on_detached_brief<F, T>(fut: F) -> Result<T, BriefFailure>
+where
+    F: std::future::Future<Output = Result<T, BriefFailure>> + Send + 'static,
+    T: Send + 'static,
+{
+    match TokioHandle::try_current() {
+        Ok(handle) => std::thread::spawn(move || handle.block_on(fut))
+            .join()
+            .map_err(|_| BriefFailure {
+                exit_code: headless_exit::INFRA_ERROR,
+                error: "brief command thread panicked".to_string(),
+                resolution: None,
+            })?,
+        Err(_) => TokioRuntimeBuilder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| BriefFailure {
+                exit_code: headless_exit::INFRA_ERROR,
+                error: format!("failed to create tokio runtime: {e}"),
+                resolution: None,
+            })?
+            .block_on(fut),
+    }
+}
+
+fn fail_usage(error: String, resolution: Option<String>) -> BriefFailure {
+    BriefFailure {
+        exit_code: headless_exit::HARD_FAIL,
+        error,
+        resolution,
+    }
+}
+
+fn fail_infra(error: String, resolution: Option<String>) -> BriefFailure {
+    BriefFailure {
+        exit_code: headless_exit::INFRA_ERROR,
+        error,
+        resolution,
+    }
+}
+
+async fn brief_refresh_impl(
+    cwd: PathBuf,
+    args: BriefRefreshArgs,
+) -> Result<BriefRefreshOutput, BriefFailure> {
+    let repo_root = get_repo_root(&cwd)
+        .await
+        .map_err(|e| fail_infra(e.to_string(), None))?;
+    let branch = get_current_branch(&repo_root)
+        .await
+        .map_err(|e| fail_infra(e.to_string(), None))?;
+    if branch == "main" || branch == "HEAD" {
+        return Err(fail_usage(
+            format!("Branch briefs are only used on feature branches (current branch: {branch})"),
+            Some(
+                "Create a feature branch (e.g. `git checkout -b fix/my-branch`) and run again."
+                    .to_string(),
+            ),
+        ));
+    }
+
+    let safe_branch = sanitize_branch_name(&branch);
+    let brief_path = repo_root
+        .join("docs")
+        .join("briefs")
+        .join(format!("{safe_branch}.md"));
+
+    let query = match args.query.as_deref() {
+        Some(q) => q.to_string(),
+        None => derive_query_from_git(&repo_root, &branch)
+            .await
+            .map_err(|e| fail_infra(e.to_string(), None))?,
+    };
+
+    let memories = search_product_knowledge(&repo_root, &query, &args)
+        .await
+        .map_err(|e| {
+            fail_infra(
+                format!("Failed to query product knowledge via `lm search`: {e}"),
+                Some("Ensure local-memory is installed and running. Try: `lm health`.".to_string()),
+            )
+        })?;
+    let selected_memory_ids: Vec<String> = memories.iter().map(|m| m.id.clone()).collect();
+
+    let auto_block = if memories.is_empty() {
+        build_auto_block_no_results(&query, &args.domain)
+    } else {
+        let synthesized = ollama_summarize(&query, &args, &memories).await?;
+        build_auto_block_with_summary(&query, &args.domain, &memories, &synthesized)
+    };
+
+    if args.dry_run {
+        return Ok(BriefRefreshOutput {
+            repo_root,
+            branch,
+            brief_path,
+            query,
+            domain: args.domain,
+            selected_memory_ids,
+            rendered_block: auto_block,
+            wrote_file: false,
+        });
+    }
+
+    ensure_parent_dir(&brief_path)
+        .map_err(|e| fail_infra(format!("failed to create briefs directory: {e}"), None))?;
+    let existing = std::fs::read_to_string(&brief_path)
+        .unwrap_or_else(|_| minimal_branch_brief_template(&branch));
+    let updated = upsert_marked_block(&existing, BRIEF_AUTO_BEGIN, BRIEF_AUTO_END, &auto_block);
+    std::fs::write(&brief_path, updated).map_err(|e| {
+        fail_infra(
+            format!("Failed to write {}: {e}", brief_path.display()),
+            None,
+        )
+    })?;
+
+    Ok(BriefRefreshOutput {
+        repo_root,
+        branch,
+        brief_path,
+        query,
+        domain: args.domain,
+        selected_memory_ids,
+        rendered_block: auto_block,
+        wrote_file: true,
+    })
+}
+
+fn ensure_parent_dir(path: &Path) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    Ok(())
+}
+
+fn minimal_branch_brief_template(branch: &str) -> String {
+    format!(
+        "# Session Brief — {branch}\n\n## Goal\n\n## Scope / Constraints\n\n## Plan\n\n## Open Questions\n\n## Verification\n\n"
+    )
+}
+
+fn sanitize_branch_name(branch: &str) -> String {
+    // Match `.githooks/pre-commit`:
+    //   sed -E 's#/+#__#g; s#[^A-Za-z0-9._-]#-#g'
+    let mut replaced = String::with_capacity(branch.len());
+    let mut chars = branch.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '/' {
+            while matches!(chars.peek(), Some('/')) {
+                chars.next();
+            }
+            replaced.push_str("__");
+        } else {
+            replaced.push(ch);
+        }
+    }
+
+    replaced
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+fn upsert_marked_block(existing: &str, begin: &str, end: &str, block_body: &str) -> String {
+    let block = format!("{begin}\n{block_body}\n{end}\n");
+    if let Some(start) = existing.find(begin) {
+        if let Some(end_rel) = existing[start..].find(end) {
+            let end_idx = start + end_rel + end.len();
+            let mut out = String::with_capacity(existing.len() + block.len());
+            out.push_str(&existing[..start]);
+            if !out.ends_with('\n') && !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str(&block);
+            out.push_str(&existing[end_idx..]);
+            return out;
+        }
+    }
+
+    let mut out = existing.to_string();
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(&block);
+    out
+}
+
+fn build_auto_block_no_results(query: &str, domain: &str) -> String {
+    format!(
+        "## Product Knowledge (auto)\n\n- Query: `{query}`\n- Domain: `{domain}`\n\nNo high-signal product knowledge matched. Try a more specific `--query` and/or raise `--limit`.\n"
+    )
+}
+
+fn build_auto_block_with_summary(
+    query: &str,
+    domain: &str,
+    memories: &[ProductKnowledgeMemory],
+    synthesized: &str,
+) -> String {
+    let mut lines = Vec::new();
+    lines.push("## Product Knowledge (auto)".to_string());
+    lines.push(String::new());
+    lines.push(format!("- Query: `{query}`"));
+    lines.push(format!("- Domain: `{domain}`"));
+    lines.push(String::new());
+    lines.push("### Selected memories".to_string());
+    for m in memories {
+        lines.push(format!(
+            "- `lm://{}/{} ` (importance {}, tags: {})",
+            domain,
+            m.id,
+            m.importance,
+            m.tags.join(", ")
+        ));
+    }
+    lines.push(String::new());
+    lines.push("### Synthesized constraints (Ollama)".to_string());
+    lines.push(String::new());
+    lines.push(synthesized.trim().to_string());
+    lines.join("\n")
+}
+
+#[derive(Debug, Clone)]
+struct ProductKnowledgeMemory {
+    id: String,
+    content: String,
+    importance: i32,
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LmSearchResponse {
+    success: bool,
+    data: Option<LmSearchData>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LmSearchData {
+    results: Option<Vec<LmSearchResult>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LmSearchResult {
+    memory: LmMemory,
+    relevance_score: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct LmMemory {
+    id: String,
+    content: String,
+    importance: i32,
+    tags: Vec<String>,
+    domain: String,
+}
+
+async fn search_product_knowledge(
+    repo_root: &Path,
+    query: &str,
+    args: &BriefRefreshArgs,
+) -> anyhow::Result<Vec<ProductKnowledgeMemory>> {
+    let mut cmd = tokio::process::Command::new("lm");
+    cmd.current_dir(repo_root);
+    cmd.arg("search")
+        .arg(query)
+        .arg("--domain")
+        .arg(&args.domain)
+        .arg("--limit")
+        .arg(args.limit.to_string())
+        .arg("--json")
+        .arg("--fields")
+        .arg("id,content,importance,tags,domain,created_at")
+        .arg("--response_format")
+        .arg("custom")
+        .arg("--max_content_length")
+        .arg(args.max_content_length.to_string());
+
+    let output = cmd
+        .output()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to run `lm search`: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!(
+            "`lm search` failed (exit {}): {}",
+            output.status.code().unwrap_or(-1),
+            stderr.trim()
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: LmSearchResponse = serde_json::from_str(&stdout).map_err(|e| {
+        anyhow::anyhow!("failed to parse `lm search` JSON output: {e} (stdout: {stdout})")
+    })?;
+    if !parsed.success {
+        return Err(anyhow::anyhow!(
+            "`lm search` returned success=false: {}",
+            parsed.error.unwrap_or_else(|| "unknown error".to_string())
+        ));
+    }
+
+    let results = parsed.data.and_then(|d| d.results).unwrap_or_default();
+    Ok(filter_product_knowledge_results(results))
+}
+
+fn filter_product_knowledge_results(results: Vec<LmSearchResult>) -> Vec<ProductKnowledgeMemory> {
+    const MIN_IMPORTANCE: i32 = 8;
+    const ALLOWED_TYPES: [&str; 7] = [
+        "decision",
+        "pattern",
+        "bug-fix",
+        "milestone",
+        "discovery",
+        "limitation",
+        "architecture",
+    ];
+
+    let mut kept: Vec<(ProductKnowledgeMemory, f64)> = Vec::new();
+    for r in results {
+        let m = r.memory;
+        if m.domain.is_empty() {
+            continue;
+        }
+        if m.importance < MIN_IMPORTANCE {
+            continue;
+        }
+        if m.tags.iter().any(|t| t == "system:true") {
+            continue;
+        }
+        let ty = m.tags.iter().find_map(|t| t.strip_prefix("type:"));
+        if let Some(ty) = ty {
+            if !ALLOWED_TYPES.contains(&ty) {
+                continue;
+            }
+        } else {
+            continue;
+        }
+
+        kept.push((
+            ProductKnowledgeMemory {
+                id: m.id,
+                content: m.content,
+                importance: m.importance,
+                tags: m.tags,
+            },
+            r.relevance_score,
+        ));
+    }
+
+    kept.sort_by(|(a, a_rel), (b, b_rel)| {
+        b.importance
+            .cmp(&a.importance)
+            .then_with(|| b_rel.total_cmp(a_rel))
+    });
+
+    kept.into_iter().map(|(m, _)| m).collect()
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaGenerateResponse {
+    response: String,
+}
+
+async fn ollama_summarize(
+    query: &str,
+    args: &BriefRefreshArgs,
+    memories: &[ProductKnowledgeMemory],
+) -> Result<String, BriefFailure> {
+    let prompt = build_ollama_prompt(query, &args.domain, memories);
+
+    let client = reqwest::Client::new();
+    let url = "http://127.0.0.1:11434/api/generate";
+    let body = serde_json::json!({
+        "model": args.ollama_model,
+        "prompt": prompt,
+        "stream": false,
+        "options": {
+            "temperature": 0,
+        }
+    });
+
+    let resp = client.post(url).json(&body).send().await.map_err(|e| {
+        fail_infra(
+            format!("failed to call Ollama at {url}: {e}"),
+            Some("Ensure Ollama is running: `ollama serve`.".to_string()),
+        )
+    })?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(fail_infra(
+            format!("Ollama generate failed ({status}): {}", text.trim()),
+            None,
+        ));
+    }
+
+    let parsed: OllamaGenerateResponse = resp
+        .json()
+        .await
+        .map_err(|e| fail_infra(format!("failed to parse Ollama JSON response: {e}"), None))?;
+
+    let response = strip_markdown_code_fence(parsed.response);
+    if !response.contains("lm://") {
+        return Err(fail_usage(
+            "Ollama response missing required citations (expected `lm://...`).".to_string(),
+            Some("Try a different `--ollama-model` (larger) or refine `--query`.".to_string()),
+        ));
+    }
+    if !validate_bullet_citations(&response) {
+        return Err(fail_usage(
+            "Ollama response contains uncited bullet(s).".to_string(),
+            Some(
+                "Re-run with a more focused `--query`, or try a different `--ollama-model`."
+                    .to_string(),
+            ),
+        ));
+    }
+
+    Ok(response)
+}
+
+fn build_ollama_prompt(query: &str, domain: &str, memories: &[ProductKnowledgeMemory]) -> String {
+    let mut prompt = String::new();
+    prompt
+        .push_str("You are generating a branch session brief section for codex-rs development.\n");
+    prompt.push_str("Task: synthesize high-signal product knowledge constraints.\n\n");
+    prompt.push_str("Rules:\n");
+    prompt.push_str("- ONLY use information from the memories below. Do not invent facts.\n");
+    prompt.push_str(&format!(
+        "- Every bullet MUST end with one or more citations like (lm://{domain}/<id>).\n"
+    ));
+    prompt.push_str("- This includes bullets under Open Questions: each question must cite which memory motivates it.\n");
+    prompt.push_str("- If you cannot cite a bullet, OMIT it.\n");
+    prompt.push_str("- Do NOT wrap your output in code fences.\n");
+    prompt.push_str("- Prefer concise, enforceable constraints over prose.\n\n");
+    prompt.push_str(&format!("User query: {query}\n\n"));
+    prompt.push_str("Memories:\n");
+    for m in memories {
+        prompt.push_str(&format!("\nMEMORY lm://{domain}/{}\n", m.id));
+        prompt.push_str(&format!("importance: {}\n", m.importance));
+        prompt.push_str(&format!("tags: {}\n", m.tags.join(", ")));
+        prompt.push_str("content:\n");
+        prompt.push_str(&m.content);
+        prompt.push('\n');
+    }
+    prompt.push_str("\nOutput markdown with these sections:\n");
+    prompt.push_str("## Decisions (Locked)\n");
+    prompt.push_str("## Patterns (Recommended)\n");
+    prompt.push_str("## Gotchas / Regressions\n");
+    prompt.push_str("## Open Questions\n");
+    prompt
+}
+
+fn strip_markdown_code_fence(text: String) -> String {
+    let trimmed = text.trim();
+    let mut lines = trimmed.lines();
+    let Some(first) = lines.next() else {
+        return String::new();
+    };
+    if !first.trim_start().starts_with("```") {
+        return trimmed.to_string();
+    }
+
+    let mut body: Vec<&str> = lines.collect();
+    if matches!(body.last(), Some(last) if last.trim() == "```") {
+        body.pop();
+        return body.join("\n").trim().to_string();
+    }
+
+    trimmed.to_string()
+}
+
+fn validate_bullet_citations(markdown: &str) -> bool {
+    for line in markdown.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("- ") && !trimmed.contains("(lm://") {
+            return false;
+        }
+    }
+    true
+}
+
+async fn get_repo_root(cwd: &Path) -> anyhow::Result<PathBuf> {
+    let output = tokio::process::Command::new("git")
+        .current_dir(cwd)
+        .arg("rev-parse")
+        .arg("--show-toplevel")
+        .output()
+        .await;
+
+    let output = match output {
+        Ok(o) => o,
+        Err(e) => {
+            return Err(anyhow::anyhow!(
+                "failed to execute git to resolve repo root: {e}"
+            ));
+        }
+    };
+
+    if !output.status.success() {
+        return Ok(cwd.to_path_buf());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(PathBuf::from(stdout.trim()))
+}
+
+async fn get_current_branch(repo_root: &Path) -> anyhow::Result<String> {
+    let output = tokio::process::Command::new("git")
+        .current_dir(repo_root)
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .output()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to run git to resolve current branch: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!(
+            "failed to resolve current branch: {}",
+            stderr.trim()
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.trim().to_string())
+}
+
+async fn derive_query_from_git(repo_root: &Path, branch: &str) -> anyhow::Result<String> {
+    let output = tokio::process::Command::new("git")
+        .current_dir(repo_root)
+        .arg("log")
+        .arg("-n")
+        .arg("5")
+        .arg("--pretty=%s")
+        .output()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to run git log: {e}"))?;
+
+    let subjects = if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        stdout
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .take(5)
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        String::new()
+    };
+
+    let branch_tokens = branch
+        .replace(['/', '-', '_'], " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let query = format!("{branch_tokens} {subjects}").trim().to_string();
+    Ok(if query.is_empty() {
+        "codex-rs".to_string()
+    } else {
+        query
+    })
 }
 
 /// Run the status command
@@ -8181,6 +8915,48 @@ fn run_ingest(cwd: PathBuf, args: IngestArgs) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn sanitize_branch_name_matches_precommit_rule() {
+        assert_eq!(sanitize_branch_name("fix/foo"), "fix__foo");
+        assert_eq!(sanitize_branch_name("fix/foo//bar"), "fix__foo__bar");
+        assert_eq!(sanitize_branch_name("feat/space name"), "feat__space-name");
+        assert_eq!(sanitize_branch_name("a.b_c-d"), "a.b_c-d");
+    }
+
+    #[test]
+    fn upsert_marked_block_appends_when_missing() {
+        let existing = "# Session Brief — x\n";
+        let body = "## Product Knowledge (auto)\nhello";
+        let out = upsert_marked_block(existing, BRIEF_AUTO_BEGIN, BRIEF_AUTO_END, body);
+        assert!(out.contains(BRIEF_AUTO_BEGIN));
+        assert!(out.contains("hello"));
+        assert!(out.contains(BRIEF_AUTO_END));
+    }
+
+    #[test]
+    fn upsert_marked_block_replaces_when_present() {
+        let existing = format!(
+            "# Session Brief — x\n\n{BRIEF_AUTO_BEGIN}\nold\n{BRIEF_AUTO_END}\n\n## Tail\n"
+        );
+        let out = upsert_marked_block(&existing, BRIEF_AUTO_BEGIN, BRIEF_AUTO_END, "new");
+        assert!(out.contains("new"));
+        assert!(!out.contains("old"));
+        assert!(out.contains("## Tail"));
+    }
+
+    #[test]
+    fn strip_markdown_code_fence_removes_wrapper() {
+        let fenced = "```markdown\n- hi (lm://x/y)\n```".to_string();
+        assert_eq!(strip_markdown_code_fence(fenced), "- hi (lm://x/y)");
+    }
+
+    #[test]
+    fn validate_bullet_citations_rejects_uncited_bullets() {
+        assert!(validate_bullet_citations("- hi (lm://x/y)\n"));
+        assert!(!validate_bullet_citations("- hi\n"));
+        assert!(validate_bullet_citations("## Title\n\nNo bullets here.\n"));
+    }
 
     /// SPEC-KIT-980: Test ingest_impl durability - artifact persisted and reopenable.
     #[tokio::test]
