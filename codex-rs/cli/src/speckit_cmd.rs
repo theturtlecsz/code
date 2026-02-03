@@ -1590,8 +1590,8 @@ pub struct NewArgs {
     pub description: String,
 
     /// Area for spec (e.g., CORE, TUI, CLI) - required for AREA-FEAT-#### ID generation
-    #[arg(long = "area", short = 'a', required = true, value_name = "AREA")]
-    pub area: String,
+    #[arg(long = "area", short = 'a', value_name = "AREA")]
+    pub area: Option<String>,
 
     /// Enable deep intake questions
     #[arg(long = "deep")]
@@ -6716,8 +6716,32 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
     };
     use std::collections::HashMap;
 
-    // Step 0: Validate area format
-    if let Err(e) = validate_area(&args.area) {
+    // Step 0a: Check for missing area (before validation)
+    let area = match &args.area {
+        Some(a) => a.clone(),
+        None => {
+            let exit_code = headless_exit::NEEDS_INPUT;
+            let available = get_available_areas(&cwd);
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": "Missing required --area argument",
+                    "available_areas": available,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Missing required --area argument");
+                eprintln!("Available areas: {}", available.join(", "));
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 0b: Validate area format
+    if let Err(e) = validate_area(&area) {
         let exit_code = headless_exit::NEEDS_INPUT;
         let available = get_available_areas(&cwd);
         if args.json {
@@ -6862,7 +6886,7 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
     }
 
     // Step 7: Generate AREA-FEAT-#### ID
-    let spec_id = match generate_next_feature_id(&cwd, &args.area) {
+    let spec_id = match generate_next_feature_id(&cwd, &area) {
         Ok(id) => id,
         Err(e) => {
             let exit_code = headless_exit::INFRA_ERROR;

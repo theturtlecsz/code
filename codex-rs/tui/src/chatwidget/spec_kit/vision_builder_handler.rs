@@ -121,7 +121,7 @@ pub fn on_vision_builder_cancelled(widget: &mut ChatWidget) {
                 Line::from(""),
                 Line::from("To resume setup:"),
                 Line::from("   /speckit.vision   - Capture project vision"),
-                Line::from("   /speckit.new <desc> - Create a spec"),
+                Line::from("   /speckit.new <AREA> <description> - Create a spec"),
             ],
             HistoryCellType::Notice,
         ));

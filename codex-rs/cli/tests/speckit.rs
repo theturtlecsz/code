@@ -5056,3 +5056,87 @@ fn test_all_stages_headless_require_maieutic() -> Result<()> {
 
     Ok(())
 }
+
+// =============================================================================
+// SPECKIT NEW: Missing AREA exit code tests
+// =============================================================================
+
+/// Test that `speckit new` with missing --area exits with code 10 (NEEDS_INPUT),
+/// not clap's default exit code 2.
+#[test]
+fn test_new_missing_area_exits_10() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    // Setup minimal repo structure
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args(["speckit", "new", "--desc", "Test description", "--headless"])
+        .output()?;
+
+    // Should exit with NEEDS_INPUT (10), not clap exit 2
+    assert_eq!(
+        output.status.code(),
+        Some(10),
+        "Missing --area should exit 10, not clap exit 2. stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Should show available areas
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Available areas:"),
+        "Should list available areas. stderr: {}",
+        stderr
+    );
+
+    Ok(())
+}
+
+/// Test that `speckit new --json` with missing --area returns proper JSON structure
+#[test]
+fn test_new_missing_area_json_exits_10() -> Result<()> {
+    let codex_home = TempDir::new()?;
+    let repo_root = TempDir::new()?;
+
+    fs::create_dir_all(repo_root.path().join("docs"))?;
+
+    let mut cmd = codex_command(codex_home.path(), repo_root.path())?;
+    let output = cmd
+        .args([
+            "speckit",
+            "new",
+            "--desc",
+            "Test description",
+            "--headless",
+            "--json",
+        ])
+        .output()?;
+
+    assert_eq!(
+        output.status.code(),
+        Some(10),
+        "Missing --area should exit 10. stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(
+        json.get("exit_code").and_then(|v| v.as_i64()),
+        Some(10),
+        "JSON exit_code should be 10"
+    );
+    assert_eq!(
+        json.get("exit_reason").and_then(|v| v.as_str()),
+        Some("needs_input"),
+        "JSON exit_reason should be 'needs_input'"
+    );
+    assert!(
+        json.get("available_areas").is_some(),
+        "Should include available_areas in JSON output"
+    );
+
+    Ok(())
+}
