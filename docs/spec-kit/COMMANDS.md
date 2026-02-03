@@ -47,11 +47,12 @@ Headless commands for automation and scripting.
 Create a new SPEC from intake answers.
 
 ```bash
-code speckit new --desc "Feature description" --answers answers.json [--deep] [--json]
+code speckit new --area <AREA> --desc "Feature description" --answers answers.json [--deep] [--json]
 ```
 
 | Option                  | Description                                   |
 | ----------------------- | --------------------------------------------- |
+| `--area <AREA>`         | Feature area (required)                       |
 | `--desc <text>`         | Feature description (required)                |
 | `--answers <path>`      | Path to answers JSON file                     |
 | `--answers-json <json>` | Inline answers JSON                           |
@@ -131,7 +132,7 @@ Deep mode also captures grounding artifacts (Architect Harvest + Project Intel).
 ### Create a SPEC interactively (TUI)
 
 ```
-/speckit.new Add user authentication with OAuth2
+/speckit.new <AREA> Add user authentication with OAuth2
 ```
 
 ### Create a SPEC headlessly (CLI)
@@ -147,7 +148,7 @@ cat > answers.json << 'EOF'
 EOF
 
 # Create spec
-code speckit new --desc "OAuth2 authentication" --answers answers.json --json
+code speckit new --area <AREA> --desc "OAuth2 authentication" --answers answers.json --json
 ```
 
 ### Rebuild projections after capsule restore
