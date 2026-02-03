@@ -10,7 +10,7 @@ Interactive commands available in the TUI chat interface.
 
 | Command                             | Aliases           | Description                           | SPEC             |
 | ----------------------------------- | ----------------- | ------------------------------------- | ---------------- |
-| `/speckit.new <desc>`               | `/spec.new`       | Create new SPEC with intake questions | -                |
+| `/speckit.new <AREA> <desc>`        | `/spec.new`       | Create new SPEC with intake questions | -                |
 | `/speckit.projectnew <type> <name>` | -                 | Create project scaffold with vision   | SPEC-KIT-960     |
 | `/speckit.capsule <subcommand>`     | `/capsule.doctor` | Capsule management                    | SPEC-KIT-971/974 |
 | `/speckit.projections rebuild`      | -                 | Regenerate filesystem from SoR        | WP-A             |
