@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "command": "guardrail.tasks",
+  "specId": "SPEC-DOGFOOD-001",
+  "sessionId": "802675",
+  "timestamp": "2025-12-26T17:34:11Z",
+  "success": true,
+  "stage": "Tasks",
+  "checks": [
+    {
+      "name": "spec-id-validation",
+      "status": "passed",
+      "message": "SPEC ID 'SPEC-DOGFOOD-001' is valid"
+    },
+    {
+      "name": "spec-files",
+      "status": "passed",
+      "message": "Required SPEC files present"
+    },
+    {
+      "name": "clean-tree",
+      "status": "passed",
+      "message": "Working tree is clean (stage artifacts excluded)"
+    },
+    {
+      "name": "tasks-stage",
+      "status": "passed",
+      "message": "Plan exists, ready for tasks"
+    }
+  ],
+  "warnings": [],
+  "errors": [],
+  "artifacts": [
+    {
+      "path": "/home/thetu/code/docs/SPEC-DOGFOOD-001/evidence/guardrail-tasks-2025-12-26T17-34-11Z_802675.json"
+    }
+  ]
+}

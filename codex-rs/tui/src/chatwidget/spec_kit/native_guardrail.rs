@@ -365,12 +365,16 @@ fn emit_telemetry(cwd: &Path, result: &GuardrailResult) -> Result<PathBuf, std::
 
     std::fs::create_dir_all(&evidence_dir)?;
 
-    let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
+    let now = chrono::Utc::now();
+    // Filesystem-safe timestamp for filename (no colons)
+    let filename_timestamp = now.format("%Y-%m-%dT%H-%M-%SZ");
+    // RFC3339 timestamp for JSON content
+    let json_timestamp = now.format("%Y-%m-%dT%H:%M:%SZ");
     let session_id = std::process::id();
     let filename = format!(
         "guardrail-{}-{}_{}.json",
         result.stage.display_name().to_lowercase(),
-        timestamp,
+        filename_timestamp,
         session_id
     );
     let telemetry_path = evidence_dir.join(filename);
@@ -380,7 +384,7 @@ fn emit_telemetry(cwd: &Path, result: &GuardrailResult) -> Result<PathBuf, std::
         "command": format!("guardrail.{}", result.stage.display_name().to_lowercase()),
         "specId": result.spec_id,
         "sessionId": session_id.to_string(),
-        "timestamp": timestamp.to_string(),
+        "timestamp": json_timestamp.to_string(),
         "success": result.success,
         "stage": result.stage.display_name(),
         "checks": result.checks_run.iter().map(|check| {
