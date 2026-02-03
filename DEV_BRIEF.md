@@ -6,7 +6,9 @@
 
 ## Current Focus
 
-<!-- What are we working on right now? -->
+Idle
+
+<!-- Branch/PR-specific session context lives in docs/briefs/<branch>.md -->
 
 ## Scope / Constraints
 

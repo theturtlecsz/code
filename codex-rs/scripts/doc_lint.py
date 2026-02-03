@@ -43,6 +43,7 @@ REQUIRED_FILES = {
     "docs/DECISIONS.md": "Locked decisions register (D1-D134)",
     "docs/POLICY.md": "Consolidated policy (model, gates, evidence, testing)",
     "docs/SPEC-KIT.md": "Canonical spec-kit reference (commands, architecture)",
+    "docs/briefs/README.md": "Branch session brief instructions (per PR/session)",
     "model_policy.toml": "Machine-authoritative model policy config",
 }
 

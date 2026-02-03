@@ -71,6 +71,9 @@ SPEC.md                      # Task tracking (single source of truth)
 * **DEV\_BRIEF.md**: Tier-1 truth anchor (must exist and be non-empty)
   * Update at session start with current focus/constraints
   * Enforced by pre-commit hook (hard block) and doc\_lint
+* **docs/briefs/<branch>.md**: Per-PR session brief (must exist and be non-empty on feature branches)
+  * `<branch>` = git branch name with `/` replaced by `__`
+  * Enforced by pre-commit hook (hard block)
 
 ## Testing Notes
 
