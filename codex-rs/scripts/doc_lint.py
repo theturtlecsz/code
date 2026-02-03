@@ -37,6 +37,7 @@ from typing import Optional
 REPO_ROOT = Path(__file__).parent.parent.parent  # codex-rs/scripts/ -> codex-rs/ -> repo root
 
 REQUIRED_FILES = {
+    "DEV_BRIEF.md": "Tier-1 dev brief (required)",
     "SPEC.md": "Root task tracking and docs contract",
     "docs/PROGRAM.md": "Active specs, dependency DAG, sequencing gates",
     "docs/DECISIONS.md": "Locked decisions register (D1-D134)",

@@ -9,6 +9,13 @@
 echo "🔍 Running pre-commit checks..."
 echo ""
 
+# === Tier-1 anchor: DEV_BRIEF.md required ===
+if [[ ! -s "DEV_BRIEF.md" ]]; then
+    echo "❌ DEV_BRIEF.md is missing or empty"
+    echo "Create it before committing. See: scripts/README_doc_lint.md"
+    exit 1
+fi
+
 # === SPEC-KIT-964: Config isolation validation ===
 # Always run, regardless of what files changed
 if [[ -f "scripts/validate-config-isolation.sh" ]]; then
