@@ -227,9 +227,41 @@ def check_decision_ids_in_specs(result: LintResult, verbose: bool = False):
     if verbose:
         print("Checking Decision IDs in specs...")
 
-    # Find active spec directories
-    spec_dirs = list(REPO_ROOT.glob("docs/SPEC-*"))
-    spec_dirs += list(REPO_ROOT.glob("docs/spec-kit/SPEC-*"))
+    # Archive rule (docs/PROGRAM.md): anything not listed in Active Specs is
+    # supporting reference or ARCHIVE. Decision IDs are required only for
+    # Active Specs.
+    program_md = REPO_ROOT / "docs/PROGRAM.md"
+    spec_dirs: list[Path] = []
+    if program_md.exists():
+        try:
+            in_active_specs = False
+            active_dirs: set[Path] = set()
+            for line in program_md.read_text().splitlines():
+                if re.match(r"^##\s+Active\s+Specs\b", line):
+                    in_active_specs = True
+                    continue
+                if in_active_specs and re.match(r"^##\s+", line):
+                    break
+                if not in_active_specs:
+                    continue
+
+                # Example row:
+                # | [SPEC-KIT-971](./SPEC-KIT-971-foo/spec.md) | ... |
+                match = re.search(r"\]\(\./([^/]+)/", line)
+                if match:
+                    active_dirs.add(REPO_ROOT / "docs" / match.group(1))
+
+            spec_dirs = sorted(active_dirs)
+        except Exception:
+            spec_dirs = []
+
+    if not spec_dirs:
+        result.add_warning(
+            "docs/PROGRAM.md",
+            None,
+            "Could not determine Active Specs for Decision IDs lint; skipping"
+        )
+        return
 
     for spec_dir in spec_dirs:
         if not spec_dir.is_dir():
