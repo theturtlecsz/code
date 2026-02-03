@@ -9,7 +9,7 @@ Usage:
 
 Exit codes:
     0 - All checks passed
-    1 - Validation errors found
+    1 - Validation errors or warnings found
     2 - Script error
 
 Checks performed:
@@ -134,7 +134,7 @@ class LintResult:
 
     @property
     def passed(self) -> bool:
-        return len(self.errors) == 0
+        return len(self.errors) == 0 and len(self.warnings) == 0
 
     def __str__(self):
         lines = []
@@ -603,7 +603,7 @@ def main():
     parser.add_argument(
         "--warn-only",
         action="store_true",
-        help="Exit 0 even with errors (treat errors as warnings)"
+        help="Exit 0 even with errors or warnings (treat violations as warnings)"
     )
 
     args = parser.parse_args()
