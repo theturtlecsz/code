@@ -16,6 +16,19 @@ if [[ ! -s "DEV_BRIEF.md" ]]; then
     exit 1
 fi
 
+# === Session brief: docs/briefs/<branch>.md required on feature branches ===
+# One branch = one session. Keep DEV_BRIEF.md stable on main; put session context here.
+BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+if [[ -n "$BRANCH_NAME" && "$BRANCH_NAME" != "HEAD" && "$BRANCH_NAME" != "main" ]]; then
+    SAFE_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed -E 's#/+#__#g; s#[^A-Za-z0-9._-]#-#g')
+    BRIEF_PATH="docs/briefs/${SAFE_BRANCH_NAME}.md"
+    if [[ ! -s "$BRIEF_PATH" ]]; then
+        echo "❌ Branch brief is missing or empty: $BRIEF_PATH"
+        echo "Create it before committing on this branch. See: docs/briefs/README.md"
+        exit 1
+    fi
+fi
+
 # === SPEC-KIT-964: Config isolation validation ===
 # Always run, regardless of what files changed
 if [[ -f "scripts/validate-config-isolation.sh" ]]; then
