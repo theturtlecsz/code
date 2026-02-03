@@ -12,7 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::error::SpecKitError;
-use super::spec_id_generator::{create_slug, generate_next_spec_id};
+use super::spec_id_generator::{create_slug, generate_next_feature_id};
 
 /// Result of successful SPEC creation
 #[derive(Debug)]
@@ -38,7 +38,13 @@ pub struct SpecCreationResult {
 ///
 /// Cost: $0 (zero agents)
 /// Time: <1s (instant)
-pub fn create_spec(description: &str, cwd: &Path) -> Result<SpecCreationResult, SpecKitError> {
+///
+/// Requires area (e.g., "CORE", "TUI") for new AREA-FEAT-#### ID generation.
+pub fn create_spec(
+    description: &str,
+    cwd: &Path,
+    area: &str,
+) -> Result<SpecCreationResult, SpecKitError> {
     let description = description.trim();
     if description.is_empty() {
         return Err(SpecKitError::Other(
@@ -46,9 +52,9 @@ pub fn create_spec(description: &str, cwd: &Path) -> Result<SpecCreationResult, 
         ));
     }
 
-    // Step 1: Generate SPEC-ID
-    let spec_id = generate_next_spec_id(cwd)
-        .map_err(|e| SpecKitError::Other(format!("Failed to generate SPEC-ID: {}", e)))?;
+    // Step 1: Generate AREA-FEAT-#### ID
+    let spec_id = generate_next_feature_id(cwd, area)
+        .map_err(|e| SpecKitError::Other(format!("Failed to generate feature ID: {}", e)))?;
 
     // Step 2: Parse description
     let slug = create_slug(description);
@@ -109,10 +115,13 @@ pub fn create_spec(description: &str, cwd: &Path) -> Result<SpecCreationResult, 
 ///
 /// Similar to create_spec but uses the enhanced description which includes
 /// answers from the interactive Q&A modal (Problem, Target, Success criteria).
+///
+/// Requires area (e.g., "CORE", "TUI") for new AREA-FEAT-#### ID generation.
 pub fn create_spec_with_context(
     description: &str,
     enhanced_description: &str,
     cwd: &Path,
+    area: &str,
 ) -> Result<SpecCreationResult, SpecKitError> {
     let description = description.trim();
     if description.is_empty() {
@@ -121,9 +130,9 @@ pub fn create_spec_with_context(
         ));
     }
 
-    // Step 1: Generate SPEC-ID
-    let spec_id = generate_next_spec_id(cwd)
-        .map_err(|e| SpecKitError::Other(format!("Failed to generate SPEC-ID: {}", e)))?;
+    // Step 1: Generate AREA-FEAT-#### ID using provided area
+    let spec_id = generate_next_feature_id(cwd, area)
+        .map_err(|e| SpecKitError::Other(format!("Failed to generate feature ID: {}", e)))?;
 
     // Step 2: Parse description
     let slug = create_slug(description);
@@ -142,6 +151,13 @@ pub fn create_spec_with_context(
 
     fs::create_dir_all(&spec_dir).map_err(|e| SpecKitError::DirectoryCreate {
         path: spec_dir.clone(),
+        source: e,
+    })?;
+
+    // Create tasks/ subdirectory for task tracking
+    let tasks_dir = spec_dir.join("tasks");
+    fs::create_dir_all(&tasks_dir).map_err(|e| SpecKitError::DirectoryCreate {
+        path: tasks_dir.clone(),
         source: e,
     })?;
 
@@ -178,7 +194,11 @@ pub fn create_spec_with_context(
     Ok(SpecCreationResult {
         spec_id,
         directory: spec_dir,
-        files_created: vec!["PRD.md".to_string(), "spec.md".to_string()],
+        files_created: vec![
+            "PRD.md".to_string(),
+            "spec.md".to_string(),
+            "tasks/".to_string(),
+        ],
         feature_name,
         slug,
         constitution_version_at_creation: constitution_version,
@@ -791,9 +811,9 @@ mod tests {
         )
         .unwrap();
 
-        let result = create_spec("Add user authentication", temp.path()).unwrap();
+        let result = create_spec("Add user authentication", temp.path(), "CORE").unwrap();
 
-        assert_eq!(result.spec_id, "SPEC-KIT-001");
+        assert_eq!(result.spec_id, "CORE-FEAT-0001");
         assert_eq!(result.feature_name, "Add User Authentication");
         assert_eq!(result.slug, "add-user-authentication");
         assert!(result.directory.exists());
@@ -806,7 +826,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let docs = temp.path().join("docs");
         fs::create_dir(&docs).unwrap();
-        fs::create_dir(docs.join("SPEC-KIT-005-existing")).unwrap();
+        fs::create_dir(docs.join("CORE-FEAT-0005-existing")).unwrap();
 
         let spec_md = temp.path().join("SPEC.md");
         fs::write(
@@ -815,8 +835,8 @@ mod tests {
         )
         .unwrap();
 
-        let result = create_spec("Test feature", temp.path()).unwrap();
-        assert_eq!(result.spec_id, "SPEC-KIT-006");
+        let result = create_spec("Test feature", temp.path(), "CORE").unwrap();
+        assert_eq!(result.spec_id, "CORE-FEAT-0006");
     }
 
     #[test]
@@ -825,7 +845,7 @@ mod tests {
         let docs = temp.path().join("docs");
         fs::create_dir(&docs).unwrap();
 
-        let result = create_spec("", temp.path());
+        let result = create_spec("", temp.path(), "CORE");
         assert!(result.is_err());
         assert!(matches!(result, Err(SpecKitError::Other(_))));
     }
@@ -843,7 +863,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = create_spec("Fix: Error in @parser (v2.0)", temp.path()).unwrap();
+        let result = create_spec("Fix: Error in @parser (v2.0)", temp.path(), "CORE").unwrap();
         assert_eq!(result.slug, "fix-error-in-parser-v2-0");
     }
 

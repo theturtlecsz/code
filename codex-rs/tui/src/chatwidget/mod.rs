@@ -4514,13 +4514,13 @@ impl ChatWidget<'_> {
                 if matches!(cmd_name_lc.as_str(), "plan" | "solve" | "code") && !has_custom {
                     let message = match cmd_name_lc.as_str() {
                         "plan" => {
-                            "Removed command: /plan\nUse Spec-Kit: /speckit.new <description>, then /speckit.plan SPEC-ID (or /speckit.auto SPEC-ID)."
+                            "Removed command: /plan\nUse Spec-Kit: /speckit.new <AREA> <description>, then /speckit.plan SPEC-ID (or /speckit.auto SPEC-ID)."
                         }
                         "solve" => {
-                            "Removed command: /solve\nUse Spec-Kit: /speckit.new <description>, then /speckit.implement SPEC-ID (or /speckit.auto SPEC-ID)."
+                            "Removed command: /solve\nUse Spec-Kit: /speckit.new <AREA> <description>, then /speckit.implement SPEC-ID (or /speckit.auto SPEC-ID)."
                         }
                         _ => {
-                            "Removed command: /code\nUse Spec-Kit: /speckit.new <description>, then /speckit.auto SPEC-ID."
+                            "Removed command: /code\nUse Spec-Kit: /speckit.new <AREA> <description>, then /speckit.auto SPEC-ID."
                         }
                     };
                     self.history_push(history_cell::new_warning_event(message.to_string()));
@@ -4701,17 +4701,20 @@ impl ChatWidget<'_> {
     // Undo/snapshot functions moved to undo_snapshots.rs (MAINT-11 Phase 9)
 
     /// Show PRD builder modal with project-specific questions (SPEC-KIT-971)
+    /// Requires area (e.g., "CORE", "TUI") for new feature ID generation
     #[allow(dead_code)]
     pub(crate) fn show_prd_builder_with_context(
         &mut self,
         description: String,
         project_type_display: String,
         questions: Vec<crate::bottom_pane::prd_builder_modal::PrdQuestion>,
+        area: String,
     ) {
         self.bottom_pane.show_prd_builder_with_context(
             description,
             project_type_display,
             questions,
+            area,
         );
     }
 
@@ -4739,8 +4742,10 @@ impl ChatWidget<'_> {
     }
 
     /// Show spec intake modal for Architect-in-a-box (Phase 1)
-    pub(crate) fn show_spec_intake_modal(&mut self, description: String, deep: bool) {
-        self.bottom_pane.show_spec_intake_modal(description, deep);
+    /// Requires area (e.g., "CORE", "TUI") for new feature ID generation
+    pub(crate) fn show_spec_intake_modal(&mut self, description: String, deep: bool, area: String) {
+        self.bottom_pane
+            .show_spec_intake_modal(description, deep, area);
     }
 
     /// Show spec intake modal for backfill (Phase 2: IntakePresenceGate)

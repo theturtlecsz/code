@@ -74,6 +74,9 @@ impl SpecKitCommand for SpecKitAutoCommand {
 /// Command: /speckit.new (and /new-spec, /spec.new)
 /// Create new SPEC from description with mandatory intake Q&A - FULLY NATIVE (zero agents, $0)
 /// Phase 1: Architect-in-a-box - enforces spec intake + capsule SoR before any filesystem projection
+///
+/// Syntax: /speckit.new <AREA> <description...> [--deep]
+/// Example: /speckit.new CORE Add user authentication --deep
 pub struct SpecKitNewCommand;
 
 impl SpecKitCommand for SpecKitNewCommand {
@@ -86,28 +89,53 @@ impl SpecKitCommand for SpecKitNewCommand {
     }
 
     fn description(&self) -> &'static str {
-        "create new SPEC with mandatory intake (INSTANT, zero agents, $0) [--deep for full architecture]"
+        "create new SPEC with mandatory intake (INSTANT, zero agents, $0) - requires AREA [--deep for full architecture]"
     }
 
     fn execute(&self, widget: &mut ChatWidget, args: String) {
         use super::super::pipeline_coordinator::run_constitution_readiness_gate;
+        use super::super::spec_id_generator::{get_available_areas, validate_area};
 
         // P91/SPEC-KIT-105: Run constitution readiness gate (warn-only)
         run_constitution_readiness_gate(widget);
 
-        // Parse --deep flag
-        let (description, deep) = parse_deep_flag(&args);
+        // Parse args: <AREA> <description...> [--deep]
+        let (area, description, deep) = parse_new_spec_args(&args);
 
+        // Check missing AREA
+        if area.is_none() {
+            let areas = get_available_areas(&widget.config.cwd);
+            widget.history_push(crate::history_cell::new_error_event(format!(
+                "Missing AREA. Usage: /speckit.new <AREA> <description> [--deep]\n\n\
+                 Available areas: {}\n\
+                 Custom areas allowed (must match ^[A-Z][A-Z0-9]*$)",
+                areas.join(", ")
+            )));
+            widget.request_redraw();
+            return;
+        }
+
+        let area = area.unwrap();
+
+        // Validate AREA format
+        if let Err(e) = validate_area(&area) {
+            widget.history_push(crate::history_cell::new_error_event(e));
+            widget.request_redraw();
+            return;
+        }
+
+        // Check empty description
         if description.trim().is_empty() {
             widget.history_push(crate::history_cell::new_error_event(
-                "Usage: /speckit.new <description> [--deep]".to_string(),
+                "Missing description. Usage: /speckit.new <AREA> <description> [--deep]"
+                    .to_string(),
             ));
             widget.request_redraw();
             return;
         }
 
         // Phase 1: Show SpecIntakeModal (mandatory intake before spec creation)
-        widget.show_spec_intake_modal(description, deep);
+        widget.show_spec_intake_modal(description, deep, area);
     }
 
     fn requires_args(&self) -> bool {
@@ -115,8 +143,8 @@ impl SpecKitCommand for SpecKitNewCommand {
     }
 }
 
-/// Parse --deep flag from args, returning (description, deep)
-fn parse_deep_flag(args: &str) -> (String, bool) {
+/// Strip --deep flag from args, returning (remaining, deep)
+fn strip_deep_flag(args: &str) -> (String, bool) {
     let args = args.trim();
     if args.ends_with("--deep") {
         (args.trim_end_matches("--deep").trim().to_string(), true)
@@ -126,6 +154,38 @@ fn parse_deep_flag(args: &str) -> (String, bool) {
         (args.replace(" --deep ", " ").trim().to_string(), true)
     } else {
         (args.to_string(), false)
+    }
+}
+
+/// Parse /speckit.new args: <AREA> <description...> [--deep]
+/// Returns (Option<area>, description, deep)
+fn parse_new_spec_args(args: &str) -> (Option<String>, String, bool) {
+    let (remaining, deep) = strip_deep_flag(args);
+    let parts: Vec<&str> = remaining.trim().splitn(2, ' ').collect();
+
+    if parts.is_empty() || parts[0].is_empty() {
+        return (None, String::new(), deep);
+    }
+
+    let potential_area = parts[0];
+
+    // Check if first token looks like an AREA (all uppercase letters/digits, starts with letter)
+    let is_area_format = !potential_area.is_empty()
+        && potential_area
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_uppercase())
+            .unwrap_or(false)
+        && potential_area
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+
+    if is_area_format {
+        let description = parts.get(1).map(|s| s.to_string()).unwrap_or_default();
+        (Some(potential_area.to_string()), description, deep)
+    } else {
+        // First token doesn't look like area - treat as missing area
+        (None, remaining, deep)
     }
 }
 
@@ -1697,7 +1757,7 @@ fn execute_alignment_check(widget: &mut ChatWidget, args: String) {
                 vec![
                     Line::from(msg),
                     Line::from(""),
-                    Line::from("Create a spec with: /speckit.new <description>"),
+                    Line::from("Create a spec with: /speckit.new <AREA> <description>"),
                 ],
                 HistoryCellType::Notice,
             ));

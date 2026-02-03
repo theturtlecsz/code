@@ -148,8 +148,8 @@ pub fn on_project_intake_submitted(
         .is_some_and(|p| !p.no_bootstrap_spec);
 
     if should_bootstrap {
-        // Get bootstrap description and deep flag
-        let (bootstrap_desc, inherit_deep) = {
+        // Get bootstrap description, deep flag, and area
+        let (bootstrap_desc, inherit_deep, bootstrap_area) = {
             let pending = widget.pending_projectnew.as_ref().unwrap();
             (
                 pending
@@ -157,7 +157,23 @@ pub fn on_project_intake_submitted(
                     .clone()
                     .unwrap_or_else(|| "Initial setup".to_string()),
                 pending.deep,
+                pending.bootstrap_area.clone(),
             )
+        };
+
+        // Require bootstrap_area when bootstrap is enabled
+        let area = match bootstrap_area {
+            Some(a) => a,
+            None => {
+                let available = super::spec_id_generator::get_available_areas(&widget.config.cwd);
+                widget.history_push(new_error_event(format!(
+                    "AREA required for bootstrap spec.\n\nAvailable areas: {}\n\nRerun with --bootstrap-area <AREA> or --no-bootstrap-spec",
+                    available.join(", ")
+                )));
+                widget.pending_projectnew = None;
+                widget.request_redraw();
+                return;
+            }
         };
 
         // Advance phase
@@ -180,8 +196,8 @@ pub fn on_project_intake_submitted(
         ));
 
         // Show spec intake modal with bootstrap description
-        // Inherit deep flag from projectnew
-        widget.show_spec_intake_modal(bootstrap_desc, inherit_deep);
+        // Inherit deep flag from projectnew, use provided area
+        widget.show_spec_intake_modal(bootstrap_desc, inherit_deep, area);
     } else {
         // No bootstrap - complete the flow
         widget.pending_projectnew = None;
@@ -196,7 +212,7 @@ pub fn on_project_intake_submitted(
                 Line::from("   Projection: docs/PROJECT_BRIEF.md"),
                 Line::from(""),
                 Line::from("Next steps:"),
-                Line::from("   /speckit.new <feature description>"),
+                Line::from("   /speckit.new <AREA> <feature description>"),
             ],
             HistoryCellType::Notice,
         ));
@@ -222,7 +238,7 @@ pub fn on_project_intake_cancelled(widget: &mut ChatWidget, project_id: String) 
             Line::from(""),
             Line::from("To resume setup, run:"),
             Line::from("   /speckit.vision   (if not already captured)"),
-            Line::from("   /speckit.new <feature description>"),
+            Line::from("   /speckit.new <AREA> <feature description>"),
         ],
         HistoryCellType::Notice,
     ));

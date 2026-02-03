@@ -1589,6 +1589,10 @@ pub struct NewArgs {
     )]
     pub description: String,
 
+    /// Area for spec (e.g., CORE, TUI, CLI) - required for AREA-FEAT-#### ID generation
+    #[arg(long = "area", short = 'a', value_name = "AREA")]
+    pub area: Option<String>,
+
     /// Enable deep intake questions
     #[arg(long = "deep")]
     pub deep: bool,
@@ -1661,6 +1665,10 @@ pub struct ProjectNewArgs {
     /// Description for bootstrap spec (overrides wrapper if provided)
     #[arg(long = "bootstrap", value_name = "DESCRIPTION")]
     pub bootstrap_desc: Option<String>,
+
+    /// Area for bootstrap spec (required when bootstrap is enabled)
+    #[arg(long = "bootstrap-area", value_name = "AREA")]
+    pub bootstrap_area: Option<String>,
 
     /// Skip bootstrap spec creation
     #[arg(long = "no-bootstrap-spec")]
@@ -6703,9 +6711,55 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
         IntakeAnswers, SPEC_INTAKE_ANSWERS_SCHEMA_VERSION, build_design_brief,
         build_spec_intake_answers, capitalize_words, capture_grounding_for_spec_intake,
         create_spec_filesystem_projections, persist_spec_intake_to_capsule,
-        spec_id_generator::generate_next_spec_id, validate_spec_answers,
+        spec_id_generator::{generate_next_feature_id, get_available_areas, validate_area},
+        validate_spec_answers,
     };
     use std::collections::HashMap;
+
+    // Step 0a: Check for missing area (before validation)
+    let area = match &args.area {
+        Some(a) => a.clone(),
+        None => {
+            let exit_code = headless_exit::NEEDS_INPUT;
+            let available = get_available_areas(&cwd);
+            if args.json {
+                let output = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "error": "Missing required --area argument",
+                    "available_areas": available,
+                });
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                eprintln!("Error: Missing required --area argument");
+                eprintln!("Available areas: {}", available.join(", "));
+            }
+            std::process::exit(exit_code);
+        }
+    };
+
+    // Step 0b: Validate area format
+    if let Err(e) = validate_area(&area) {
+        let exit_code = headless_exit::NEEDS_INPUT;
+        let available = get_available_areas(&cwd);
+        if args.json {
+            let output = serde_json::json!({
+                "schema_version": SCHEMA_VERSION,
+                "tool_version": tool_version(),
+                "exit_code": exit_code,
+                "exit_reason": headless_exit::exit_reason(exit_code),
+                "error": e,
+                "available_areas": available,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            eprintln!("Error: {}", e);
+            eprintln!("Available areas: {}", available.join(", "));
+        }
+        std::process::exit(exit_code);
+    }
 
     // Step 1: Load and parse answers
     let answers_json = match load_answers(&args.answers_path, &args.answers_json) {
@@ -6831,8 +6885,8 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
         std::process::exit(exit_code);
     }
 
-    // Step 7: Generate spec_id
-    let spec_id = match generate_next_spec_id(&cwd) {
+    // Step 7: Generate AREA-FEAT-#### ID
+    let spec_id = match generate_next_feature_id(&cwd, &area) {
         Ok(id) => id,
         Err(e) => {
             let exit_code = headless_exit::INFRA_ERROR;
@@ -6842,11 +6896,11 @@ fn run_new(cwd: PathBuf, args: NewArgs) -> anyhow::Result<()> {
                     "tool_version": tool_version(),
                     "exit_code": exit_code,
                     "exit_reason": headless_exit::exit_reason(exit_code),
-                    "error": format!("Failed to generate SPEC-ID: {}", e),
+                    "error": format!("Failed to generate feature ID: {}", e),
                 });
                 println!("{}", serde_json::to_string_pretty(&output)?);
             } else {
-                eprintln!("Error: Failed to generate SPEC-ID: {}", e);
+                eprintln!("Error: Failed to generate feature ID: {}", e);
             }
             std::process::exit(exit_code);
         }
@@ -7032,9 +7086,60 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
         capture_grounding_for_spec_intake, create_project, create_project_filesystem_projection,
         create_spec_filesystem_projections, persist_project_intake_to_capsule,
         persist_spec_intake_to_capsule, persist_vision_to_overlay,
-        spec_id_generator::generate_next_spec_id, validate_project_answers, validate_spec_answers,
+        spec_id_generator::{generate_next_feature_id, get_available_areas, validate_area},
+        validate_project_answers, validate_spec_answers,
     };
     use std::collections::HashMap;
+
+    // Step 0: Check bootstrap_area if bootstrap is enabled
+    let should_bootstrap = !args.no_bootstrap_spec;
+    if should_bootstrap {
+        match &args.bootstrap_area {
+            Some(area) => {
+                // Validate area format
+                if let Err(e) = validate_area(area) {
+                    let exit_code = headless_exit::NEEDS_INPUT;
+                    let available = get_available_areas(&cwd);
+                    if args.json {
+                        let output = serde_json::json!({
+                            "schema_version": SCHEMA_VERSION,
+                            "tool_version": tool_version(),
+                            "exit_code": exit_code,
+                            "exit_reason": headless_exit::exit_reason(exit_code),
+                            "error": format!("Invalid --bootstrap-area: {}", e),
+                            "available_areas": available,
+                        });
+                        println!("{}", serde_json::to_string_pretty(&output)?);
+                    } else {
+                        eprintln!("Error: Invalid --bootstrap-area: {}", e);
+                        eprintln!("Available areas: {}", available.join(", "));
+                    }
+                    std::process::exit(exit_code);
+                }
+            }
+            None => {
+                // Missing bootstrap_area when bootstrap is enabled
+                let exit_code = headless_exit::NEEDS_INPUT;
+                let available = get_available_areas(&cwd);
+                if args.json {
+                    let output = serde_json::json!({
+                        "schema_version": SCHEMA_VERSION,
+                        "tool_version": tool_version(),
+                        "exit_code": exit_code,
+                        "exit_reason": headless_exit::exit_reason(exit_code),
+                        "error": "AREA required for bootstrap spec. Use --bootstrap-area <AREA> or --no-bootstrap-spec",
+                        "available_areas": available,
+                    });
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                } else {
+                    eprintln!("Error: AREA required for bootstrap spec.");
+                    eprintln!("Use --bootstrap-area <AREA> or --no-bootstrap-spec");
+                    eprintln!("Available areas: {}", available.join(", "));
+                }
+                std::process::exit(exit_code);
+            }
+        }
+    }
 
     // Step 1: Parse project type
     let project_type = match ProjectType::parse(&args.project_type) {
@@ -7386,12 +7491,14 @@ fn run_projectnew(cwd: PathBuf, args: ProjectNewArgs) -> anyhow::Result<()> {
             );
         }
 
-        // Generate spec_id (in project directory)
-        let spec_id = match generate_next_spec_id(&project_dir) {
+        // Generate AREA-FEAT-#### ID (in project directory)
+        // bootstrap_area is guaranteed to be Some by Step 0 validation
+        let bootstrap_area = args.bootstrap_area.as_ref().unwrap();
+        let spec_id = match generate_next_feature_id(&project_dir, bootstrap_area) {
             Ok(id) => id,
             Err(e) => {
                 eprintln!(
-                    "Warning: Failed to generate SPEC-ID: {}. Skipping bootstrap.",
+                    "Warning: Failed to generate feature ID: {}. Skipping bootstrap.",
                     e
                 );
                 return output_projectnew_success(

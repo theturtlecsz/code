@@ -27,7 +27,7 @@ use super::intake_core::{
     create_spec_filesystem_projections, persist_spec_intake_to_capsule, validate_spec_answers,
     write_intake_md_only,
 };
-use super::spec_id_generator::generate_next_spec_id;
+use super::spec_id_generator::generate_next_feature_id;
 
 /// Called when user completes the spec intake modal
 pub fn on_spec_intake_submitted(
@@ -36,6 +36,7 @@ pub fn on_spec_intake_submitted(
     deep: bool,
     answers: HashMap<String, String>,
     existing_spec_id: Option<String>,
+    area: Option<String>,
 ) {
     let is_backfill = existing_spec_id.is_some();
 
@@ -56,12 +57,25 @@ pub fn on_spec_intake_submitted(
     let spec_id = match existing_spec_id {
         Some(id) => id, // Backfill mode: use existing spec_id
         None => {
-            // New spec mode: generate new ID
-            match generate_next_spec_id(&widget.config.cwd) {
+            // New spec mode: generate new ID using area
+            let area = match area {
+                Some(a) => a,
+                None => {
+                    let available =
+                        super::spec_id_generator::get_available_areas(&widget.config.cwd);
+                    widget.history_push(new_error_event(format!(
+                        "AREA required for new spec creation.\n\nAvailable areas: {}\n\nUse: /speckit.new <AREA> <description>",
+                        available.join(", ")
+                    )));
+                    widget.request_redraw();
+                    return;
+                }
+            };
+            match generate_next_feature_id(&widget.config.cwd, &area) {
                 Ok(id) => id,
                 Err(e) => {
                     widget.history_push(new_error_event(format!(
-                        "Failed to generate SPEC-ID: {}",
+                        "Failed to generate feature ID: {}",
                         e
                     )));
                     widget.request_redraw();
@@ -276,7 +290,7 @@ pub fn on_spec_intake_cancelled(
                     Line::from("Project setup completed without bootstrap spec."),
                     Line::from(""),
                     Line::from("Next steps:"),
-                    Line::from("   /speckit.new <description> - Create a spec when ready"),
+                    Line::from("   /speckit.new <AREA> <description> - Create a spec when ready"),
                 ],
                 HistoryCellType::Notice,
             ));
@@ -287,7 +301,7 @@ pub fn on_spec_intake_cancelled(
                     Line::from("Spec intake cancelled"),
                     Line::from(format!("   Description: {}", description)),
                     Line::from(""),
-                    Line::from("To try again: /speckit.new <description> [--deep]"),
+                    Line::from("To try again: /speckit.new <AREA> <description> [--deep]"),
                 ],
                 HistoryCellType::Notice,
             ));

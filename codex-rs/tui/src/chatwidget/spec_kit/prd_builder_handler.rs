@@ -14,6 +14,7 @@ pub fn on_prd_builder_submitted(
     widget: &mut ChatWidget,
     description: String,
     answers: HashMap<String, String>,
+    area: String,
 ) {
     // Extract answers
     let problem = answers.get("Problem").cloned().unwrap_or_default();
@@ -26,11 +27,12 @@ pub fn on_prd_builder_submitted(
         description, problem, target, success
     );
 
-    // Create SPEC with enhanced description
+    // Create SPEC with enhanced description and area
     match super::new_native::create_spec_with_context(
         &description,
         &enhanced_description,
         &widget.config.cwd,
+        &area,
     ) {
         Ok(result) => {
             widget.history_push(PlainHistoryCell::new(
@@ -88,7 +90,7 @@ pub fn on_prd_builder_cancelled(widget: &mut ChatWidget, description: String) {
             Line::from("❌ SPEC creation cancelled"),
             Line::from(format!("   Description: {}", description)),
             Line::from(""),
-            Line::from("To try again: /speckit.new <description>"),
+            Line::from("To try again: /speckit.new <AREA> <description>"),
         ],
         HistoryCellType::Notice,
     ));

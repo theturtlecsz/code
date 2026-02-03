@@ -775,7 +775,9 @@ pub fn persist_spec_intake_to_capsule(
 /// Create spec filesystem projections (spec.md, PRD.md, INTAKE.md)
 ///
 /// # Returns
-/// * `Ok(dir_name)` - The created directory name (e.g., "SPEC-KIT-042-add-user-auth")
+/// * `Ok(dir_name)` - The created directory name (e.g., "CORE-FEAT-0042-add-user-auth")
+///
+/// Creates the feature directory with a `tasks/` subdirectory for task tracking.
 /// * `Err(SpecKitError)` on filesystem failure
 pub fn create_spec_filesystem_projections(
     cwd: &Path,
@@ -791,6 +793,13 @@ pub fn create_spec_filesystem_projections(
 
     fs::create_dir_all(&spec_dir).map_err(|e| SpecKitError::DirectoryCreate {
         path: spec_dir.clone(),
+        source: e,
+    })?;
+
+    // Create tasks/ subdirectory for task tracking (SPECKIT-TASK-0001)
+    let tasks_dir = spec_dir.join("tasks");
+    fs::create_dir_all(&tasks_dir).map_err(|e| SpecKitError::DirectoryCreate {
+        path: tasks_dir,
         source: e,
     })?;
 

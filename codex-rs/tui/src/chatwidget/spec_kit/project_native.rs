@@ -236,12 +236,12 @@ lm remember "<insight>" --type <TYPE> --importance 8 --tags "component:..."
 
 ## Spec-Kit Workflow
 This project uses spec-kit for structured development:
-- `/speckit.new <description>` - Create new SPEC
+- `/speckit.new <AREA> <description>` - Create new SPEC
 - `/speckit.auto SPEC-ID` - Full automation pipeline
 - `/speckit.status SPEC-ID` - Check progress
 
 ## Getting Started
-1. Define your first feature with `/speckit.new`
+1. Define your first feature with `/speckit.new <AREA> <description>`
 2. Review generated PRD in `docs/SPEC-*/PRD.md`
 3. Run `/speckit.auto` to implement
 
@@ -459,7 +459,7 @@ fn create_planning_md(
 
 ### Spec-Kit Integration
 This project uses spec-kit for structured development:
-1. `/speckit.new <description>` - Create new SPEC
+1. `/speckit.new <AREA> <description>` - Create new SPEC
 2. `/speckit.auto SPEC-ID` - Run full automation pipeline
 3. Review generated artifacts in `docs/SPEC-*/`
 

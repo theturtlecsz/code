@@ -658,12 +658,14 @@ impl BottomPane<'_> {
         description: String,
         project_type_display: String,
         questions: Vec<prd_builder_modal::PrdQuestion>,
+        area: String,
     ) {
         let modal = prd_builder_modal::PrdBuilderModal::with_project_questions(
             description,
             project_type_display,
             questions,
             self.app_event_tx.clone(),
+            area,
         );
         self.active_view = Some(Box::new(modal));
         self.status_view_active = false;
@@ -691,9 +693,14 @@ impl BottomPane<'_> {
     }
 
     /// Show spec intake modal for Architect-in-a-box (Phase 1)
-    pub fn show_spec_intake_modal(&mut self, description: String, deep: bool) {
-        let modal =
-            spec_intake_modal::SpecIntakeModal::new(description, deep, self.app_event_tx.clone());
+    /// Requires area (e.g., "CORE", "TUI") for new feature ID generation
+    pub fn show_spec_intake_modal(&mut self, description: String, deep: bool, area: String) {
+        let modal = spec_intake_modal::SpecIntakeModal::new(
+            description,
+            deep,
+            area,
+            self.app_event_tx.clone(),
+        );
         self.active_view = Some(Box::new(modal));
         self.status_view_active = false;
         self.request_redraw();

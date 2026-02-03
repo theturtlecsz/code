@@ -55,6 +55,8 @@ pub struct PendingProjectNew {
     pub bootstrap_desc: Option<String>,
     /// Skip bootstrap spec creation
     pub no_bootstrap_spec: bool,
+    /// Area for bootstrap spec (required when bootstrap is enabled)
+    pub bootstrap_area: Option<String>,
     /// Current phase in the orchestration flow
     pub phase: ProjectNewPhase,
 }
@@ -107,6 +109,7 @@ impl SpecKitCommand for SpecKitProjectNewCommand {
         let mut project_name: Option<&str> = None;
         let mut deep = false;
         let mut bootstrap_desc: Option<String> = None;
+        let mut bootstrap_area: Option<String> = None;
         let mut no_bootstrap_spec = false;
 
         let mut i = 0;
@@ -131,11 +134,37 @@ impl SpecKitCommand for SpecKitProjectNewCommand {
                         return;
                     }
                 }
+                "--bootstrap-area" => {
+                    i += 1;
+                    if i < parsed.len() {
+                        let area = &parsed[i];
+                        // Validate area format
+                        if let Err(e) = super::super::spec_id_generator::validate_area(area) {
+                            widget.history_push(new_error_event(format!(
+                                "Invalid --bootstrap-area: {}\n\nAvailable areas: {}",
+                                e,
+                                super::super::spec_id_generator::get_available_areas(
+                                    &widget.config.cwd
+                                )
+                                .join(", ")
+                            )));
+                            widget.request_redraw();
+                            return;
+                        }
+                        bootstrap_area = Some(area.clone());
+                    } else {
+                        widget.history_push(new_error_event(
+                            "--bootstrap-area requires an AREA argument".to_string(),
+                        ));
+                        widget.request_redraw();
+                        return;
+                    }
+                }
                 _ => {
                     // Positional argument
                     if arg.starts_with('-') {
                         widget.history_push(new_error_event(format!(
-                            "Unknown flag: {}. Use --deep, --bootstrap \"desc\", or --no-bootstrap-spec",
+                            "Unknown flag: {}. Use --deep, --bootstrap \"desc\", --bootstrap-area <AREA>, or --no-bootstrap-spec",
                             arg
                         )));
                         widget.request_redraw();
@@ -237,6 +266,7 @@ impl SpecKitCommand for SpecKitProjectNewCommand {
             deep,
             bootstrap_desc,
             no_bootstrap_spec,
+            bootstrap_area,
             phase: ProjectNewPhase::VisionPending,
         });
 
@@ -272,14 +302,19 @@ fn show_usage(widget: &mut ChatWidget) {
             Line::from("  generic    - Spec-kit files only (no language setup)"),
             Line::from(""),
             Line::from("Options:"),
-            Line::from("  --deep               Enable deep intake questions"),
-            Line::from("  --bootstrap \"desc\"   Description for bootstrap spec"),
-            Line::from("  --no-bootstrap-spec  Skip bootstrap spec creation"),
+            Line::from("  --deep                     Enable deep intake questions"),
+            Line::from("  --bootstrap \"desc\"         Description for bootstrap spec"),
+            Line::from(
+                "  --bootstrap-area <AREA>    Area for bootstrap spec (required with --bootstrap)",
+            ),
+            Line::from("  --no-bootstrap-spec        Skip bootstrap spec creation"),
             Line::from(""),
             Line::from("Examples:"),
             Line::from("  /speckit.projectnew rust my-lib"),
             Line::from("  /speckit.projectnew python my-app --deep"),
-            Line::from("  /speckit.projectnew ts my-svc --bootstrap \"add auth\""),
+            Line::from(
+                "  /speckit.projectnew ts my-svc --bootstrap \"add auth\" --bootstrap-area CORE",
+            ),
             Line::from("  /speckit.projectnew generic docs-only --no-bootstrap-spec"),
             Line::from(""),
             Line::from("Flow:"),

@@ -135,15 +135,18 @@ pub fn run_native_guardrail(
 // === Individual Check Implementations ===
 
 fn validate_spec_id(cwd: &Path, spec_id: &str) -> GuardrailCheck {
-    // Check format: SPEC-XXX-NNN or similar
-    let valid_format = spec_id.starts_with("SPEC-") && spec_id.len() > 5;
+    // Check format: accepts BOTH legacy and new formats
+    // Legacy: SPEC-*, MAINT-*, or any prefix starting with uppercase
+    // New: AREA-FEAT-#### (e.g., CORE-FEAT-0001)
+    let legacy_format = spec_id.starts_with("SPEC-") || spec_id.starts_with("MAINT-");
+    let new_format = is_valid_feature_id_format(spec_id);
 
-    if !valid_format {
+    if !legacy_format && !new_format {
         return GuardrailCheck {
             name: "spec-id-format".to_string(),
             status: CheckStatus::Warning,
             message: Some(format!(
-                "SPEC ID '{}' doesn't match expected format SPEC-*",
+                "SPEC ID '{}' doesn't match expected format (SPEC-*, MAINT-*, or AREA-FEAT-####)",
                 spec_id
             )),
         };
@@ -164,6 +167,43 @@ fn validate_spec_id(cwd: &Path, spec_id: &str) -> GuardrailCheck {
         status: CheckStatus::Passed,
         message: Some(format!("SPEC ID '{}' is valid", spec_id)),
     }
+}
+
+/// Check if spec_id matches new AREA-FEAT-#### format
+fn is_valid_feature_id_format(spec_id: &str) -> bool {
+    // Pattern: AREA-FEAT-#### where AREA is uppercase letters/digits
+    let parts: Vec<&str> = spec_id.split('-').collect();
+    if parts.len() < 3 {
+        return false;
+    }
+
+    let area = parts[0];
+    let feat = parts[1];
+    let num = parts[2];
+
+    // FEAT marker must be literal "FEAT"
+    if feat != "FEAT" {
+        return false;
+    }
+
+    // Number must be exactly 4 digits
+    if num.len() != 4 || !num.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+
+    // Area must be valid: starts with uppercase, all uppercase/digits
+    if area.is_empty() {
+        return false;
+    }
+    let mut chars = area.chars();
+    if !chars
+        .next()
+        .map(|c| c.is_ascii_uppercase())
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
 }
 
 fn validate_spec_files(cwd: &Path, spec_id: &str) -> GuardrailCheck {
