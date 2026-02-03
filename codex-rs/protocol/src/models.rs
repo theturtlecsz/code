@@ -52,6 +52,7 @@ pub enum ResponseItem {
         #[serde(default, skip_serializing)]
         id: String,
         summary: Vec<ReasoningItemReasoningSummary>,
+        #[ts(optional)]
         #[serde(default, skip_serializing_if = "should_serialize_reasoning_content")]
         content: Option<Vec<ReasoningItemContent>>,
         encrypted_content: Option<String>,
@@ -89,6 +90,7 @@ pub enum ResponseItem {
     CustomToolCall {
         #[serde(skip_serializing)]
         id: Option<String>,
+        #[ts(optional)]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         status: Option<String>,
 
@@ -111,6 +113,7 @@ pub enum ResponseItem {
     WebSearchCall {
         #[serde(skip_serializing)]
         id: Option<String>,
+        #[ts(optional)]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         status: Option<String>,
         action: WebSearchAction,

@@ -1232,6 +1232,15 @@ fn test_cross_process_lock_with_real_subprocess() {
     use crate::memvid_adapter::lock::lock_path_for;
     use std::process::{Command, Stdio};
 
+    // Check if flock is available (not present in all CI environments)
+    let flock_check = Command::new("sh")
+        .args(["-c", "command -v flock >/dev/null 2>&1"])
+        .status();
+    if flock_check.map(|s| !s.success()).unwrap_or(true) {
+        eprintln!("SKIP: flock not available in this environment");
+        return;
+    }
+
     let temp_dir = TempDir::new().unwrap();
     let capsule_path = temp_dir.path().join("real_subprocess.mv2");
     let lock_path = lock_path_for(&capsule_path);

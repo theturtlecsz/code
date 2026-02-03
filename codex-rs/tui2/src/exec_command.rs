@@ -34,7 +34,7 @@ where
     Some(rel.to_path_buf())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::*;
 

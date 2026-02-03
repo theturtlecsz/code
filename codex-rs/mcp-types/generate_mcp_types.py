@@ -21,9 +21,9 @@ from typing import Any, Literal
 SCHEMA_VERSION = "2025-06-18"
 JSONRPC_VERSION = "2.0"
 
-STANDARD_DERIVE = "#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]\n"
+STANDARD_DERIVE = "#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS, schemars::JsonSchema)]\n"
 STANDARD_HASHABLE_DERIVE = (
-    "#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, TS)]\n"
+    "#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, TS, schemars::JsonSchema)]\n"
 )
 
 # Will be populated with the schema's `definitions` map in `main()` so that
@@ -332,10 +332,13 @@ class StructField:
     type_name: str
     serde: str | None = None
     comment: str | None = None
+    ts_optional: bool = False
 
     def append(self, out: list[str], supports_const: bool) -> None:
         if self.comment:
             out.append(f"    // {self.comment}\n")
+        if self.ts_optional:
+            out.append("    #[ts(optional)]\n")
         if self.serde:
             out.append(f"    {self.serde}\n")
         if self.viz == "const":
@@ -377,9 +380,9 @@ def define_struct(
             prop_type = f"Option<{prop_type}>"
         rs_prop = rust_prop_name(prop_name, is_optional)
         if prop_type.startswith("&'static str"):
-            fields.append(StructField("const", rs_prop.name, prop_type, rs_prop.serde))
+            fields.append(StructField("const", rs_prop.name, prop_type, rs_prop.serde, ts_optional=is_optional))
         else:
-            fields.append(StructField("pub", rs_prop.name, prop_type, rs_prop.serde))
+            fields.append(StructField("pub", rs_prop.name, prop_type, rs_prop.serde, ts_optional=is_optional))
 
     # Special-case: add Codex-specific user_agent to Implementation
     if name == "Implementation":
@@ -390,6 +393,7 @@ def define_struct(
                 "Option<String>",
                 '#[serde(default, skip_serializing_if = "Option::is_none")]',
                 "This is an extra field that the Codex MCP server sends as part of InitializeResult.",
+                ts_optional=True,
             )
         )
 

@@ -1409,6 +1409,18 @@ mod tests {
             .output()
             .expect("Failed to init git repo");
 
+        // Configure git identity for CI environments without global config
+        Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(temp.path())
+            .output()
+            .expect("Failed to configure git email");
+        Command::new("git")
+            .args(["config", "user.name", "Test User"])
+            .current_dir(temp.path())
+            .output()
+            .expect("Failed to configure git name");
+
         // Add and commit initial files
         Command::new("git")
             .args(["add", "."])

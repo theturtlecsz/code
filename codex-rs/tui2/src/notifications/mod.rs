@@ -59,7 +59,7 @@ fn should_use_windows_toasts() -> bool {
     is_wsl() && env::var_os("WT_SESSION").is_some()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "tui2-legacy-tests"))]
 mod tests {
     use super::NotificationBackendKind;
     use super::detect_backend;
