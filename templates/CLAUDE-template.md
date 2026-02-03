@@ -40,7 +40,7 @@ lm remember "<insight>" --type <TYPE> --importance 8 --tags "component:..."
 
 This project uses spec-kit for structured development:
 
-* `/speckit.new <description>` - Create new SPEC
+* `/speckit.new <AREA> <description>` - Create new SPEC
 * `/speckit.auto SPEC-ID` - Full automation pipeline (Stage0 handles memory)
 * `/speckit.status SPEC-ID` - Check progress
 

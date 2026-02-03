@@ -19,7 +19,7 @@
 **Core Workflow:**
 
 ```
-/speckit.new <description>
+/speckit.new <AREA> <description>
   → Multi-agent PRD creation with templates
   → SPEC-ID generation
   → Consistent structure (55% faster)

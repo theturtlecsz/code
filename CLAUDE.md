@@ -36,7 +36,7 @@ cargo build --workspace --all-features
 ### Spec-Kit Commands
 
 ```bash
-/speckit.new <description>        # Create new SPEC (instant, free)
+/speckit.new <AREA> <description> # Create new SPEC (instant, free)
 /speckit.project rust <name>      # Scaffold project with spec-kit
 /speckit.auto SPEC-ID             # Full 6-stage pipeline (~$2.70)
 /speckit.status SPEC-ID           # Check SPEC status

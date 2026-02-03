@@ -326,7 +326,7 @@ impl ProjectSnapshotBuilder {
             },
             WorkflowSummary {
                 name: "speckit.new".to_string(),
-                command: "/speckit.new <description>".to_string(),
+                command: "/speckit.new <AREA> <description>".to_string(),
                 description: "Create new SPEC with guided questions".to_string(),
                 stages: vec![
                     "Project detection".to_string(),
