@@ -1791,6 +1791,10 @@ pub struct BriefArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum BriefSubcommand {
+    /// Initialize the current branch session brief with minimal template
+    Init(BriefInitArgs),
+    /// Validate the current branch session brief exists and is non-empty
+    Check(BriefCheckArgs),
     /// Generate or update the current branch session brief
     Refresh(BriefRefreshArgs),
 }
@@ -1835,6 +1839,30 @@ pub struct BriefRefreshArgs {
     /// Output JSON instead of text
     #[arg(long = "json", short = 'j')]
     pub json: bool,
+}
+
+/// Arguments for `speckit brief init`
+#[derive(Debug, Parser)]
+pub struct BriefInitArgs {
+    /// Overwrite existing brief with template (otherwise no-op if exists and non-empty)
+    #[arg(long = "force")]
+    pub force: bool,
+
+    /// Output JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+}
+
+/// Arguments for `speckit brief check`
+#[derive(Debug, Parser)]
+pub struct BriefCheckArgs {
+    /// Output JSON instead of text
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+
+    /// Require the SPECKIT_BRIEF_REFRESH marker block to exist
+    #[arg(long = "require-refresh-block")]
+    pub require_refresh_block: bool,
 }
 
 impl SpeckitCli {
@@ -1946,8 +1974,269 @@ struct BriefFailure {
 
 fn run_brief(cwd: PathBuf, args: BriefArgs) -> anyhow::Result<()> {
     match args.command {
+        BriefSubcommand::Init(args) => run_brief_init(cwd, args),
+        BriefSubcommand::Check(args) => run_brief_check(cwd, args),
         BriefSubcommand::Refresh(args) => run_brief_refresh(cwd, args),
     }
+}
+
+fn run_brief_init(cwd: PathBuf, args: BriefInitArgs) -> anyhow::Result<()> {
+    let json_output = args.json;
+    let force = args.force;
+
+    let result = block_on_detached_brief(async move {
+        let repo_root = get_repo_root(&cwd)
+            .await
+            .map_err(|e| fail_infra(e.to_string(), None))?;
+        let branch = get_current_branch(&repo_root)
+            .await
+            .map_err(|e| fail_infra(e.to_string(), None))?;
+
+        // Hard error on main or detached HEAD
+        if branch == "main" || branch == "HEAD" {
+            return Err(fail_usage(
+                format!(
+                    "Branch briefs are only used on feature branches (current branch: {branch})"
+                ),
+                Some(
+                    "Create a feature branch (e.g. `git checkout -b fix/my-branch`) and run again."
+                        .to_string(),
+                ),
+            ));
+        }
+
+        let safe_branch = sanitize_branch_name(&branch);
+        let brief_path = repo_root
+            .join("docs")
+            .join("briefs")
+            .join(format!("{safe_branch}.md"));
+
+        // Check if brief exists and is non-empty
+        let exists = brief_path.exists();
+        let non_empty = exists && brief_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
+
+        // If exists and non-empty and not --force: no-op
+        if exists && non_empty && !force {
+            return Ok(BriefInitOutput {
+                branch,
+                brief_path,
+                wrote_file: false,
+            });
+        }
+
+        // Create parent directories if needed
+        if let Some(parent) = brief_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                fail_infra(
+                    format!("Failed to create briefs directory: {e}"),
+                    Some("Check filesystem permissions.".to_string()),
+                )
+            })?;
+        }
+
+        // Write the template
+        let template = minimal_branch_brief_template(&branch);
+        std::fs::write(&brief_path, &template).map_err(|e| {
+            fail_infra(
+                format!("Failed to write brief file: {e}"),
+                Some("Check filesystem permissions.".to_string()),
+            )
+        })?;
+
+        Ok(BriefInitOutput {
+            branch,
+            brief_path,
+            wrote_file: true,
+        })
+    });
+
+    match result {
+        Ok(output) => {
+            if json_output {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": headless_exit::SUCCESS,
+                    "exit_reason": headless_exit::exit_reason(headless_exit::SUCCESS),
+                    "branch": output.branch,
+                    "brief_path": output.brief_path.display().to_string(),
+                    "wrote_file": output.wrote_file,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else if output.wrote_file {
+                println!("Created branch brief: {}", output.brief_path.display());
+            } else {
+                println!(
+                    "Brief already exists: {} (use --force to overwrite)",
+                    output.brief_path.display()
+                );
+            }
+            Ok(())
+        }
+        Err(err) => {
+            if json_output {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": err.exit_code,
+                    "exit_reason": headless_exit::exit_reason(err.exit_code),
+                    "error": err.error,
+                    "resolution": err.resolution,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {}", err.error);
+                if let Some(resolution) = err.resolution.as_deref() {
+                    eprintln!("Resolution: {}", resolution);
+                }
+            }
+            std::process::exit(err.exit_code);
+        }
+    }
+}
+
+#[derive(Debug)]
+struct BriefInitOutput {
+    branch: String,
+    brief_path: PathBuf,
+    wrote_file: bool,
+}
+
+fn run_brief_check(cwd: PathBuf, args: BriefCheckArgs) -> anyhow::Result<()> {
+    let json_output = args.json;
+    let require_refresh_block = args.require_refresh_block;
+
+    let result = block_on_detached_brief(async move {
+        let repo_root = get_repo_root(&cwd)
+            .await
+            .map_err(|e| fail_infra(e.to_string(), None))?;
+        let branch = get_current_branch(&repo_root)
+            .await
+            .map_err(|e| fail_infra(e.to_string(), None))?;
+
+        // Hard error on main or detached HEAD
+        if branch == "main" || branch == "HEAD" {
+            return Err(fail_usage(
+                format!(
+                    "Branch briefs are only used on feature branches (current branch: {branch})"
+                ),
+                Some(
+                    "Create a feature branch (e.g. `git checkout -b fix/my-branch`) and run again."
+                        .to_string(),
+                ),
+            ));
+        }
+
+        let safe_branch = sanitize_branch_name(&branch);
+        let brief_path = repo_root
+            .join("docs")
+            .join("briefs")
+            .join(format!("{safe_branch}.md"));
+
+        // Check if brief exists and is non-empty
+        let exists = brief_path.exists();
+        let non_empty = exists && brief_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
+
+        // Check for refresh block if required
+        let has_refresh_block = if require_refresh_block && exists && non_empty {
+            let content = std::fs::read_to_string(&brief_path).map_err(|e| {
+                fail_infra(
+                    format!("Failed to read brief file: {e}"),
+                    Some("Check filesystem permissions.".to_string()),
+                )
+            })?;
+            content.contains("<!-- BEGIN: SPECKIT_BRIEF_REFRESH -->")
+        } else {
+            !require_refresh_block // If not required, consider it "present"
+        };
+
+        Ok(BriefCheckOutput {
+            branch,
+            brief_path,
+            exists,
+            non_empty,
+            has_refresh_block,
+            require_refresh_block,
+        })
+    });
+
+    match result {
+        Ok(output) => {
+            // Determine validation result
+            let valid = output.exists
+                && output.non_empty
+                && (!output.require_refresh_block || output.has_refresh_block);
+
+            if json_output {
+                let exit_code = if valid {
+                    headless_exit::SUCCESS
+                } else {
+                    headless_exit::HARD_FAIL
+                };
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": exit_code,
+                    "exit_reason": headless_exit::exit_reason(exit_code),
+                    "branch": output.branch,
+                    "brief_path": output.brief_path.display().to_string(),
+                    "exists": output.exists,
+                    "non_empty": output.non_empty,
+                    "has_refresh_block": output.has_refresh_block,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+                if !valid {
+                    std::process::exit(headless_exit::HARD_FAIL);
+                }
+            } else if valid {
+                println!("OK: {}", output.brief_path.display());
+            } else {
+                let reason = if !output.exists {
+                    "missing"
+                } else if !output.non_empty {
+                    "empty"
+                } else {
+                    "missing refresh block"
+                };
+                eprintln!("FAIL: {} ({})", output.brief_path.display(), reason);
+                eprintln!();
+                eprintln!("To create the brief, run one of:");
+                eprintln!("  code speckit brief init");
+                eprintln!("  code speckit brief refresh --query \"<feature keywords>\"");
+                std::process::exit(headless_exit::HARD_FAIL);
+            }
+            Ok(())
+        }
+        Err(err) => {
+            if json_output {
+                let json = serde_json::json!({
+                    "schema_version": SCHEMA_VERSION,
+                    "tool_version": tool_version(),
+                    "exit_code": err.exit_code,
+                    "exit_reason": headless_exit::exit_reason(err.exit_code),
+                    "error": err.error,
+                    "resolution": err.resolution,
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                eprintln!("Error: {}", err.error);
+                if let Some(resolution) = err.resolution.as_deref() {
+                    eprintln!("Resolution: {}", resolution);
+                }
+            }
+            std::process::exit(err.exit_code);
+        }
+    }
+}
+
+#[derive(Debug)]
+struct BriefCheckOutput {
+    branch: String,
+    brief_path: PathBuf,
+    exists: bool,
+    non_empty: bool,
+    has_refresh_block: bool,
+    require_refresh_block: bool,
 }
 
 fn run_brief_refresh(cwd: PathBuf, args: BriefRefreshArgs) -> anyhow::Result<()> {
@@ -8918,10 +9207,26 @@ mod tests {
 
     #[test]
     fn sanitize_branch_name_matches_precommit_rule() {
+        // Basic slash replacement
         assert_eq!(sanitize_branch_name("fix/foo"), "fix__foo");
+        assert_eq!(sanitize_branch_name("fix/foo/bar"), "fix__foo__bar");
+
+        // Multiple consecutive slashes collapse to single __
         assert_eq!(sanitize_branch_name("fix/foo//bar"), "fix__foo__bar");
+        assert_eq!(sanitize_branch_name("fix///triple"), "fix__triple");
+
+        // Special characters become hyphens
         assert_eq!(sanitize_branch_name("feat/space name"), "feat__space-name");
+        assert_eq!(sanitize_branch_name("fix/foo@bar"), "fix__foo-bar");
+        assert_eq!(
+            sanitize_branch_name("feat/v1.0#release"),
+            "feat__v1.0-release"
+        );
+
+        // Valid characters preserved
         assert_eq!(sanitize_branch_name("a.b_c-d"), "a.b_c-d");
+        assert_eq!(sanitize_branch_name("my-branch_v2.1"), "my-branch_v2.1");
+        assert_eq!(sanitize_branch_name("feat_name-1.0"), "feat_name-1.0");
     }
 
     #[test]

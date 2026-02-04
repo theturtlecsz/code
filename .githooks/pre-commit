@@ -24,7 +24,12 @@ if [[ -n "$BRANCH_NAME" && "$BRANCH_NAME" != "HEAD" && "$BRANCH_NAME" != "main" 
     BRIEF_PATH="docs/briefs/${SAFE_BRANCH_NAME}.md"
     if [[ ! -s "$BRIEF_PATH" ]]; then
         echo "❌ Branch brief is missing or empty: $BRIEF_PATH"
-        echo "Create it before committing on this branch. See: docs/briefs/README.md"
+        echo ""
+        echo "To create the brief, run one of:"
+        echo "  code speckit brief init"
+        echo "  code speckit brief refresh --query \"<feature keywords>\""
+        echo ""
+        echo "See: docs/briefs/README.md"
         exit 1
     fi
 fi

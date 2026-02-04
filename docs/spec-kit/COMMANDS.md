@@ -90,15 +90,49 @@ Where `<branch>` is your git branch name with `/` replaced by `__` (same rule as
 code speckit brief refresh --query "Stage0" [--domain codex-product] [--limit 10] [--ollama-model qwen2.5:3b] [--dry-run] [--json]
 ```
 
-| Option                   | Description                                      |
-| ------------------------ | ------------------------------------------------ |
-| `--query <text>`         | Search query for product knowledge               |
-| `--domain <domain>`      | local-memory domain (default: `codex-product`)   |
-| `--limit <n>`            | Max results from local-memory (default: 10)      |
-| `--max-content-length n` | Max characters per memory item (default: 800)    |
+| Option                   | Description                                        |
+| ------------------------ | -------------------------------------------------- |
+| `--query <text>`         | Search query for product knowledge                 |
+| `--domain <domain>`      | local-memory domain (default: `codex-product`)     |
+| `--limit <n>`            | Max results from local-memory (default: 10)        |
+| `--max-content-length n` | Max characters per memory item (default: 800)      |
 | `--ollama-model <model>` | Ollama model for synthesis (default: `qwen2.5:3b`) |
-| `--dry-run`              | Print the generated block instead of writing     |
-| `--json`                 | Output JSON for scripting                        |
+| `--dry-run`              | Print the generated block instead of writing       |
+| `--json`                 | Output JSON for scripting                          |
+
+### `code speckit brief init`
+
+Initialize the current feature-branch session brief with a minimal template.
+
+```bash
+code speckit brief init [--force] [--json]
+```
+
+| Option    | Description                            |
+| --------- | -------------------------------------- |
+| `--force` | Overwrite existing brief with template |
+| `--json`  | Output JSON for scripting              |
+
+**Behavior**:
+
+* On `main` or detached HEAD: exits with error (briefs are only for feature branches)
+* If brief exists and non-empty: no-op (exits 0)
+* If brief missing or empty: creates from template
+
+### `code speckit brief check`
+
+Validate the current branch session brief exists and is non-empty.
+
+```bash
+code speckit brief check [--json] [--require-refresh-block]
+```
+
+| Option                    | Description                          |
+| ------------------------- | ------------------------------------ |
+| `--json`                  | Output JSON for scripting            |
+| `--require-refresh-block` | Also require the auto-refresh marker |
+
+**Exit codes**: 0 (valid), 2 (missing/empty), 3 (infrastructure error)
 
 ### `code speckit projections rebuild`
 
