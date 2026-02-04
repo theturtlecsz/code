@@ -522,4 +522,3 @@ fn elicitation_options() -> Vec<ApprovalOption> {
         },
     ]
 }
-

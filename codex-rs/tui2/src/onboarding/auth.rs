@@ -647,4 +647,3 @@ impl WidgetRef for AuthModeWidget {
         }
     }
 }
-

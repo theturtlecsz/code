@@ -226,4 +226,3 @@ impl WidgetRef for CommandPopup {
         );
     }
 }
-

@@ -627,4 +627,3 @@ fn render_offset_content(
 
     copy_height
 }
-

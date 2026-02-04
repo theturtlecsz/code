@@ -779,4 +779,3 @@ impl ScrollStream {
         total
     }
 }
-

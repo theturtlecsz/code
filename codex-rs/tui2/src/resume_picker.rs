@@ -1040,4 +1040,3 @@ fn calculate_column_metrics(rows: &[Row], include_cwd: bool) -> ColumnMetrics {
         labels,
     }
 }
-

@@ -1952,4 +1952,3 @@ fn prompt_selection_action(
         }
     }
 }
-

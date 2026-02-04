@@ -309,4 +309,3 @@ pub fn prompt_command_with_arg_placeholders(name: &str, args: &[String]) -> (Str
     }
     (text, cursor)
 }
-

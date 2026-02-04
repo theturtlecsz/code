@@ -1456,4 +1456,3 @@ fn format_mcp_invocation<'a>(invocation: McpInvocation) -> Line<'a> {
     ];
     invocation_spans.into()
 }
-

@@ -58,4 +58,3 @@ pub fn detect_backend() -> DesktopNotificationBackend {
 fn should_use_windows_toasts() -> bool {
     is_wsl() && env::var_os("WT_SESSION").is_some()
 }
-
