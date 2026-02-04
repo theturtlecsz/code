@@ -3473,46 +3473,6 @@ async fn fetch_rate_limits(base_url: String, auth: CodexAuth) -> Option<RateLimi
     }
 }
 
-#[cfg(all(test, feature = "tui2-legacy-tests"))]
-pub(crate) fn show_review_commit_picker_with_entries(
-    chat: &mut ChatWidget,
-    entries: Vec<codex_core::git_info::CommitLogEntry>,
-) {
-    let mut items: Vec<SelectionItem> = Vec::with_capacity(entries.len());
-    for entry in entries {
-        let subject = entry.subject.clone();
-        let sha = entry.sha.clone();
-        let search_val = format!("{subject} {sha}");
-
-        items.push(SelectionItem {
-            name: subject.clone(),
-            actions: vec![Box::new(move |tx3: &AppEventSender| {
-                tx3.send(AppEvent::CodexOp(Op::Review {
-                    review_request: ReviewRequest {
-                        target: ReviewTarget::Commit {
-                            sha: sha.clone(),
-                            title: Some(subject.clone()),
-                        },
-                        user_facing_hint: None,
-                    },
-                }));
-            })],
-            dismiss_on_select: true,
-            search_value: Some(search_val),
-            ..Default::default()
-        });
-    }
-
-    chat.bottom_pane.show_selection_view(SelectionViewParams {
-        title: Some("Select a commit to review".to_string()),
-        footer_hint: Some(standard_popup_hint_line()),
-        items,
-        is_searchable: true,
-        search_placeholder: Some("Type to search commits".to_string()),
-        ..Default::default()
-    });
-}
-
 // Skill mentions - stubbed for fork (not in local InputItem)
 #[allow(dead_code)]
 fn find_skill_mentions(text: &str, skills: &[SkillMetadata]) -> Vec<SkillMetadata> {
@@ -3551,8 +3511,3 @@ fn skills_for_cwd(cwd: &Path, skills_entries: &[SkillsListEntry]) -> Vec<SkillMe
         })
         .unwrap_or_default()
 }
-
-// Tests disabled by default - require API migration work (~475 errors from codex-core API drift)
-// Enable with: cargo test -p codex-tui2 --features tui2-legacy-tests
-#[cfg(all(test, feature = "tui2-legacy-tests"))]
-pub(crate) mod tests;

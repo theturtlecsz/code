@@ -13,14 +13,8 @@ name = "codex_tui2"
 path = "src/lib.rs"
 
 [features]
-# Enable vt100-based tests (emulator) when running with `--features vt100-tests`.
-vt100-tests = []
 # Gate verbose debug logging inside the TUI implementation.
 debug-logs = []
-# Enable legacy tests that require API migration. Tests have ~475 errors due to
-# codex-core API drift; enable this to work on fixing them.
-# Run: cargo test -p codex-tui2 --features tui2-legacy-tests
-tui2-legacy-tests = []
 
 [lints]
 workspace = true
