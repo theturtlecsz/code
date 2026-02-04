@@ -27,6 +27,10 @@
     * [Integration Point](#integration-point)
     * [State Changes](#state-changes)
     * [Context Injection](#context-injection)
+  * [5. Stage0 Has No Memvid Dependency (Adapter Boundary)](#5-stage0-has-no-memvid-dependency-adapter-boundary)
+    * [Why This Boundary Exists](#why-this-boundary-exists)
+    * [Mechanism](#mechanism)
+    * [Invariants (from codex-rs/SPEC.md)](#invariants-from-codex-rsspecmd)
 * [Part II: Dynamic Context Compiler (DCC)](#part-ii-dynamic-context-compiler-dcc)
   * [5. Intent Query Object (IQO)](#5-intent-query-object-iqo)
     * [Schema](#schema)
@@ -357,6 +361,54 @@ if let Some(stage0_result) = &state.stage0_result {
     }
 }
 ```
+
+***
+
+## 5. Stage0 Has No Memvid Dependency (Adapter Boundary)
+
+Stage0 orchestration core is intentionally isolated from Memvid implementation details.
+All Memvid concepts are accessed through adapter interfaces.
+
+### Why This Boundary Exists
+
+* **Layering / Avoid Cycles**: Stage0 depends on abstract traits, not concrete implementations.
+  This prevents circular dependencies (Stage0 -> Memvid -> Stage0).
+
+* **Testability / Reuse**: Stage0 can be tested with mock adapters (NoopTier2Client, LlmStubAdapter)
+  without Memvid infrastructure. Enables unit testing of orchestration logic in isolation.
+
+* **SoR vs Engine Separation**: Memvid capsule is the system-of-record; Stage0 is the execution
+  engine. Keeping them separate ensures SoR changes don't require Stage0 code changes.
+
+* **Determinism / I/O Boundaries**: Stage0 core logic is deterministic given inputs.
+  All I/O (memory reads, Tier2 queries, LLM calls) is pushed to adapter boundaries,
+  enabling replay determinism and offline testing.
+
+* **Backend Flexibility**: Different integrations (CLI, TUI, headless) can provide
+  different adapters. Stage0 doesn't assume any specific memory backend.
+
+### Mechanism
+
+The interface is defined via the `LocalMemoryClient` trait:
+
+```
+Stage0 Core -> LocalMemoryClient (trait) -> MemvidMemoryAdapter (impl) -> CapsuleHandle
+```
+
+**Key implementations** (see `codex-rs/tui/src/stage0_adapters.rs`):
+
+| Adapter                 | Purpose                                  |
+| ----------------------- | ---------------------------------------- |
+| `LocalMemoryCliAdapter` | CLI/REST access to local-memory (no MCP) |
+| `MemvidMemoryAdapter`   | Direct Memvid capsule access             |
+| `NoopTier2Client`       | Fallback when NotebookLM unavailable     |
+| `LlmStubAdapter`        | Heuristic fallback (no actual LLM calls) |
+
+### Invariants (from codex-rs/SPEC.md)
+
+* Stage0 core has no Memvid dependency
+* LocalMemoryClient trait is the interface
+* Adapter boundary enforced: Stage0 -> LocalMemoryClient -> MemvidMemoryAdapter -> CapsuleHandle
 
 ***
 

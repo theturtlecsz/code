@@ -8,7 +8,11 @@
 
 Idle
 
-<!-- Branch/PR-specific session context lives in docs/briefs/<branch>.md -->
+## Session Workflow
+
+* `main` branch stays stable; `Current Focus: Idle` between sessions
+* Per-PR context goes in `docs/briefs/<branch>.md` (branch name with `/` replaced by `__`)
+* Branch briefs must be refreshed/snapshotted before commit (enforced by pre-commit)
 
 ## Scope / Constraints
 
@@ -21,7 +25,10 @@ Idle
 
 ## Verification
 
+All must pass (local-only is sufficient):
+
 ```bash
-python3 scripts/doc_lint.py      # Must pass
-bash .githooks/pre-commit        # Must pass
+python3 scripts/doc_lint.py                                            # warnings are errors
+cargo clippy --workspace --all-targets --all-features -- -D warnings   # from codex-rs/
+bash .githooks/pre-commit                                              # full validation
 ```
