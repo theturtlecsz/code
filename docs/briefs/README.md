@@ -36,3 +36,24 @@ Copy this into your branch brief:
 ## Verification
 ```
 
+## Quick Start
+
+Initialize brief for your feature branch:
+
+```bash
+code speckit brief init
+```
+
+Then (optionally) enrich with product knowledge:
+
+```bash
+code speckit brief refresh --query "your feature keywords"
+```
+
+## Validation
+
+Check brief exists before committing (CI use):
+
+```bash
+code speckit brief check
+```
