@@ -9,11 +9,11 @@ use std::path::PathBuf;
 
 fn get_repo_root() -> PathBuf {
     // CARGO_MANIFEST_DIR is codex-rs/tui, need to go up 2 levels
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    manifest_dir
         .parent() // codex-rs/tui -> codex-rs
-        .expect("Expected parent")
-        .parent() // codex-rs -> repo root
-        .expect("Expected repo root")
+        .and_then(|p| p.parent()) // codex-rs -> repo root
+        .unwrap_or_else(|| panic!("Failed to find repo root from {}", manifest_dir.display()))
         .to_path_buf()
 }
 
@@ -27,8 +27,7 @@ fn test_generate_next_feature_id_real_repo() {
     // Verify format: CORE-FEAT-####
     assert!(
         next_id.starts_with("CORE-FEAT-"),
-        "Expected CORE-FEAT-#### format, got: {}",
-        next_id
+        "Expected CORE-FEAT-#### format, got: {next_id}"
     );
     assert_eq!(
         next_id.len(),
@@ -56,13 +55,11 @@ fn test_generate_feature_directory_name_real_repo() {
     // Should be TUI-FEAT-####-test-native-id-generation
     assert!(
         dir_name.starts_with("TUI-FEAT-"),
-        "Expected TUI-FEAT-#### prefix, got: {}",
-        dir_name
+        "Expected TUI-FEAT-#### prefix, got: {dir_name}"
     );
     assert!(
         dir_name.contains("-test-native-id-generation"),
-        "Expected slug in name, got: {}",
-        dir_name
+        "Expected slug in name, got: {dir_name}"
     );
 
     println!("Generated full feature directory name: {dir_name}");
@@ -78,8 +75,7 @@ fn test_get_available_areas_real_repo() {
     for default in DEFAULT_AREAS {
         assert!(
             areas.contains(&default.to_string()),
-            "Missing default area: {}",
-            default
+            "Missing default area: {default}"
         );
     }
 
@@ -88,7 +84,7 @@ fn test_get_available_areas_real_repo() {
     sorted.sort();
     assert_eq!(areas, sorted, "Areas should be sorted");
 
-    println!("Available areas: {:?}", areas);
+    println!("Available areas: {areas:?}");
 }
 
 #[test]

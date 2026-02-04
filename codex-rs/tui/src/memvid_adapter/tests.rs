@@ -1238,7 +1238,10 @@ fn test_cross_process_lock_with_real_subprocess() {
         .args(["-c", "command -v flock >/dev/null 2>&1"])
         .status();
     if flock_check.map(|s| !s.success()).unwrap_or(true) {
-        eprintln!("SKIP: flock not available in this environment");
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("SKIP: flock not available in this environment");
+        }
         return;
     }
 

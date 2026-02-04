@@ -78,18 +78,8 @@ impl StatusIndicatorWidget {
         self.header = header;
     }
 
-    #[cfg(all(test, feature = "tui2-legacy-tests"))]
-    pub(crate) fn header(&self) -> &str {
-        &self.header
-    }
-
     pub(crate) fn set_interrupt_hint_visible(&mut self, visible: bool) {
         self.show_interrupt_hint = visible;
-    }
-
-    #[cfg(all(test, feature = "tui2-legacy-tests"))]
-    pub(crate) fn interrupt_hint_visible(&self) -> bool {
-        self.show_interrupt_hint
     }
 
     pub(crate) fn pause_timer(&mut self) {
