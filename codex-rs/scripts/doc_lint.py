@@ -503,8 +503,13 @@ def check_invariants_documented(result: LintResult, verbose: bool = False):
         r"replay.*determinism|offline.*replay",
     ]
 
-    # Search in SPEC.md, HANDOFF.md, and docs/
-    search_files = [REPO_ROOT / "SPEC.md", REPO_ROOT / "HANDOFF.md"]
+    # Search in SPEC.md, HANDOFF.md, codex-rs/SPEC.md, codex-rs/HANDOFF.md, and docs/
+    search_files = [
+        REPO_ROOT / "SPEC.md",
+        REPO_ROOT / "HANDOFF.md",
+        REPO_ROOT / "codex-rs" / "SPEC.md",
+        REPO_ROOT / "codex-rs" / "HANDOFF.md",
+    ]
     search_files += list(REPO_ROOT.glob("docs/**/*.md"))
 
     all_content = ""
@@ -520,7 +525,7 @@ def check_invariants_documented(result: LintResult, verbose: bool = False):
         if not re.search(inv_pattern, all_content, re.IGNORECASE):
             missing.append(inv_pattern)
 
-    if missing and verbose:
+    if missing:
         for m in missing:
             result.add_warning(
                 "docs/",

@@ -73,12 +73,13 @@ User input (TUI)
 
 ## 2. Key Boundaries
 
-| Boundary           | Location                                | Description                                                                                |
-| ------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------ |
-| UX + Orchestration | `codex-rs/tui/src/chatwidget/spec_kit/` | User-facing commands and pipeline coordination                                             |
-| Shared Library     | `codex-rs/spec-kit/`                    | Config, retry logic, shared types                                                          |
-| Templates          | `./templates/` (project-local)          | Prompt templates with embedded fallbacks                                                   |
-| Evidence Store     | `docs/SPEC-OPS-004-.../evidence/`       | Telemetry, artifacts, synthesis data. **Note**: Capsule is the SOR; filesystem is derived. |
+| Boundary           | Location                                | Description                                                                                                                                                              |
+| ------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| UX + Orchestration | `codex-rs/tui/src/chatwidget/spec_kit/` | User-facing commands and pipeline coordination                                                                                                                           |
+| Shared Library     | `codex-rs/spec-kit/`                    | Config, retry logic, shared types                                                                                                                                        |
+| Templates          | `./templates/` (project-local)          | Prompt templates with embedded fallbacks                                                                                                                                 |
+| Evidence Store     | `docs/SPEC-OPS-004-.../evidence/`       | Telemetry, artifacts, synthesis data. **Note**: Capsule is the SOR; filesystem is derived.                                                                               |
+| Stage0 Adapters    | `codex-rs/tui/src/stage0_adapters.rs`   | Memory/Tier2 abstraction layer; Stage0 core has no Memvid dependency (see [STAGE0-REFERENCE.md](STAGE0-REFERENCE.md#5-stage0-has-no-memvid-dependency-adapter-boundary)) |
 
 ***
 
