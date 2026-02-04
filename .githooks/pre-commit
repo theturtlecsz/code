@@ -90,6 +90,23 @@ if [ -n "$RUST_CHANGES" ]; then
     fi
 fi
 
+# === Rustfmt gate: run only when Rust/Cargo files are staged ===
+# Uses same detection as clippy gate above
+if [ -n "$RUST_CHANGES" ]; then
+    echo ""
+    echo "Rust changes detected, running rustfmt check..."
+    FMT_CMD="cargo fmt --all -- --check"
+    if ! (cd codex-rs && $FMT_CMD); then
+        echo ""
+        echo "❌ Rustfmt found formatting issues"
+        echo "Run the following to fix:"
+        echo "  cd codex-rs && cargo fmt --all"
+        echo ""
+        echo "Fix formatting before committing, or skip with: git commit --no-verify"
+        exit 1
+    fi
+fi
+
 # === V6 Doc Contract: Documentation lint (SPEC-KIT-972) ===
 # Run doc lint if any .md files or docs/ changed
 # NOTE: scripts/doc_lint.py forwards to canonical codex-rs/scripts/doc_lint.py
