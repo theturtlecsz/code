@@ -72,6 +72,24 @@ if [[ -f "scripts/validate-config-isolation.sh" ]]; then
     fi
 fi
 
+# === Clippy gate: run only when Rust/Cargo files are staged ===
+# Pattern: .rs files, Cargo.toml, Cargo.lock, rust-toolchain* under codex-rs/
+RUST_CHANGES=$(git diff --cached --name-only | grep -E "^codex-rs/.*\.rs$|^codex-rs/.*Cargo\.toml$|^codex-rs/.*Cargo\.lock$|^codex-rs/rust-toolchain" || true)
+if [ -n "$RUST_CHANGES" ]; then
+    echo ""
+    echo "Rust changes detected, running clippy (fail on warnings)..."
+    CLIPPY_CMD="cargo clippy --workspace --all-targets --all-features -- -D warnings"
+    if ! (cd codex-rs && $CLIPPY_CMD); then
+        echo ""
+        echo "❌ Clippy found warnings or errors"
+        echo "Run the following to see issues:"
+        echo "  cd codex-rs && $CLIPPY_CMD"
+        echo ""
+        echo "Fix violations before committing, or skip with: git commit --no-verify"
+        exit 1
+    fi
+fi
+
 # === V6 Doc Contract: Documentation lint (SPEC-KIT-972) ===
 # Run doc lint if any .md files or docs/ changed
 # NOTE: scripts/doc_lint.py forwards to canonical codex-rs/scripts/doc_lint.py
