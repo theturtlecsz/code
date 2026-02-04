@@ -100,6 +100,20 @@ code speckit brief refresh --query "Stage0" [--domain codex-product] [--limit 10
 | `--dry-run`              | Print the generated block instead of writing       |
 | `--json`                 | Output JSON for scripting                          |
 
+**Capsule Snapshot**
+
+On successful refresh, the brief is snapshotted to the workspace capsule with metadata:
+
+* URI format: `mv2://default/WORKFLOW/brief-<UTC>/artifact/briefs/<branch>/<UTC>.md`
+* Checkpoint label: `brief-<branch>-<UTC>`
+
+The refresh block will include:
+
+* `Capsule URI`: stable artifact reference
+* `Capsule checkpoint`: checkpoint identifier
+
+This creates a dual-surface SoR: the brief is both git-committed and capsule-snapshotted.
+
 ### `code speckit brief init`
 
 Initialize the current feature-branch session brief with a minimal template.
@@ -124,15 +138,20 @@ code speckit brief init [--force] [--json]
 Validate the current branch session brief exists and is non-empty.
 
 ```bash
-code speckit brief check [--json] [--require-refresh-block]
+code speckit brief check [--json] [--require-refresh-block] [--require-capsule-snapshot]
 ```
 
-| Option                    | Description                          |
-| ------------------------- | ------------------------------------ |
-| `--json`                  | Output JSON for scripting            |
-| `--require-refresh-block` | Also require the auto-refresh marker |
+| Option                       | Description                                               |
+| ---------------------------- | --------------------------------------------------------- |
+| `--json`                     | Output JSON for scripting                                 |
+| `--require-refresh-block`    | Require the auto-refresh marker block exists              |
+| `--require-capsule-snapshot` | Require refresh block contains capsule URI and checkpoint |
 
-**Exit codes**: 0 (valid), 2 (missing/empty), 3 (infrastructure error)
+**Exit codes**:
+
+* 0: Valid (all requirements met)
+* 2: Missing, empty, or validation failure (refresh block/capsule snapshot missing)
+* 3: Infrastructure error (filesystem, git)
 
 ### `code speckit projections rebuild`
 

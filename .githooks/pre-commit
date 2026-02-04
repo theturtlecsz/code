@@ -18,6 +18,7 @@ fi
 
 # === Session brief: docs/briefs/<branch>.md required on feature branches ===
 # One branch = one session. Keep DEV_BRIEF.md stable on main; put session context here.
+# Brief must contain refresh block + capsule snapshot (dual-surface SoR).
 BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
 if [[ -n "$BRANCH_NAME" && "$BRANCH_NAME" != "HEAD" && "$BRANCH_NAME" != "main" ]]; then
     SAFE_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed -E 's#/+#__#g; s#[^A-Za-z0-9._-]#-#g')
@@ -25,11 +26,37 @@ if [[ -n "$BRANCH_NAME" && "$BRANCH_NAME" != "HEAD" && "$BRANCH_NAME" != "main" 
     if [[ ! -s "$BRIEF_PATH" ]]; then
         echo "❌ Branch brief is missing or empty: $BRIEF_PATH"
         echo ""
-        echo "To create the brief, run one of:"
-        echo "  code speckit brief init"
+        echo "To create the brief with capsule snapshot, run:"
         echo "  code speckit brief refresh --query \"<feature keywords>\""
         echo ""
         echo "See: docs/briefs/README.md"
+        exit 1
+    fi
+
+    # Check for refresh marker block
+    if ! grep -q "<!-- BEGIN: SPECKIT_BRIEF_REFRESH -->" "$BRIEF_PATH"; then
+        echo "❌ Branch brief missing refresh block: $BRIEF_PATH"
+        echo ""
+        echo "To add the refresh block with capsule snapshot, run:"
+        echo "  code speckit brief refresh --query \"<feature keywords>\""
+        exit 1
+    fi
+
+    # Check for capsule snapshot (mv2:// URI)
+    if ! grep -q "mv2://" "$BRIEF_PATH"; then
+        echo "❌ Branch brief missing capsule snapshot: $BRIEF_PATH"
+        echo ""
+        echo "To add the capsule snapshot, run:"
+        echo "  code speckit brief refresh --query \"<feature keywords>\""
+        exit 1
+    fi
+
+    # Check for capsule checkpoint marker
+    if ! grep -q -- "- Capsule checkpoint:" "$BRIEF_PATH"; then
+        echo "❌ Branch brief missing capsule checkpoint: $BRIEF_PATH"
+        echo ""
+        echo "To add the capsule snapshot, run:"
+        echo "  code speckit brief refresh --query \"<feature keywords>\""
         exit 1
     fi
 fi

@@ -1863,6 +1863,10 @@ pub struct BriefCheckArgs {
     /// Require the SPECKIT_BRIEF_REFRESH marker block to exist
     #[arg(long = "require-refresh-block")]
     pub require_refresh_block: bool,
+
+    /// Require the refresh block to contain capsule snapshot (mv2:// URI and checkpoint)
+    #[arg(long = "require-capsule-snapshot")]
+    pub require_capsule_snapshot: bool,
 }
 
 impl SpeckitCli {
@@ -2105,6 +2109,7 @@ struct BriefInitOutput {
 fn run_brief_check(cwd: PathBuf, args: BriefCheckArgs) -> anyhow::Result<()> {
     let json_output = args.json;
     let require_refresh_block = args.require_refresh_block;
+    let require_capsule_snapshot = args.require_capsule_snapshot;
 
     let result = block_on_detached_brief(async move {
         let repo_root = get_repo_root(&cwd)
@@ -2137,17 +2142,38 @@ fn run_brief_check(cwd: PathBuf, args: BriefCheckArgs) -> anyhow::Result<()> {
         let exists = brief_path.exists();
         let non_empty = exists && brief_path.metadata().map(|m| m.len() > 0).unwrap_or(false);
 
-        // Check for refresh block if required
-        let has_refresh_block = if require_refresh_block && exists && non_empty {
-            let content = std::fs::read_to_string(&brief_path).map_err(|e| {
+        // Read content once if we need to check for markers
+        let needs_content_check =
+            (require_refresh_block || require_capsule_snapshot) && exists && non_empty;
+        let content = if needs_content_check {
+            Some(std::fs::read_to_string(&brief_path).map_err(|e| {
                 fail_infra(
                     format!("Failed to read brief file: {e}"),
                     Some("Check filesystem permissions.".to_string()),
                 )
-            })?;
-            content.contains("<!-- BEGIN: SPECKIT_BRIEF_REFRESH -->")
+            })?)
         } else {
-            !require_refresh_block // If not required, consider it "present"
+            None
+        };
+
+        // Check for refresh block if required
+        let has_refresh_block = if require_refresh_block {
+            content
+                .as_ref()
+                .map(|c| c.contains("<!-- BEGIN: SPECKIT_BRIEF_REFRESH -->"))
+                .unwrap_or(false)
+        } else {
+            true // If not required, consider it "present"
+        };
+
+        // Check for capsule snapshot if required
+        let has_capsule_snapshot = if require_capsule_snapshot {
+            content
+                .as_ref()
+                .map(|c| has_capsule_snapshot_markers(c))
+                .unwrap_or(false)
+        } else {
+            true // If not required, consider it "present"
         };
 
         Ok(BriefCheckOutput {
@@ -2157,6 +2183,8 @@ fn run_brief_check(cwd: PathBuf, args: BriefCheckArgs) -> anyhow::Result<()> {
             non_empty,
             has_refresh_block,
             require_refresh_block,
+            has_capsule_snapshot,
+            require_capsule_snapshot,
         })
     });
 
@@ -2165,7 +2193,8 @@ fn run_brief_check(cwd: PathBuf, args: BriefCheckArgs) -> anyhow::Result<()> {
             // Determine validation result
             let valid = output.exists
                 && output.non_empty
-                && (!output.require_refresh_block || output.has_refresh_block);
+                && (!output.require_refresh_block || output.has_refresh_block)
+                && (!output.require_capsule_snapshot || output.has_capsule_snapshot);
 
             if json_output {
                 let exit_code = if valid {
@@ -2183,6 +2212,7 @@ fn run_brief_check(cwd: PathBuf, args: BriefCheckArgs) -> anyhow::Result<()> {
                     "exists": output.exists,
                     "non_empty": output.non_empty,
                     "has_refresh_block": output.has_refresh_block,
+                    "has_capsule_snapshot": output.has_capsule_snapshot,
                 });
                 println!("{}", serde_json::to_string_pretty(&json)?);
                 if !valid {
@@ -2195,13 +2225,14 @@ fn run_brief_check(cwd: PathBuf, args: BriefCheckArgs) -> anyhow::Result<()> {
                     "missing"
                 } else if !output.non_empty {
                     "empty"
-                } else {
+                } else if output.require_refresh_block && !output.has_refresh_block {
                     "missing refresh block"
+                } else {
+                    "missing capsule snapshot"
                 };
                 eprintln!("FAIL: {} ({})", output.brief_path.display(), reason);
                 eprintln!();
-                eprintln!("To create the brief, run one of:");
-                eprintln!("  code speckit brief init");
+                eprintln!("To create the brief with capsule snapshot, run:");
                 eprintln!("  code speckit brief refresh --query \"<feature keywords>\"");
                 std::process::exit(headless_exit::HARD_FAIL);
             }
@@ -2237,6 +2268,8 @@ struct BriefCheckOutput {
     non_empty: bool,
     has_refresh_block: bool,
     require_refresh_block: bool,
+    has_capsule_snapshot: bool,
+    require_capsule_snapshot: bool,
 }
 
 fn run_brief_refresh(cwd: PathBuf, args: BriefRefreshArgs) -> anyhow::Result<()> {
@@ -2260,6 +2293,8 @@ fn run_brief_refresh(cwd: PathBuf, args: BriefRefreshArgs) -> anyhow::Result<()>
                     "rendered_block": output.rendered_block,
                     "dry_run": dry_run,
                     "wrote_file": output.wrote_file,
+                    "capsule_uri": output.capsule_uri,
+                    "checkpoint_id": output.checkpoint_id,
                 });
                 println!("{}", serde_json::to_string_pretty(&json)?);
             } else if dry_run {
@@ -2303,6 +2338,8 @@ struct BriefRefreshOutput {
     selected_memory_ids: Vec<String>,
     rendered_block: String,
     wrote_file: bool,
+    capsule_uri: Option<String>,
+    checkpoint_id: Option<String>,
 }
 
 fn block_on_detached_brief<F, T>(fut: F) -> Result<T, BriefFailure>
@@ -2389,11 +2426,54 @@ async fn brief_refresh_impl(
         })?;
     let selected_memory_ids: Vec<String> = memories.iter().map(|m| m.id.clone()).collect();
 
+    // Pre-compute capsule identifiers for the snapshot
+    let utc_now = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let spec_id = "WORKFLOW";
+    let run_id = format!("brief-{}", utc_now);
+    let capsule_path = format!("briefs/{}/{}.md", safe_branch, utc_now);
+    let label = format!("brief-{}-{}", safe_branch, utc_now);
+
+    let capsule_config = default_capsule_config(&repo_root);
+    let workspace_id = capsule_config.workspace_id.clone();
+
+    // Pre-compute the capsule URI (deterministic format)
+    let capsule_uri = format!(
+        "mv2://{}/{}/{}/artifact/{}",
+        workspace_id, spec_id, run_id, capsule_path
+    );
+
+    // The checkpoint value written into the brief is the manual-checkpoint label.
+    // (The capsule-generated checkpoint_id is returned separately in JSON output.)
+    let checkpoint_label = label.clone();
+
+    let (capsule_uri_for_block, checkpoint_for_block) = if args.dry_run {
+        // Avoid emitting a real mv2:// URI in dry-run output so it can't be copy/pasted
+        // to satisfy pre-commit without a real capsule snapshot.
+        (
+            "<dry-run: run without --dry-run to snapshot>".to_string(),
+            "<dry-run: run without --dry-run to snapshot>".to_string(),
+        )
+    } else {
+        (capsule_uri.clone(), checkpoint_label.clone())
+    };
+
     let auto_block = if memories.is_empty() {
-        build_auto_block_no_results(&query, &args.domain)
+        build_auto_block_no_results(
+            &query,
+            &args.domain,
+            &capsule_uri_for_block,
+            &checkpoint_for_block,
+        )
     } else {
         let synthesized = ollama_summarize(&query, &args, &memories).await?;
-        build_auto_block_with_summary(&query, &args.domain, &memories, &synthesized)
+        build_auto_block_with_summary(
+            &query,
+            &args.domain,
+            &memories,
+            &synthesized,
+            &capsule_uri_for_block,
+            &checkpoint_for_block,
+        )
     };
 
     if args.dry_run {
@@ -2406,6 +2486,8 @@ async fn brief_refresh_impl(
             selected_memory_ids,
             rendered_block: auto_block,
             wrote_file: false,
+            capsule_uri: None,
+            checkpoint_id: None,
         });
     }
 
@@ -2414,7 +2496,49 @@ async fn brief_refresh_impl(
     let existing = std::fs::read_to_string(&brief_path)
         .unwrap_or_else(|_| minimal_branch_brief_template(&branch));
     let updated = upsert_marked_block(&existing, BRIEF_AUTO_BEGIN, BRIEF_AUTO_END, &auto_block);
-    std::fs::write(&brief_path, updated).map_err(|e| {
+
+    // Snapshot the brief to capsule
+    let git_sha = get_git_sha_best_effort(&repo_root).await;
+    let capsule = CapsuleHandle::open(capsule_config).map_err(|e| {
+        fail_infra(
+            format!("Failed to open capsule: {e}"),
+            Some("Ensure .speckit/memvid/ directory exists and is writable.".to_string()),
+        )
+    })?;
+
+    let metadata = serde_json::json!({
+        "branch": branch,
+        "safe_branch": safe_branch,
+        "git_sha": git_sha,
+        "query": query,
+        "domain": args.domain,
+        "selected_memory_ids": selected_memory_ids,
+    });
+
+    let _uri = capsule
+        .put(
+            spec_id,
+            &run_id,
+            ObjectType::Artifact,
+            &capsule_path,
+            updated.as_bytes().to_vec(),
+            metadata,
+        )
+        .map_err(|e| {
+            fail_infra(
+                format!("Failed to snapshot brief to capsule: {e}"),
+                Some("Capsule write failed. Check disk space and permissions.".to_string()),
+            )
+        })?;
+
+    let actual_checkpoint = capsule.commit_manual(&label).map_err(|e| {
+        fail_infra(
+            format!("Failed to commit capsule checkpoint: {e}"),
+            Some("Capsule commit failed. Check disk space and permissions.".to_string()),
+        )
+    })?;
+
+    std::fs::write(&brief_path, &updated).map_err(|e| {
         fail_infra(
             format!("Failed to write {}: {e}", brief_path.display()),
             None,
@@ -2430,7 +2554,29 @@ async fn brief_refresh_impl(
         selected_memory_ids,
         rendered_block: auto_block,
         wrote_file: true,
+        capsule_uri: Some(capsule_uri),
+        checkpoint_id: Some(actual_checkpoint.as_str().to_string()),
     })
+}
+
+/// Get git SHA at HEAD, best-effort (returns empty string on failure).
+async fn get_git_sha_best_effort(repo_root: &Path) -> String {
+    tokio::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(repo_root)
+        .output()
+        .await
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default()
 }
 
 fn ensure_parent_dir(path: &Path) -> std::io::Result<()> {
@@ -2498,9 +2644,20 @@ fn upsert_marked_block(existing: &str, begin: &str, end: &str, block_body: &str)
     out
 }
 
-fn build_auto_block_no_results(query: &str, domain: &str) -> String {
+/// Check if brief content contains capsule snapshot markers.
+/// Returns true if both `mv2://` URI and `Capsule checkpoint:` are present.
+fn has_capsule_snapshot_markers(content: &str) -> bool {
+    content.contains("mv2://") && content.contains("- Capsule checkpoint:")
+}
+
+fn build_auto_block_no_results(
+    query: &str,
+    domain: &str,
+    capsule_uri: &str,
+    checkpoint_id: &str,
+) -> String {
     format!(
-        "## Product Knowledge (auto)\n\n- Query: `{query}`\n- Domain: `{domain}`\n\nNo high-signal product knowledge matched. Try a more specific `--query` and/or raise `--limit`.\n"
+        "## Product Knowledge (auto)\n\n- Query: `{query}`\n- Domain: `{domain}`\n- Capsule URI: `{capsule_uri}`\n- Capsule checkpoint: `{checkpoint_id}`\n\nNo high-signal product knowledge matched. Try a more specific `--query` and/or raise `--limit`.\n"
     )
 }
 
@@ -2509,12 +2666,16 @@ fn build_auto_block_with_summary(
     domain: &str,
     memories: &[ProductKnowledgeMemory],
     synthesized: &str,
+    capsule_uri: &str,
+    checkpoint_id: &str,
 ) -> String {
     let mut lines = Vec::new();
     lines.push("## Product Knowledge (auto)".to_string());
     lines.push(String::new());
     lines.push(format!("- Query: `{query}`"));
     lines.push(format!("- Domain: `{domain}`"));
+    lines.push(format!("- Capsule URI: `{capsule_uri}`"));
+    lines.push(format!("- Capsule checkpoint: `{checkpoint_id}`"));
     lines.push(String::new());
     lines.push("### Selected memories".to_string());
     for m in memories {
@@ -9591,6 +9752,81 @@ mod tests {
         assert!(
             has_stage_tag,
             "at least one result should have stage:test tag"
+        );
+    }
+
+    #[test]
+    fn test_has_capsule_snapshot_markers_both_present() {
+        let content = r#"
+## Product Knowledge (auto)
+
+- Query: `test`
+- Domain: `codex-product`
+- Capsule URI: `mv2://default/WORKFLOW/brief-20260204T120000Z/artifact/briefs/test__branch/20260204T120000Z.md`
+- Capsule checkpoint: `brief-test__branch-20260204T120000Z`
+
+No high-signal product knowledge matched.
+"#;
+        assert!(has_capsule_snapshot_markers(content));
+    }
+
+    #[test]
+    fn test_has_capsule_snapshot_markers_only_uri() {
+        let content = r#"
+## Product Knowledge (auto)
+
+- Query: `test`
+- Capsule URI: `mv2://default/WORKFLOW/brief-test/artifact/briefs/test/test.md`
+
+No capsule checkpoint line.
+"#;
+        assert!(!has_capsule_snapshot_markers(content));
+    }
+
+    #[test]
+    fn test_has_capsule_snapshot_markers_neither() {
+        let content = r#"
+## Product Knowledge (auto)
+
+- Query: `test`
+- Domain: `codex-product`
+
+No capsule metadata at all.
+"#;
+        assert!(!has_capsule_snapshot_markers(content));
+    }
+
+    #[test]
+    fn test_capsule_snapshot_roundtrip() {
+        // Hermetic test: create temp dir, open capsule, snapshot a sample brief, commit
+        let temp_dir = TempDir::new().expect("create temp dir");
+        let config = default_capsule_config(temp_dir.path());
+        let capsule = CapsuleHandle::open(config).expect("should open capsule");
+
+        let brief_content = b"# Test Brief\n\nSample content for capsule snapshot test.";
+        let uri = capsule
+            .put(
+                "WORKFLOW",
+                "brief-test-001",
+                ObjectType::Artifact,
+                "briefs/test__branch/20260204T120000Z.md",
+                brief_content.to_vec(),
+                serde_json::json!({"branch": "test/branch", "safe_branch": "test__branch"}),
+            )
+            .expect("should put artifact");
+
+        let checkpoint = capsule
+            .commit_manual("brief-test__branch-20260204T120000Z")
+            .expect("should commit");
+
+        assert!(
+            uri.as_str().starts_with("mv2://"),
+            "URI should start with mv2://: {}",
+            uri.as_str()
+        );
+        assert!(
+            !checkpoint.as_str().is_empty(),
+            "checkpoint should be non-empty"
         );
     }
 }
