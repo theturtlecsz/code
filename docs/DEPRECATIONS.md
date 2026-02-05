@@ -10,6 +10,7 @@ Single canonical list of deprecated/superseded documentation and their replaceme
 **Policy**
 
 - When a doc is no longer canonical, add a **top-of-file banner** in the doc and an entry here.
+- Deprecated PRDs are **archived into zip packs under `archive/` and removed from the working tree** (no stubs); this register is the canonical pointer.
 - For historical/frozen docs (notably under `docs/SPEC-KIT-*`), prefer adding an entry here and only add minimal banner text when needed.
 
 **Status meanings**
@@ -29,4 +30,3 @@ Single canonical list of deprecated/superseded documentation and their replaceme
 ## Planned: Capsule-backed tracking
 
 Long-term, deprecations should be emitted as capsule events and projected into this register. Track design/implementation in `codex-rs/SPEC.md` (Planned: `SPEC-PM-001`).
-
