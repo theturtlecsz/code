@@ -1,18 +1,10 @@
 name: Code Coverage
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - 'codex-rs/**/*.rs'
-      - 'codex-rs/**/Cargo.toml'
-      - '.github/workflows/coverage.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'codex-rs/**/*.rs'
-      - 'codex-rs/**/Cargo.toml'
-      - '.github/workflows/coverage.yml'
+  schedule:
+    # Weekly (UTC). Coverage is expensive; not required on every PR.
+    - cron: '0 5 * * 1' # Mondays 05:00 UTC
+  workflow_dispatch: {}
 
 env:
   CARGO_TERM_COLOR: always
