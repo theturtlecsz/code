@@ -110,7 +110,7 @@ These invariants MUST NOT be violated:
 | ---- | ----------- |
 | SPEC-DOGFOOD-002 | Canonical gold run: prove `/speckit.auto` happy path + complete evidence chain on Linux; add a scheduled CI run once stable. |
 | SPEC-PK-001 | Product knowledge (codex-product) dogfood + measurement: validate determinism (snapshot/evidence pack) and quantify Tier2 reduction/curation quality. |
-| SPEC-PM-001 | Project management deep dive: capsule-backed feature + task tracking (SoR) with filesystem projections (including `SPEC.md`), maieutic PRD sessions, and status surfaces (CLI/TUI/headless). |
+| SPEC-PM-001 | Project management deep dive: capsule-backed feature + task tracking (SoR) with filesystem projections (including `SPEC.md`), maieutic PRD sessions, and status surfaces (CLI/TUI/headless). PRD: `docs/SPEC-PM-001-project-management/PRD.md`. |
 | DOC-DRIFT-001 | Docs drift control: maintain `docs/DEPRECATIONS.md`, deprecate/update legacy PRDs/roadmaps that conflict with current product vision, and keep doc maps pointing at canonical trackers. |
 
 ### Completed (Recent)

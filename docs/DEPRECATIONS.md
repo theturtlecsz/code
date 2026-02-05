@@ -33,6 +33,8 @@ Single canonical list of deprecated/superseded documentation and their replaceme
 | `plan.md` | Deprecated | `docs/DECISIONS.md` + `codex-rs/SPEC.md` | ARB Pass 2 planning doc; superseded by locked decisions + canonical tracker; archived in `tree-pack-20260205-legacy-arb-docs.zip`. | 2026-02-05 |
 
 | `codex-rs/docs/SPEC-KIT-933-database-integrity-hygiene/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Doc Precedence + Planned A/B/C) | Legacy SPEC-KIT PRD not aligned to current vision scope; archived in `tree-pack-20260205-legacy-prds-spec-kit.zip`. | 2026-02-05 |
+| `docs/SPEC-KIT-902-nativize-guardrails/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Doc Precedence + Planned A/B/C) | Complete legacy PRD; archived in `tree-pack-20260205-deprecated-prd-spec-kit-902.zip`. | 2026-02-05 |
+| `docs/SPEC-KIT-952-cli-routing-multi-provider/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Doc Precedence + Planned A/B/C) | Complete legacy PRD; archived in `tree-pack-20260205-deprecated-prd-spec-kit-952.zip`. | 2026-02-05 |
 | `docs/SPEC-KIT-010-local-memory-migration/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Doc Precedence + Planned A/B/C) | Legacy SPEC-KIT PRD not aligned to current vision scope; archived in `tree-pack-20260205-legacy-prds-spec-kit.zip`. | 2026-02-05 |
 | `docs/SPEC-KIT-013-telemetry-schema-guard/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Doc Precedence + Planned A/B/C) | Legacy SPEC-KIT PRD not aligned to current vision scope; archived in `tree-pack-20260205-legacy-prds-spec-kit.zip`. | 2026-02-05 |
 | `docs/SPEC-KIT-014-docs-refresh/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Doc Precedence + Planned A/B/C) | Legacy SPEC-KIT PRD not aligned to current vision scope; archived in `tree-pack-20260205-legacy-prds-spec-kit.zip`. | 2026-02-05 |

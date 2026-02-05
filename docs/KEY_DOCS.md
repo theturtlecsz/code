@@ -30,6 +30,8 @@ See `docs/DEPRECATIONS.md` and archive packs under `archive/` for the full histo
 
 Remaining PRDs in tree:
 
-* [`docs/SPEC-KIT-902-nativize-guardrails/PRD.md`](SPEC-KIT-902-nativize-guardrails/PRD.md)
-* [`docs/SPEC-KIT-952-cli-routing-multi-provider/PRD.md`](SPEC-KIT-952-cli-routing-multi-provider/PRD.md)
-* [`docs/SPEC-KIT-960-speckit-project/PRD.md`](SPEC-KIT-960-speckit-project/PRD.md)
+* [`docs/SPEC-KIT-960-speckit-project/PRD.md`](SPEC-KIT-960-speckit-project/PRD.md) (Complete)
+
+## Product PRDs
+
+* [`docs/SPEC-PM-001-project-management/PRD.md`](SPEC-PM-001-project-management/PRD.md)
