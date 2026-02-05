@@ -1,6 +1,10 @@
 # SPEC-KIT-900: Gold Run Pipeline Validation
 
-## Status: IN_PROGRESS
+> **Status**: Deprecated.
+>
+> `SPEC-KIT-900` is tracked as completed in `codex-rs/SPEC.md` (headless CLI parity work). The gold-run validation effort is tracked separately in `codex-rs/SPEC.md` (see planned `SPEC-DOGFOOD-002`).
+
+## Status: DEPRECATED
 
 ## Overview
 
