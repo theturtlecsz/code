@@ -710,12 +710,13 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
 
     let os = env::consts::OS;
     let arch = env::consts::ARCH;
-    let target = match (os, arch) {
-        ("linux", "x86_64") => "x86_64-unknown-linux-musl",
-        ("linux", "aarch64") => "aarch64-unknown-linux-musl",
-        ("macos", "x86_64") => "x86_64-apple-darwin",
-        ("macos", "aarch64") => "aarch64-apple-darwin",
-        ("windows", _) => "x86_64-pc-windows-msvc",
+    let targets: Vec<&'static str> = match (os, arch) {
+        // Prefer host-like GNU assets; fall back to older MUSL assets.
+        ("linux", "x86_64") => vec!["x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl"],
+        ("linux", "aarch64") => vec!["aarch64-unknown-linux-gnu", "aarch64-unknown-linux-musl"],
+        ("macos", "x86_64") => vec!["x86_64-apple-darwin"],
+        ("macos", "aarch64") => vec!["aarch64-apple-darwin"],
+        ("windows", _) => vec!["x86_64-pc-windows-msvc"],
         _ => bail!(format!("Unsupported platform: {}/{}", os, arch)),
     };
 
@@ -773,13 +774,16 @@ async fn preview_main(args: PreviewArgs) -> anyhow::Result<()> {
     let base = format!("https://github.com/{owner}/{name}/releases/download/{tag}");
 
     // Try to download the best asset for this platform; prefer .tar.gz on Unix and .zip on Windows; fallback to .zst.
+    // Some repos publish multiple target variants; try in preference order.
     let mut urls: Vec<String> = vec![];
     if cfg!(windows) {
         urls.push(format!("{base}/code-x86_64-pc-windows-msvc.exe.zip"));
     } else {
         // tar.gz first, then zst
-        urls.push(format!("{base}/code-{target}.tar.gz"));
-        urls.push(format!("{base}/code-{target}.zst"));
+        for target in targets {
+            urls.push(format!("{base}/code-{target}.tar.gz"));
+            urls.push(format!("{base}/code-{target}.zst"));
+        }
     }
 
     let tmp = tempdir()?;
