@@ -5,6 +5,7 @@ This repo has a small set of canonical documents. If you’re unsure what to rea
 | File                                                        | Type               | Purpose                                                            |
 | ----------------------------------------------------------- | ------------------ | ------------------------------------------------------------------ |
 | [`docs/KEY_DOCS.md`](KEY_DOCS.md)                           | Map                | Canonical doc map (this file)                                      |
+| [`docs/DEPRECATIONS.md`](DEPRECATIONS.md)                   | Register           | Deprecated/superseded docs and their replacements                  |
 | [`docs/POLICY.md`](POLICY.md)                               | Policy             | Consolidated policy (model, gates, evidence, testing)              |
 | [`docs/OPERATIONS.md`](OPERATIONS.md)                       | Operations         | Consolidated operations (playbook + config reference)              |
 | [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)                   | Architecture       | System architecture (TUI, async/sync, pipeline, consensus)         |

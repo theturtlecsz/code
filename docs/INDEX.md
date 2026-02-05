@@ -4,6 +4,7 @@
 
 * `INDEX.md` (this file)
 * `KEY_DOCS.md`
+* `DEPRECATIONS.md`
 * `VISION.md`
 * `ARCHITECTURE.md`
 * `POLICY.md`
