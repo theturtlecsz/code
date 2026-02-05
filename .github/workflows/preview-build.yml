@@ -1,6 +1,9 @@
 name: Preview Build
 
 on:
+  schedule:
+    # Weekly (UTC). Linux-only smoke: tests + release build.
+    - cron: '0 3 * * 1' # Mondays 03:00 UTC
   workflow_dispatch: {}
 
 concurrency:
@@ -39,15 +42,6 @@ jobs:
           retention-days: 30
 
   build:
-    # Skip preview builds for the automated upstream-merge PRs.
-    # These PRs are large, frequent, and not meant for end-user preview binaries.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.draft == false &&
-        github.event.pull_request.head.ref != 'upstream-merge'
-      )
     needs: policy-compliance  # Block build if policy fails
     name: Preview Build
     runs-on: ubuntu-latest
@@ -104,6 +98,14 @@ jobs:
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: "true"
         run: cargo fetch --locked
+
+      - name: Tests (core)
+        working-directory: codex-rs
+        run: cargo test -p codex-core --locked
+
+      - name: Tests (tui lib)
+        working-directory: codex-rs
+        run: cargo test -p codex-tui --lib --locked
 
       - name: Build code (release)
         shell: bash
@@ -281,6 +283,7 @@ jobs:
   comment:
     name: Post Artifact Links
     needs: [build, release]
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref != 'upstream-merge'
     runs-on: ubuntu-latest
     steps:
       - name: Resolve slug and latest tag
