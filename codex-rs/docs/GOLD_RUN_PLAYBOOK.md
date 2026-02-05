@@ -1,8 +1,10 @@
 # Gold Run Playbook
 
+> **Status**: Needs refresh. Use `codex-rs/SPEC.md` as the canonical tracker for the current gold-run SPEC and acceptance criteria.
+
 **Purpose**: Reproducible steps to validate the `/speckit.auto` pipeline produces a complete evidence chain.
 
-**Target SPEC**: SPEC-KIT-900
+**Target SPEC**: SPEC-DOGFOOD-002
 
 ---
 
@@ -51,14 +53,14 @@ git stash push -m "pre-gold-run"
 ./target/release/codex-tui
 
 # Run gold run SPEC
-/speckit.auto SPEC-KIT-900
+/speckit.auto SPEC-DOGFOOD-002
 ```
 
 ### Option B: Automated Mode
 
 ```bash
 # Single command (useful for CI)
-./target/release/codex-tui --initial-command "/speckit.auto SPEC-KIT-900"
+./target/release/codex-tui --initial-command "/speckit.auto SPEC-DOGFOOD-002"
 ```
 
 ---
@@ -67,7 +69,7 @@ git stash push -m "pre-gold-run"
 
 ```
 Stage 0: Context Injection
-├── Load spec.md from docs/SPEC-KIT-900-gold-run/
+├── Load spec.md from docs/SPEC-DOGFOOD-002/
 ├── Generate TASK_BRIEF.md (if tier2 enabled)
 └── Inject context into agent prompts
 
@@ -116,13 +118,13 @@ Stage 6: Unlock
 After pipeline completes, run:
 
 ```bash
-/speckit.verify SPEC-KIT-900
+/speckit.verify SPEC-DOGFOOD-002
 ```
 
 ### Expected Output
 
 ```
-SPEC-KIT-900 Verification Report
+SPEC-DOGFOOD-002 Verification Report
 ================================
 
 Stage Artifacts:
@@ -134,7 +136,7 @@ Stage Artifacts:
   [x] unlock.md exists (N bytes)
 
 Evidence Chain:
-  [x] evidence/consensus/SPEC-KIT-900/ directory exists
+  [x] evidence/consensus/SPEC-DOGFOOD-002/ directory exists
   [x] 12 verdict files present
   [x] Cost summary written
 
@@ -155,7 +157,7 @@ Result: PASS
 **Symptom**: No progress for >5 minutes
 
 **Actions**:
-1. Check `/speckit.status SPEC-KIT-900`
+1. Check `/speckit.status SPEC-DOGFOOD-002`
 2. Look for "waiting on model output" in status
 3. Check API rate limits if using external providers
 
@@ -165,7 +167,7 @@ Result: PASS
 
 **Actions**:
 1. Check evidence files for specific failure reason
-2. Review `evidence/consensus/SPEC-KIT-900/<stage>_verdict.json`
+2. Review `evidence/consensus/SPEC-DOGFOOD-002/<stage>_verdict.json`
 3. If sidecar critic enabled, check for advisory signals
 
 ### Missing Evidence Files
@@ -214,21 +216,21 @@ jobs:
       - name: Run Gold SPEC
         run: |
           timeout 30m ./target/release/codex-tui \
-            --initial-command "/speckit.auto SPEC-KIT-900"
+            --initial-command "/speckit.auto SPEC-DOGFOOD-002"
         working-directory: codex-rs
         env:
           SPEC_KIT_AUTO_COMMIT: true
 
       - name: Verify Evidence
         run: ./target/release/codex-tui \
-          --initial-command "/speckit.verify SPEC-KIT-900"
+          --initial-command "/speckit.verify SPEC-DOGFOOD-002"
         working-directory: codex-rs
 
       - name: Upload Evidence
         uses: actions/upload-artifact@v4
         with:
           name: gold-run-evidence
-          path: codex-rs/evidence/consensus/SPEC-KIT-900/
+          path: codex-rs/evidence/consensus/SPEC-DOGFOOD-002/
 ```
 
 ---
@@ -237,8 +239,8 @@ jobs:
 
 A successful gold run produces:
 
-1. **6 stage artifacts** in `docs/SPEC-KIT-900-gold-run/`
-2. **12 evidence files** in `evidence/consensus/SPEC-KIT-900/`
+1. **6 stage artifacts** in `docs/SPEC-DOGFOOD-002/`
+2. **12 evidence files** in `evidence/consensus/SPEC-DOGFOOD-002/`
 3. **Cost summary** with timing data
 4. **Zero manual intervention** after initiation
 5. **Clean git history** (if auto-commit enabled)

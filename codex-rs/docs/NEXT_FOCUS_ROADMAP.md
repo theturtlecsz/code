@@ -1,5 +1,9 @@
 # Planner / Spec-Kit — Next Focus Roadmap (Architect Review)
 
+> **Status**: Deprecated as a canonical roadmap. Use `SPEC.md` / `codex-rs/SPEC.md` as the single source of truth for active/planned work.
+>
+> This document is retained for historical context and may describe superseded priorities or terminology.
+
 **Date:** 2025-12-19 (Updated: post-automation-review)
 **Context:** Post PR7-PR9 (gate/review vocabulary migration + CI hardening complete)
 
