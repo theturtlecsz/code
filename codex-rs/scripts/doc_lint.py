@@ -51,6 +51,7 @@ REQUIRED_FILES = {
 CANONICAL_DOCS_ROOT = {
     "docs/KEY_DOCS.md": "Canonical doc map",
     "docs/INDEX.md": "Documentation index",
+    "docs/DEPRECATIONS.md": "Deprecated/superseded docs register",
     "docs/POLICY.md": "Consolidated policy",
     "docs/OPERATIONS.md": "Consolidated operations",
     "docs/ARCHITECTURE.md": "System architecture",
