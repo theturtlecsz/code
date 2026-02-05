@@ -31,6 +31,7 @@ jobs:
       - name: Clippy
         working-directory: codex-rs
         continue-on-error: true
+        if: github.event_name == 'push'
         run: cargo clippy -p codex-cli -p codex-tui --all-targets --no-deps
 
       - name: Tests (core)
@@ -40,6 +41,10 @@ jobs:
       - name: Tests (tui lib)
         working-directory: codex-rs
         run: cargo test -p codex-tui --lib
+
+      - name: Build (code binary)
+        working-directory: codex-rs
+        run: cargo build -p codex-cli --bin code
 
       - name: Docs link check
         run: python3 scripts/check_doc_links.py

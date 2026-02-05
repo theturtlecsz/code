@@ -8,13 +8,6 @@ on:
       - 'codex-rs/core/**'
       - 'codex-rs/protocol/**'
       - '.github/workflows/tui-tests.yml'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'codex-rs/tui/**'
-      - 'codex-rs/core/**'
-      - 'codex-rs/protocol/**'
-      - '.github/workflows/tui-tests.yml'
 
 env:
   CARGO_TERM_COLOR: always
