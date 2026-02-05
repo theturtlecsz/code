@@ -26,6 +26,11 @@ Single canonical list of deprecated/superseded documentation and their replaceme
 | `codex-rs/docs/NEXT_FOCUS_ROADMAP.md` | Deprecated | `SPEC.md` → `codex-rs/SPEC.md` | Historical roadmap; conflicts resolved by `codex-rs/SPEC.md` doc precedence order. | 2026-02-05 |
 | `codex-rs/docs/SPEC-KIT-900-gold-run/spec.md` | Superseded | `docs/SPEC-DOGFOOD-002/spec.md` + `codex-rs/SPEC.md` (Planned) | `SPEC-KIT-900` is completed work; gold-run validation is tracked separately as `SPEC-DOGFOOD-002`. | 2026-02-05 |
 | `codex-rs/docs/GOLD_RUN_PLAYBOOK.md` | Needs refresh | `docs/SPEC-DOGFOOD-002/spec.md` + `codex-rs/SPEC.md` (Planned) | Keep as playbook, but acceptance criteria lives in the SPEC and tracker. | 2026-02-05 |
+| `ARB_HANDOFF.md` | Deprecated | `docs/DECISIONS.md` + `codex-rs/SPEC.md` | ARB Pass 1/2 handoff doc; superseded by locked decisions + canonical tracker; archived in `tree-pack-20260205-legacy-arb-docs.zip`. | 2026-02-05 |
+| `ARCHITECT_REVIEW_RESEARCH.md` | Deprecated | `docs/DECISIONS.md` + `codex-rs/SPEC.md` | ARB Pass 1 research notes; superseded by locked decisions + canonical tracker; archived in `tree-pack-20260205-legacy-arb-docs.zip`. | 2026-02-05 |
+| `ARCHITECT_QUESTIONS.md` | Deprecated | `docs/DECISIONS.md` + `codex-rs/SPEC.md` | ARB question definitions; superseded by locked decisions + canonical tracker; archived in `tree-pack-20260205-legacy-arb-docs.zip`. | 2026-02-05 |
+| `ARCHITECT_REVIEW_BOARD_OUTPUT.md` | Superseded | `docs/DECISIONS.md` | ARB decision output; superseded by locked decisions register; archived in `tree-pack-20260205-legacy-arb-docs.zip`. | 2026-02-05 |
+| `plan.md` | Deprecated | `docs/DECISIONS.md` + `codex-rs/SPEC.md` | ARB Pass 2 planning doc; superseded by locked decisions + canonical tracker; archived in `tree-pack-20260205-legacy-arb-docs.zip`. | 2026-02-05 |
 
 | `codex-rs/docs/SPEC-KIT-933-database-integrity-hygiene/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Doc Precedence + Planned A/B/C) | Legacy SPEC-KIT PRD not aligned to current vision scope; archived in `tree-pack-20260205-legacy-prds-spec-kit.zip`. | 2026-02-05 |
 | `docs/SPEC-KIT-010-local-memory-migration/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Doc Precedence + Planned A/B/C) | Legacy SPEC-KIT PRD not aligned to current vision scope; archived in `tree-pack-20260205-legacy-prds-spec-kit.zip`. | 2026-02-05 |
