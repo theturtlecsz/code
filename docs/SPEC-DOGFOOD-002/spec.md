@@ -13,9 +13,20 @@ This SPEC exists to prove the happy path works in practice (not just in unit/int
 3. Artifacts/evidence are persisted to the system-of-record (Memvid capsule) with filesystem projections as best-effort
 4. `/speckit.verify` reports a coherent pass/fail with actionable diagnostics
 
+Additionally, this SPEC is the canonical dogfood for **assisted maieutic + PM tracking**:
+
+5. Assisted maieutic intake runs in **dry-run** mode (no new spec dirs) but still produces capsule artifacts + scoring output
+6. PM lifecycle gates are exercised: Backlog → Planned promotion requires deterministic score ≥ 90/100 and Open Questions empty
+
 ## Scope
 
 **In scope**
+- Configure Tavily MCP (local pinned) for web research; fallback to default web search if unavailable
+- Run assisted maieutic intake in dry-run mode for `SPEC-DOGFOOD-002` and capture:
+  - Deterministic score report (numeric gate)
+  - Advisory rubric report (persisted)
+  - Web research artifact summary (query + sources + hashes/IDs)
+- Verify PM status transitions and `codex-rs/SPEC.md` tracker insertion on Planned promotion
 - Run `/speckit.auto SPEC-DOGFOOD-002` on Linux
 - Verify expected stage artifacts exist under `docs/SPEC-DOGFOOD-002/`
 - Verify evidence exists in the capsule and is sufficient for audit/replay (per `docs/PROGRAM.md` and `docs/DECISIONS.md`)
@@ -40,6 +51,8 @@ docs/SPEC-DOGFOOD-002/
 
 ## Definition of Done
 
+- Assisted intake dry-run completes and produces required artifacts
+- Deterministic score is ≥ 90/100 and Open Questions are empty when promoting to `Planned`
 - `/speckit.auto SPEC-DOGFOOD-002` completes without manual intervention beyond initiation
 - `/speckit.verify SPEC-DOGFOOD-002` reports PASS (or a single well-scoped blocking failure with clear remediation)
 - Evidence/artifacts are replay/audit friendly per program DoD (`docs/PROGRAM.md`)
