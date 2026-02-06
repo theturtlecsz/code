@@ -75,6 +75,14 @@ Work items have a single **state** at a time:
 
 ---
 
+## Command Surface (v1)
+
+Canonical CLI namespace: `code speckit pm ...`
+
+TUI should provide a short alias (e.g., `/pm ...`) that maps 1:1 onto the canonical CLI behavior (Tier‑1 parity requirement).
+
+---
+
 ## Planned Promotion Gates (v1)
 
 Promotion to `Planned` is **manual** (PM action) and must satisfy:
@@ -86,6 +94,46 @@ Promotion to `Planned` is **manual** (PM action) and must satisfy:
    - If open questions are present, the work item cannot be marked `Planned`.
 
 Headless must return structured output and product exit codes for blocking states (no clap default exit=2 fallbacks).
+
+---
+
+## Deterministic PRD Quality Score (v1)
+
+The numeric quality score is **deterministic-only** (no model variance) and is computed from the completed intake form.
+
+**Purpose**
+
+- Provide a deterministic "ready to plan" threshold (≥ 90/100).
+- Keep the model-graded rubric advisory (persisted for audit/review but not gating).
+
+**Proposed deterministic rubric (v0)**
+
+Score ranges from 0–100 and is the sum of the following components:
+
+1. **Problem + Outcome clarity (20)**
+   - Problem statement present and non-trivial length (10)
+   - Outcome present and non-trivial length (10)
+2. **Scope + Non-goals quality (20)**
+   - Scope-in list meets min count and contains non-placeholder entries (10)
+   - Non-goals list meets min count and contains non-placeholder entries (10)
+3. **Acceptance criteria verifiability (20)**
+   - Minimum number of criteria present (10)
+   - Each criterion includes an explicit verification method (10)
+4. **Integration + Constraints coverage (15)**
+   - Integration points present and not "unknown"/placeholder (10)
+   - Constraints present and non-placeholder (5)
+5. **Risk coverage (10)**
+   - Risks present and non-placeholder (5)
+   - Assumptions present if applicable (or explicitly "none") (5)
+6. **Deep fields completeness (15)** (assisted default)
+   - Architecture components + dataflows present (5)
+   - Integration mapping + test plan present (5)
+   - Threat model + rollout plan + risk register + non-goals rationale present (5)
+
+**Hard caps**
+
+- If any required form field is missing/invalid under existing validation, score is capped at 0 (cannot be promoted).
+- If open questions are non-empty, promotion is blocked regardless of score (see Planned Promotion Gates).
 
 ---
 
@@ -127,6 +175,42 @@ All web research used to form recommendations should be captured into capsule ar
 
 ---
 
+## Web Research Artifacts (v1)
+
+**Goal**: capture enough information to support audit/replay without violating capture-mode or export safety constraints.
+
+**Proposed artifact: `WebResearchBundle` (v0)**
+
+- Stored in capsule as structured JSON.
+- Filesystem projection is best-effort (e.g., under `docs/<SPEC_ID>/research/web_research_bundle.json`).
+
+**Fields (high level)**
+
+- `schema_version`
+- `spec_id`, `run_id`
+- `provider`: `tavily-mcp` or `client-web-search`
+- `capture_mode`: `prompts_only` or `full_io` (mirrors PolicySnapshot capture mode)
+- `requests[]`:
+  - `tool` (e.g., `tavily-search`, `tavily-extract`)
+  - `query` / `urls`
+  - `params` (depth, max results, filters)
+  - `retrieved_at`
+  - `results[]` (minimal metadata)
+  - `selected[]` (URLs actually used to form recommendations)
+  - `errors[]`
+- `bundle_hash` (sha256 of canonicalized bundle JSON)
+
+**Capture-mode rules**
+
+- `prompts_only` (export-safe):
+  - Store query + params and **URL list**.
+  - Do **not** store extracted page text.
+  - If storing result snippets is deemed unsafe, store only hashes for title/snippet instead of raw text.
+- `full_io` (not export-safe):
+  - May store extracted page text as separate capsule artifacts referenced by URI.
+
+---
+
 ## Functional Requirements
 
 | ID | Requirement | Acceptance Criteria | Priority |
@@ -162,8 +246,8 @@ All web research used to form recommendations should be captured into capsule ar
 - Exact schema for work items (feature vs spec vs task) and which fields must be immutable.
 - Whether `docs/DEPRECATIONS.md` becomes a projection of capsule events in the first iteration or later.
 - How to represent “archived packs” as first-class capsule artifacts (URI scheme, metadata).
-- Deterministic scoring rubric definition (what contributes to the 0–100 score, and weights).
-- Where and how web research artifacts are stored for audit/replay (hashes/IDs, retention, redaction).
+- Confirm deterministic scoring rubric weights/threshold behavior (see "Deterministic PRD Quality Score").
+- Confirm web research artifact export-safety posture (snippets/titles stored vs hashed-only in `prompts_only`).
 - What automation "bot runner" semantics exist for `NeedsResearch` / `NeedsReview` (manual-only state vs queue semantics, scheduling, visibility in status surfaces).
 
 ---
@@ -171,3 +255,4 @@ All web research used to form recommendations should be captured into capsule ar
 ## Supporting Docs
 
 - `docs/SPEC-PM-001-project-management/ARCHITECT-BRIEF-maieutic-and-prd.md`: research + design drift analysis for assisted maieutics and PRD generation.
+- `docs/SPEC-PM-001-project-management/TODO-bot-runner-spec.md`: TODO spec stub for Devin-style research/review bot runner semantics.
