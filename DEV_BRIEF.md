@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Docs-only planning stub: `SPEC-PM-002` (Devin-style bot runner semantics for `NeedsResearch` / `NeedsReview`)
+Docs-only planning: `SPEC-PM-002` (bot runner interface contract) + `SPEC-PM-003` (bot system design) for `NeedsResearch` / `NeedsReview`
 
 ## Session Workflow
 

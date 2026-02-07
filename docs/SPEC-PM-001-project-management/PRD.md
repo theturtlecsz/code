@@ -97,7 +97,7 @@ Headless must return structured output and product exit codes for blocking state
 
 ---
 
-## Bot Automation Holding States (v1) — tracked in `SPEC-PM-002`
+## Bot Automation Holding States (v1) — tracked in `SPEC-PM-002` / `SPEC-PM-003`
 
 These are **manual** states used for optional automation (not part of the default `/speckit.auto` workflow):
 
@@ -107,6 +107,10 @@ These are **manual** states used for optional automation (not part of the defaul
 - `NeedsReview`:
   - Validator/reviewer runs with tool access and may create worktrees/branches to stage suggested changes.
   - Bot output must be able to write back a summarized response into TUI status surfaces.
+
+See:
+- Interface contract (commands/exit codes/artifacts): `docs/SPEC-PM-002-bot-runner/spec.md`
+- Bot system design (runner/service/tooling internals): `docs/SPEC-PM-003-bot-system/spec.md`
 
 ---
 
@@ -268,7 +272,7 @@ All web research used to form recommendations should be captured into capsule ar
 - How to represent “archived packs” as first-class capsule artifacts (URI scheme, metadata).
 - Confirm deterministic scoring rubric weights/threshold behavior (see "Deterministic PRD Quality Score").
 - Confirm web research template size caps + cache retention/TTL for `prompts_only` temporary content cache.
-- Bot runner semantics for `NeedsResearch` / `NeedsReview` (manual-only state vs queue semantics, scheduling, visibility in status surfaces) — tracked as `SPEC-PM-002`.
+- Bot runner interface + system design for `NeedsResearch` / `NeedsReview` (manual-only state vs queue semantics, scheduling, visibility in status surfaces) — tracked as `SPEC-PM-002` / `SPEC-PM-003`.
 
 ---
 
