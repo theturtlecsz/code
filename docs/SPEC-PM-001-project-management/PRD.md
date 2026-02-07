@@ -57,10 +57,10 @@ This is a product vision gap: the same tools used to build Codex-RS should also 
 Work items have a single **state** at a time:
 
 - `Backlog`: Not scheduled yet (default for new work items).
-- `NeedsResearch`: Optional manual holding state to run "Devin-style" research automation.
+- `NeedsResearch`: Optional manual holding state to run "Devin-style" research automation (semantics tracked in `SPEC-PM-002`; NotebookLM-required).
 - `Planned`: Scheduled / approved to start. Promotion to `Planned` is explicitly invoked and gated (see below).
 - `InProgress`: Actively being worked.
-- `NeedsReview`: Optional manual holding state to run "Devin-style" review automation.
+- `NeedsReview`: Optional manual holding state to run "Devin-style" review automation (semantics tracked in `SPEC-PM-002`).
 - `Completed`: Done (definition depends on item type; for specs, typically "merged + verified").
 - `Deprecated`: No longer applicable to product direction; retained for history with pointers.
 - `Archived`: Terminal historical record (kept only as a pointer + archived pack).
@@ -94,6 +94,19 @@ Promotion to `Planned` is **manual** (PM action) and must satisfy:
    - If open questions are present, the work item cannot be marked `Planned`.
 
 Headless must return structured output and product exit codes for blocking states (no clap default exit=2 fallbacks).
+
+---
+
+## Bot Automation Holding States (v1) — tracked in `SPEC-PM-002`
+
+These are **manual** states used for optional automation (not part of the default `/speckit.auto` workflow):
+
+- `NeedsResearch`:
+  - **NotebookLM is required**; if unavailable, the run returns a BLOCKED result with structured output (no fallback research).
+  - Network access is allowed (Tavily MCP preferred; generic web research allowed).
+- `NeedsReview`:
+  - Validator/reviewer runs with tool access and may create worktrees/branches to stage suggested changes.
+  - Bot output must be able to write back a summarized response into TUI status surfaces.
 
 ---
 
