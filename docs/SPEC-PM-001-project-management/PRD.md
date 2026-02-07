@@ -255,11 +255,11 @@ All web research used to form recommendations should be captured into capsule ar
 - How to represent “archived packs” as first-class capsule artifacts (URI scheme, metadata).
 - Confirm deterministic scoring rubric weights/threshold behavior (see "Deterministic PRD Quality Score").
 - Confirm web research template size caps + cache retention/TTL for `prompts_only` temporary content cache.
-- What automation "bot runner" semantics exist for `NeedsResearch` / `NeedsReview` (manual-only state vs queue semantics, scheduling, visibility in status surfaces).
+- Bot runner semantics for `NeedsResearch` / `NeedsReview` (manual-only state vs queue semantics, scheduling, visibility in status surfaces) — tracked as `SPEC-PM-002`.
 
 ---
 
 ## Supporting Docs
 
 - `docs/SPEC-PM-001-project-management/ARCHITECT-BRIEF-maieutic-and-prd.md`: research + design drift analysis for assisted maieutics and PRD generation.
-- `docs/SPEC-PM-001-project-management/TODO-bot-runner-spec.md`: TODO spec stub for Devin-style research/review bot runner semantics.
+- `docs/SPEC-PM-002-bot-runner/spec.md`: SPEC stub for Devin-style research/review bot runner semantics.
