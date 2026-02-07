@@ -2,11 +2,11 @@
 
 > **Tier-1 Truth Anchor** — Required for every session. Update before starting work.
 
-**Last Updated**: 2026-02-03
+**Last Updated**: 2026-02-07
 
 ## Current Focus
 
-Idle
+Docs-only planning stub: `SPEC-PM-002` (Devin-style bot runner semantics for `NeedsResearch` / `NeedsReview`)
 
 ## Session Workflow
 

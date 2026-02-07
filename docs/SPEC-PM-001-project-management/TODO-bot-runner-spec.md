@@ -1,8 +1,12 @@
 # TODO Spec: Devin-Style Bot Runner (NeedsResearch / NeedsReview)
 
-**Status**: Draft (TODO)
+**Status**: Superseded by `SPEC-PM-002` (2026-02-07)
 **Parent**: `SPEC-PM-001`
 **Date**: 2026-02-06
+
+This file is kept for historical context. Canonical stub now lives at:
+
+- `docs/SPEC-PM-002-bot-runner/spec.md`
 
 ---
 
@@ -78,4 +82,3 @@ All artifacts must respect capture mode (`none | prompts_only | full_io`) and ex
   - `WebResearchBundle` + a short `ResearchReport` (structured JSON + Markdown projection).
 - A command to place an item into `NeedsReview` and run a single deterministic/static review pass that emits:
   - `ReviewReport` with "must fix" vs "suggestions" plus a summarized risk list.
-
