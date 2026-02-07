@@ -26,3 +26,14 @@ Split the bot-runner documentation into:
 - `python3 scripts/check_doc_links.py`
 - `bash .githooks/pre-commit`
 
+<!-- BEGIN: SPECKIT_BRIEF_REFRESH -->
+## Product Knowledge (auto)
+
+- Query: `SPEC-PM-002 SPEC-PM-003 bot system NeedsResearch NeedsReview`
+- Domain: `codex-product`
+- Capsule URI: `mv2://default/WORKFLOW/brief-20260207T041858Z/artifact/briefs/docs__pm-bot-system-split/20260207T041858Z.md`
+- Capsule checkpoint: `brief-docs__pm-bot-system-split-20260207T041858Z`
+
+No high-signal product knowledge matched. Try a more specific `--query` and/or raise `--limit`.
+
+<!-- END: SPECKIT_BRIEF_REFRESH -->
