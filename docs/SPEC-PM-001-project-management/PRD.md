@@ -203,9 +203,16 @@ All web research used to form recommendations should be captured into capsule ar
 **Capture-mode rules**
 
 - `prompts_only` (export-safe):
-  - Store query + params and **URL list**.
-  - Do **not** store extracted page text.
-  - If storing result snippets is deemed unsafe, store only hashes for title/snippet instead of raw text.
+  - Store query + params and a **full result template** (not just titles):
+    - URL + domain
+    - title (if available)
+    - ranking/score (if provided)
+    - published/updated timestamp (if available)
+    - snippet/summary fields (if provided), with size caps
+    - hashes for any larger text fields to support audit/replay without requiring raw storage
+  - Optionally store a **temporary non-export-safe cache** for selected sources to avoid refetching during the same session:
+    - extracted content is stored separately (by URI) with explicit TTL/expiry metadata
+    - cache artifacts must be excluded from safe export and are not required for deterministic gating
 - `full_io` (not export-safe):
   - May store extracted page text as separate capsule artifacts referenced by URI.
 
@@ -247,7 +254,7 @@ All web research used to form recommendations should be captured into capsule ar
 - Whether `docs/DEPRECATIONS.md` becomes a projection of capsule events in the first iteration or later.
 - How to represent “archived packs” as first-class capsule artifacts (URI scheme, metadata).
 - Confirm deterministic scoring rubric weights/threshold behavior (see "Deterministic PRD Quality Score").
-- Confirm web research artifact export-safety posture (snippets/titles stored vs hashed-only in `prompts_only`).
+- Confirm web research template size caps + cache retention/TTL for `prompts_only` temporary content cache.
 - What automation "bot runner" semantics exist for `NeedsResearch` / `NeedsReview` (manual-only state vs queue semantics, scheduling, visibility in status surfaces).
 
 ---
