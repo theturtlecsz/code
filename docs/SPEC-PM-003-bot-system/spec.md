@@ -306,3 +306,4 @@ The bot system should reuse existing primitives rather than inventing new ones:
 
 - Interface contract: `docs/SPEC-PM-002-bot-runner/spec.md`
 - PM system PRD: `docs/SPEC-PM-001-project-management/PRD.md`
+- External research digest (informational): `docs/SPEC-PM-003-bot-system/research-digest.md`

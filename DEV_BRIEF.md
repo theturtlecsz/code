@@ -6,7 +6,7 @@
 
 ## Current Focus
 
-Docs + types: finalize `SPEC-PM-003` (bot system design) and add `codex-core` request types backing `SPEC-PM-002` / `SPEC-PM-003` (`BotRunRequest`, enums).
+Docs: digest external deep‑research outputs into a durable `SPEC‑PM‑003` research note (for planning/roadmap review), and keep the Spec‑Kit dev NotebookLM notebook sources current.
 
 ## Session Workflow
 
