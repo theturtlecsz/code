@@ -85,6 +85,7 @@ mod openai_model_info;
 mod openai_tools;
 mod patch_harness;
 pub mod plan_tool;
+pub mod pm;
 mod pro_observer;
 mod pro_supervisor;
 pub mod project_doc;
