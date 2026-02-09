@@ -13,6 +13,8 @@ This document is intentionally an **interface spec**: how callers interact with 
 
 The underlying **bot system architecture** (runner/service/tooling internals, queueing, IPC, allowlists) is tracked separately in `SPEC-PM-003`.
 
+PRD: `docs/SPEC-PM-002-bot-runner/PRD.md`
+
 ## Definitions (v1)
 
 - **Work Item**: A capsule-backed PM object with a stable ID and lifecycle state (defined in `SPEC-PM-001`).
@@ -21,6 +23,7 @@ The underlying **bot system architecture** (runner/service/tooling internals, qu
 - **Write Mode** (review only): `none | worktree`
   - `none`: bot is read-only with respect to the repo
   - `worktree`: bot may stage suggested changes in a bot-owned worktree/branch
+- **Run Configuration**: caller-provided settings that shape the run (e.g., an intensity preset plus include/exclude toggles for analysis scopes).
 - **Artifact URI**: A capsule logical URI referencing an immutable artifact (authoritative SoR).
 - **Filesystem Projection**: Best-effort human-readable mirror of artifacts; rebuildable from capsule state (not authoritative).
 
@@ -66,12 +69,15 @@ The underlying **bot system architecture** (runner/service/tooling internals, qu
 
 - The current holding state and the latest bot run summary must be visible across CLI/TUI/headless status surfaces.
 - Long-form details live in artifacts (capsule SoR) with projections for humans.
+- Long-lived runs should expose a “latest checkpoint” summary so callers can understand progress without requiring streaming logs.
 
 ## Inputs
 
 - Work item + attached PRD/intake form data.
 - Capsule artifacts linked to the work item (intake/grounding/reports/evidence).
-- `NeedsResearch` requires NotebookLM; if unavailable/unconfigured, the run terminates as **BLOCKED** with structured output (no fallback research).
+- `NeedsResearch` dependency posture is **policy-defined**:
+  - If NotebookLM (or equivalent Tier‑2 grounding) is required but unavailable, the run terminates as **BLOCKED** with structured output.
+  - If degraded operation is allowed, outputs must be labeled degraded and preserve replay/audit inputs.
 - Web research is allowed via both:
   - Tavily MCP (preferred; pinned locally), and
   - the client’s default/generic web research tooling.
@@ -83,6 +89,7 @@ Artifact types (schemas start at v0; additive-only until locked):
 - `ResearchReport`: synthesis + recommended options/tradeoffs (references `WebResearchBundle` as needed).
 - `ReviewReport`: structured review notes with file/line references + risk assessment.
 - `BotRunLog`: timing/cost summary + tool usage + success/failure diagnostics.
+- `BotRunCheckpoint` (optional, long-lived runs): latest progress summary + resume metadata (no over-capture).
 - `WebResearchBundle`: structured web research capture (defined in `SPEC-PM-001`; reused here).
 - `PatchBundle` (review only, write mode): patch/diff + worktree/branch metadata + apply/inspect instructions.
 
@@ -94,8 +101,13 @@ All artifacts must respect capture mode (`none | prompts_only | full_io`) and ex
 
 ### Run
 
-- `code speckit pm bot run --id <WORK_ITEM_ID> --kind research`
-- `code speckit pm bot run --id <WORK_ITEM_ID> --kind review [--write-mode worktree]`
+- `code speckit pm bot run --id <WORK_ITEM_ID> --kind research [--wait]`
+- `code speckit pm bot run --id <WORK_ITEM_ID> --kind review [--write-mode worktree] [--wait]`
+
+Run configuration (proposal):
+
+- `--preset <name>` (named intensity preset)
+- `--scope <name>` / `--no-scope <name>` (include/exclude analysis scopes)
 
 ### Status + Results
 
@@ -138,14 +150,21 @@ Worktree/branch naming conventions and enforcement details are specified in `SPE
 
 ### Exit Codes (proposal)
 
-Bot runs should reuse the existing semantics of standard + headless-specific exit codes:
+`pm bot run` is **async by default**: it submits a run request to the bot service, returns `run_id` + initial status JSON, and exits immediately.
 
-- `0`: success (run completed)
-- `2`: hard fail / blocked (includes `NotebookLM unavailable` for `NeedsResearch`)
-- `3`: infrastructure error (runner/service failure, I/O, capsule corruption)
-- `10`: needs input (missing required work item data / work item not eligible / missing required flags)
-- `11`: needs approval (write-mode requested but not explicitly allowed in headless policy/config)
-- `13`: invariant violation (headless attempted to prompt)
+Exit codes:
+
+- For `pm bot run` (default, submit-and-exit):
+  - `0`: submitted (a `run_id` was created/returned; completion is reported via `status`/`show` or `--wait`)
+  - `3`: infrastructure error (unable to submit: service failure, I/O, capsule corruption)
+  - `10`: needs input (invalid request / work item missing required data / work item not eligible / missing required flags)
+  - `11`: needs approval (write-mode requested but not explicitly allowed in headless policy/config)
+  - `13`: invariant violation (headless attempted to prompt)
+- For `pm bot run --wait` (poll until terminal state and then exit):
+  - `0`: terminal `succeeded`
+  - `2`: terminal `blocked` or `cancelled`
+  - `3`: terminal `failed`
+  - `10`: terminal `needs_attention` (manual resolution required)
 
 ### JSON Output Schema (v0)
 
@@ -156,12 +175,20 @@ All headless bot-run commands must emit JSON with:
 - `work_item_id`
 - `kind` (`research | review`)
 - `run_id`
-- `status` (`success | failed | blocked | cancelled`)
+- `status` (`queued | running | succeeded | failed | blocked | needs_attention | cancelled`)
 - `exit_code`
 - `summary` (short, human-readable)
 - `artifact_uris[]` (capsule logical URIs for produced artifacts)
 - `projection_paths[]` (filesystem projections written, if any)
 - `errors[]` (structured; includes `blocked_reason` for `status=blocked`)
+
+### Long-Lived Runs (proposal)
+
+Long-lived runs must remain usable in headless mode without streaming UI:
+
+- callers can query status and the latest checkpoint summary deterministically,
+- resume must never prompt (missing inputs/prereqs become structured “needs input/blocked” outcomes),
+- `pm bot run` is async by default; `--wait` is an explicit opt-in for synchronous scripting.
 
 ## Artifact Schemas (v0 — proposal)
 
@@ -174,6 +201,17 @@ All headless bot-run commands must emit JSON with:
 - `capture_mode`
 - `tool_usage[]` (tool name + counts + timing; no over-capture)
 - `status` + `errors[]`
+
+### BotRunCheckpoint (optional)
+
+- `schema_version`
+- `tool_version`
+- `work_item_id`, `run_id`, `kind`
+- `checkpoint_at` (RFC3339)
+- `phase` (coarse step label)
+- `summary` (short, human-readable)
+- `percent` (optional; best-effort)
+- `resume_hint` (optional; what the service/runner will do next)
 
 ### ResearchReport
 
@@ -236,6 +274,7 @@ Capture-mode compliance:
 ## Open Questions
 
 - Do we want a dedicated headless exit code for `BLOCKED`, or reuse exit code `2` with a structured `blocked_reason`?
+- What are the canonical preset names and scope toggles exposed in the TUI (and how are they represented in CLI/headless)?
 - What is the canonical filesystem projection root for PM work items (`docs/specs/<ID>/...` vs `.speckit/pm/...`), and which is Tier‑1 required?
 
 ## References

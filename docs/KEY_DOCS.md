@@ -23,6 +23,8 @@ This repo has a small set of canonical documents. If you’re unsure what to rea
 | [`templates/PRD-template.md`](../templates/PRD-template.md) | Template           | PRD template — standard format                                     |
 | [`memory/local-notes.md`](../memory/local-notes.md)         | Notes              | Project-specific notes                                             |
 
+> Note: a `SPEC-*` ID is the uniform work item. `PRD.md`, `spec.md`, `plan.md`, etc. are artifacts inside that work item’s “SPEC packet” directory under `docs/`.
+
 ## Feature PRDs (Spec-Kit)
 
 Legacy SPEC-KIT PRDs were archived from the working tree on 2026-02-05.
@@ -35,3 +37,5 @@ Remaining PRDs in tree:
 ## Product PRDs
 
 * [`docs/SPEC-PM-001-project-management/PRD.md`](SPEC-PM-001-project-management/PRD.md)
+* [`docs/SPEC-PM-002-bot-runner/PRD.md`](SPEC-PM-002-bot-runner/PRD.md)
+* [`docs/SPEC-PM-003-bot-system/PRD.md`](SPEC-PM-003-bot-system/PRD.md)

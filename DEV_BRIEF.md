@@ -2,11 +2,11 @@
 
 > **Tier-1 Truth Anchor** — Required for every session. Update before starting work.
 
-**Last Updated**: 2026-02-08
+**Last Updated**: 2026-02-09
 
 ## Current Focus
 
-Docs: digest external deep‑research outputs into a durable `SPEC‑PM‑003` research note (for planning/roadmap review), and keep the Spec‑Kit dev NotebookLM notebook sources current.
+Docs: review remaining non-complete PRDs for alignment with current product vision (Gold Run, Product Knowledge, capsule-backed PM) and keep PRD discovery/links clean (DOC-DRIFT-001).
 
 ## Session Workflow
 
