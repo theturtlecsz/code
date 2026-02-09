@@ -74,6 +74,18 @@ Spec-kit provides single-owner multi-agent development automation for feature sp
 
 > Parity note: per D113/D133, Tier 1 automation features are required to work with full parity across TUI/CLI/headless.
 
+### Terminology: Work Items and "SPEC Packets"
+
+In Codex-RS, the **uniform unit of work** is a **work item** identified by a `SPEC-*` ID and tracked in the canonical tracker (`codex-rs/SPEC.md`).
+
+A work item’s documentation is stored as a **SPEC packet**: a directory under `docs/` containing **multiple artifacts**, for example:
+
+- `PRD.md` — product requirements (“what/why”)
+- `spec.md` — design / interface / architecture (“how”)
+- `plan.md`, `tasks.md`, etc. — pipeline outputs
+
+This is *not* “PRDs vs SPECS” as competing concepts — both are just artifacts within the same work item packet.
+
 ***
 
 ## Commands and Workflows
