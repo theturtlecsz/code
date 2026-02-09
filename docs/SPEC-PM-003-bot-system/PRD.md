@@ -16,16 +16,22 @@
 - Headless automation must not prompt or silently take destructive actions.
 - Capture-mode must be enforced with an over-capture hard-block.
 
-This PRD defines the product requirements for the runner/service/tooling internals that realize the PM bot contract without introducing a daemon-oriented “agent framework”.
+Additionally, bot runs may be **long-lived** (hours → days). The product must ensure they can survive:
+
+- TUI restarts / disconnects,
+- process crashes,
+- machine reboots.
+
+This PRD defines the product requirements for the runner/service/tooling internals that realize the PM bot contract while remaining local-first and sovereignty-preserving.
 
 ---
 
 ## Goals
 
-1. Implement the baseline runtime model for bot runs as a deterministic, crash-safe execution unit (“one run = one bounded execution”).
+1. Provide a service-first runtime that can manage long-lived bot runs and resume incomplete runs after reboot.
 2. Provide safe mutation for `NeedsReview` via bot-owned worktrees/branches (never touch the user’s active worktree by default).
 3. Enforce capability boundaries (read/write/network/tool allowlists) centrally and audibly.
-4. Persist authoritative bot outputs as capsule artifacts; treat filesystem/Linear as projections only.
+4. Persist authoritative bot outputs as capsule artifacts; treat the filesystem as a projection only.
 5. Define concurrency/locking and best-effort cancellation semantics compatible with the capsule single-writer model.
 6. Make replay/audit possible by snapshotting any non-capsule inputs used (e.g., local-memory retrievals, web research).
 
@@ -33,7 +39,7 @@ This PRD defines the product requirements for the runner/service/tooling interna
 
 ## Non-Goals (v1)
 
-- Always-on background daemon/service.
+- A heavy, always-processing “agent framework” daemon.
 - Fully automatic scheduling/queueing across the whole machine.
 - Auto-merge/auto-push behavior.
 - Cross-platform support (Linux-first remains baseline).
@@ -58,7 +64,7 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 ### Proposed (needs confirmation)
 
 - Whether to standardize on **NDJSON streaming progress events** (stdout) vs “final JSON only” for headless callers.
-- Whether to ship an **optional on-demand runner service** (short-lived, non-required) for queueing/progress fan-out.
+- Clarify the scope of acceptable “persistence” for a lightweight job-management service vs the D38/D126 no-daemon posture (see ADR-004).
 - Whether to formalize retention/cleanup policies for large projections (worktrees, caches) as a separate spec/decision.
 
 ---
@@ -69,15 +75,17 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 
 | ID | Requirement | Acceptance Criteria |
 | --- | --- | --- |
-| FR1 | Ephemeral baseline runner | Bot runs execute as a bounded command invocation whose semantics match headless/CLI/TUI (Tier‑1). |
-| FR2 | Deterministic context bundle | Runner snapshots required inputs (capsule artifacts + repo metadata); detects drift at apply/merge boundaries rather than mid-run. |
-| FR3 | Locking + concurrency | Enforce “at most one active run per `(work_item_id, kind)`”; respect capsule single-writer discipline. |
-| FR4 | Permission enforcement | Central allowlist checks for network/tool/write; deny-by-default with explicit escalation flags. |
-| FR5 | Research physiology | `NeedsResearch` hard-requires NotebookLM; missing config → blocked result (no silent downgrade). |
-| FR6 | Review physiology | `NeedsReview` write mode stages changes in bot-owned worktree/branch; emits a `PatchBundle` artifact for review/apply. |
-| FR7 | Artifact persistence | Persist `BotRunLog` and kind-specific outputs as capsule artifacts in a capture-mode-compliant way. |
-| FR8 | Best-effort projections | Write rebuildable filesystem projections when allowed; projections never become SoR. |
-| FR9 | Cancellation | Cooperative cancellation marks run terminal state and persists a log artifact with partial context (within capture policy). |
+| FR1 | Service-first runtime | Bot runs are managed by a lightweight local service whose semantics match TUI/CLI/headless (Tier‑1). |
+| FR2 | Reboot survival | Incomplete runs can resume after reboot via systemd user unit behavior without interactive prompts. |
+| FR3 | Graceful degradation | When the service is down, the TUI provides read-only status from capsule artifacts and explicit service management actions. |
+| FR4 | Deterministic context + checkpoints | The system snapshots required inputs and persists checkpoints so resume does not lose work or violate determinism/audit. |
+| FR5 | Locking + concurrency | Enforce “at most one active run per `(work_item_id, kind)`”; respect capsule single-writer discipline. |
+| FR6 | Permission enforcement | Central allowlist checks for network/tool/write; deny-by-default with explicit escalation flags. |
+| FR7 | Research physiology | Research runs must be source-grounded and auditable; dependency posture (NotebookLM required vs degraded) is policy-defined. |
+| FR8 | Review physiology | Review write mode stages changes in bot-owned worktree/branch; outputs remain reviewable against a reasonably current base. |
+| FR9 | Artifact persistence | Persist `BotRunLog` and kind-specific outputs as capsule artifacts in a capture-mode-compliant way. |
+| FR10 | Best-effort projections | Write rebuildable filesystem projections when allowed; projections never become SoR. |
+| FR11 | Cancellation | Cooperative cancellation marks run terminal state and persists a log artifact with partial context (within capture policy). |
 
 ### Non-Functional Requirements
 
@@ -86,7 +94,7 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 | NFR1 | Fault isolation | Runner crashes don’t crash TUI | TUI spawns runner as child; non-zero exits handled |
 | NFR2 | Replay / audit | Decisions can be replayed from capsule evidence | Evidence packs + artifact schemas |
 | NFR3 | Capture compliance | No over-capture across any codepath | Policy tests + artifact writer checks |
-| NFR4 | Minimal operational burden | No required background service | Runs work via CLI invocation only |
+| NFR4 | Minimal operational burden | Service is lightweight + user-scoped | systemd user unit + “idle when no jobs” posture |
 
 ---
 
@@ -101,7 +109,8 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 
 ## Success Metrics
 
-- A PM bot run can execute end-to-end without a daemon and without semantic divergence across surfaces.
+- A PM bot run can execute end-to-end without semantic divergence across surfaces.
+- A long-lived run can survive a reboot and continue (resume) without bypassing maieutic gates.
 - Concurrent invocations do not corrupt capsule state; lock contention resolves cleanly (blocked/queued behavior is explicit).
 - Review write mode never mutates the user’s primary worktree and yields reviewable patches/worktrees.
 - Capture-mode restrictions are enforced strictly; any over-capture attempt hard-blocks.
@@ -110,8 +119,9 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 
 ## Open Questions
 
-- What IPC transport (if any) is acceptable for an optional on-demand runner service (Unix socket vs stdio bridge)?
-- Where should a persistent run queue live, if we add one (capsule-backed events vs ephemeral in-memory)?
+- What IPC transport is acceptable between TUI/CLI/headless and the service (Unix socket vs stdio bridge vs in-process only)?
+- What triggers resume after reboot (timer-driven, socket-activated, explicit “resume all incomplete”)?
+- How should the system handle “freshness” for long-lived review runs (rebase/refresh boundaries and conflict posture)?
 - What are the initial allowlisted local commands for `NeedsReview` validation, and where is that policy defined?
 
 ---
@@ -121,4 +131,4 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 - PM system PRD: `docs/SPEC-PM-001-project-management/PRD.md`
 - Bot runner contract: `docs/SPEC-PM-002-bot-runner/spec.md`
 - Bot system design: `docs/SPEC-PM-003-bot-system/spec.md`
-
+- Runtime ADR (proposed): `docs/adr/ADR-004-pm-bot-service-runtime.md`

@@ -41,7 +41,7 @@ Codex-RS introduces optional, manual “Devin-style” automation for PM holding
 
 ## Primary Users / Callers (Tier‑1)
 
-- **TUI**: spawns the canonical CLI command and renders progress/results (viewer model).
+- **TUI**: initiates runs and renders status/results; runtime may be service-first (see `SPEC-PM-003`).
 - **CLI**: interactive developer/PM usage.
 - **Headless/CI**: deterministic, non-interactive usage in scripts and automation.
 
@@ -78,6 +78,8 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot runner 
 | FR3 | Stable artifacts | Each run produces capsule artifacts (SoR) appropriate to kind/capture mode (e.g. `BotRunLog`, `ResearchReport`/`ReviewReport`, optional `PatchBundle`, optional `WebResearchBundle`). |
 | FR4 | Safe defaults | Default is read-only; review write mode is explicit and isolated (bot-owned worktree/branch). |
 | FR5 | Status visibility | Caller can query latest run status/results across CLI/TUI/headless using the same contract. |
+| FR6 | Run configuration UX | Callers can express run intent via a preset + include/exclude toggles (surface-appropriate), and the run records what configuration was used. |
+| FR7 | Long-lived usability | Long-lived runs expose periodic checkpoint summaries so status is meaningful without requiring streaming logs. |
 
 ### Non-Functional Requirements
 
@@ -110,6 +112,7 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot runner 
 
 - Should `BLOCKED` be a dedicated exit code or “exit 2 with structured `blocked_reason`”?
 - Do we require optional **streaming progress** (NDJSON) for long runs, or is final JSON sufficient for v1?
+- Are bot runs synchronous (wait for completion) by default, or do they submit a job and return a `run_id` for later status queries?
 - What is the canonical filesystem projection root for PM bot run outputs (`docs/` vs `.speckit/`)?
 
 ---
@@ -119,4 +122,3 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot runner 
 - Interface contract: `docs/SPEC-PM-002-bot-runner/spec.md`
 - Bot system design: `docs/SPEC-PM-003-bot-system/spec.md`
 - PM system PRD: `docs/SPEC-PM-001-project-management/PRD.md`
-

@@ -83,6 +83,19 @@ TUI should provide a short alias (e.g., `/pm ...`) that maps 1:1 onto the canoni
 
 ---
 
+## TUI Interaction Design (v1) (proposal)
+
+The PM layer is primarily experienced through the TUI. v1 UX should make the “current truth” legible in under 30 seconds:
+
+- **List view**: work items with lifecycle state, owner, last updated, and latest bot run summary (if any).
+- **Detail view**: PRD/spec links, lifecycle state controls, and the latest run artifacts/checkpoint summary.
+- **Run configuration**: named intensity presets plus granular include/exclude toggles for analysis scopes (e.g., correctness/security/performance), presented as checkboxes.
+- **Safety signals**: explicit indicators when a run is operating in degraded mode (e.g., dependency unavailable) or when write mode is enabled.
+
+If the PM/bot service is unavailable, the TUI must degrade gracefully to read-only status views from capsule artifacts, and provide explicit service management actions (start/stop/doctor).
+
+---
+
 ## Planned Promotion Gates (v1)
 
 Promotion to `Planned` is **manual** (PM action) and must satisfy:
@@ -102,7 +115,9 @@ Headless must return structured output and product exit codes for blocking state
 These are **manual** states used for optional automation (not part of the default `/speckit.auto` workflow):
 
 - `NeedsResearch`:
-  - **NotebookLM is required**; if unavailable, the run returns a BLOCKED result with structured output (no fallback research).
+  - NotebookLM (or equivalent Tier‑2 grounding) posture is **policy-defined**:
+    - if required but unavailable, the run returns a BLOCKED result with structured output,
+    - if degraded operation is allowed, the run proceeds with explicit degraded labeling.
   - Network access is allowed (Tavily MCP preferred; generic web research allowed).
 - `NeedsReview`:
   - Validator/reviewer runs with tool access and may create worktrees/branches to stage suggested changes.
