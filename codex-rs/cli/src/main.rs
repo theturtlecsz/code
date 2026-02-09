@@ -29,6 +29,7 @@ use std::process;
 use tokio::runtime::{Builder as TokioRuntimeBuilder, Handle as TokioHandle};
 
 mod mcp_cmd;
+mod pm_cmd;
 mod reflex_cmd;
 mod speckit_cmd;
 mod stage0_cmd;

@@ -449,6 +449,12 @@ pub enum SpeckitSubcommand {
     ///
     /// Generates and updates `docs/briefs/<branch>.md` (with `/` → `__`).
     Brief(BriefArgs),
+
+    /// PM bot operations (submit, query, cancel runs)
+    ///
+    /// SPEC-PM-002/003: IPC client for the codex-pm-service.
+    /// Connects to the PM service via Unix socket.
+    Pm(crate::pm_cmd::PmCli),
 }
 
 /// Arguments for `speckit status` command
@@ -1916,6 +1922,11 @@ impl SpeckitCli {
             return run_brief(cwd, args);
         }
 
+        // Handle PM commands (IPC client, don't need executor)
+        if let SpeckitSubcommand::Pm(pm_cli) = self.command {
+            return pm_cli.run().map_err(|e| anyhow::anyhow!("{e}"));
+        }
+
         // Resolve policy from env/config at adapter boundary (not in executor)
         let toggles = PolicyToggles::from_env_and_config();
         let policy_snapshot = PolicySnapshot {
@@ -1958,6 +1969,7 @@ impl SpeckitCli {
             SpeckitSubcommand::Projections(_) => unreachable!("Projections handled above"),
             SpeckitSubcommand::Ingest(_) => unreachable!("Ingest handled above"),
             SpeckitSubcommand::Brief(_) => unreachable!("Brief handled above"),
+            SpeckitSubcommand::Pm(_) => unreachable!("Pm handled above"),
         }
     }
 }
