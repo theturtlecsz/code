@@ -73,7 +73,7 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot runner 
 
 | ID | Requirement | Acceptance Criteria |
 | --- | --- | --- |
-| FR1 | Run bots manually | Caller can invoke a bot run for a `(work_item_id, kind)` and receive a terminal result. |
+| FR1 | Run bots manually | Caller can submit a bot run for a `(work_item_id, kind)` and receive `run_id` + initial status. Terminal results are retrieved separately (`status`/`show`), with `--wait` as an explicit opt-in for synchronous scripting. |
 | FR2 | Deterministic headless | Headless never prompts; missing prerequisites returns structured output + non-zero exit code. |
 | FR3 | Stable artifacts | Each run produces capsule artifacts (SoR) appropriate to kind/capture mode (e.g. `BotRunLog`, `ResearchReport`/`ReviewReport`, optional `PatchBundle`, optional `WebResearchBundle`). |
 | FR4 | Safe defaults | Default is read-only; review write mode is explicit and isolated (bot-owned worktree/branch). |
@@ -112,7 +112,6 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot runner 
 
 - Should `BLOCKED` be a dedicated exit code or “exit 2 with structured `blocked_reason`”?
 - Do we require optional **streaming progress** (NDJSON) for long runs, or is final JSON sufficient for v1?
-- Are bot runs synchronous (wait for completion) by default, or do they submit a job and return a `run_id` for later status queries?
 - What is the canonical filesystem projection root for PM bot run outputs (`docs/` vs `.speckit/`)?
 
 ---

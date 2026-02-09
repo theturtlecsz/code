@@ -37,21 +37,16 @@ PRD: `docs/SPEC-PM-003-bot-system/PRD.md`
 - **Maieutic step always mandatory** (D130): bot automation must not bypass required gates (especially `/speckit.auto`).
 - **Operational footprint posture** (D38): prefer single-binary, no-daemon design; any persistent runtime must be tightly scoped and justified.
 - **No permanent daemon (maintenance posture)** (D126): maintenance triggers are event/scheduled/on-demand; avoid “always processing” background loops.
+- **Bot job management service runtime** (D135): lightweight persistent service is allowed for bot job management; must be systemd-managed, auto-resume on reboot, and exit-when-idle (no heavyweight frameworks or always-processing daemons).
 - **Explainability follows capture mode** (D131) + **over-capture hard-block** (D119): the system must never persist more than policy allows; `capture=none` persists no explainability artifacts.
 - **No silent destructive actions in headless** (`SPEC-PM-001` NFR3): write operations require explicit user intent and must be auditable.
 - **Single-writer capsule** (D7): capsule writes are serialized; runner must not violate lock/queue invariants.
 
-## Service-First Runtime (Proposed)
+## Service-First Runtime (D135)
 
-Product intent is trending toward **long-lived bot runs** (hours → days) that must survive:
+Bot runs may be **long-lived** (hours → days) and must survive TUI restarts, process crashes, and machine reboots.
 
-- TUI restarts / disconnects
-- process crashes
-- machine reboots
-
-Proposed baseline runtime (see ADR-004): a lightweight **PM bot service** managed by a **systemd user unit** that can resume incomplete runs without user interaction. The ephemeral CLI runner remains as fallback/debug, not the primary execution model.
-
-This requires clarifying how ADR-004 interacts with D38/D126 (no-daemon posture) and may require a new locked decision (e.g., D135).
+Baseline runtime (D135; ADR-004): a lightweight **PM bot service** managed by a **systemd user unit** that can resume incomplete runs without user interaction and **exit when idle**. The ephemeral CLI runner remains as fallback/debug, not the primary execution model.
 
 ## Three-Surface Truth Model (ADR-003)
 
@@ -83,9 +78,9 @@ We want strong fault isolation and Tier‑1 parity while preserving the “no pe
 - **In-process runner library**:
   - Pros: low overhead, easy local invocation.
   - Cons: poor fault isolation (runner panic can crash TUI); parity drift risk if UI-specific assumptions leak in.
-- **Service-first runtime (systemd-managed)** (proposed baseline; ADR-004):
+- **Service-first runtime (systemd-managed)** (baseline; D135, ADR-004):
   - Pros: supports long-lived runs + reboot survival; isolates runs from TUI lifetime; enables resume/cancel semantics.
-  - Cons: introduces IPC + lifecycle management; requires policy clarification vs D38/D126 and careful “not always processing” boundaries.
+  - Cons: introduces IPC + lifecycle management; must strictly enforce D135 scope (exit-when-idle; no always-processing loops; no heavy frameworks).
 - **Ephemeral CLI runner** (fallback/debug):
   - Pros: easy debugging; parity by construction; minimal operational footprint.
   - Cons: not sufficient alone for multi-day runs and reboot survival.
@@ -96,15 +91,15 @@ We want strong fault isolation and Tier‑1 parity while preserving the “no pe
 
 ### Placement + Lifecycle
 
-Baseline runtime (proposed): **PM BotRunnerService** + **systemd user unit** (ADR-004).
+Baseline runtime: **PM BotRunnerService** + **systemd user unit** (D135; ADR-004).
 
 - The service owns run lifecycle (start/status/cancel/resume) and performs the work.
 - The service persists run artifacts and **checkpoints** into the capsule so incomplete runs can resume after restart/reboot.
-- The service must remain “lightweight” and job-scoped (no heavy agent framework; avoid always-processing loops).
+- The service must remain “lightweight” and job-scoped: **exit when idle**, no heavy agent framework, and no always-processing loops.
 
 Fallback runtime: **ephemeral CLI runner**.
 
-- Runs a single `pm bot run` execution as a one-shot process.
+- Executes a single bot run as a one-shot process (internal engine), producing the same artifacts as the service.
 - Used for debugging, emergency “no service” scenarios, and parity testing.
 
 ### CLI/Headless Integration
@@ -163,9 +158,10 @@ Proposed states:
 - `succeeded`
 - `failed`
 - `blocked`
+- `needs_attention` (terminal; manual resolution required, e.g., rebase conflicts)
 - `cancelled`
 
-Mapping to headless exit codes is defined in `SPEC-PM-002` (e.g., `0` success, `1` failure, `2` blocked, `130` cancelled).
+Mapping to headless exit codes is defined in `SPEC-PM-002` (noting that `pm bot run` is async by default and `--wait` is the opt-in mode for “exit reflects terminal state”).
 
 ## Locking + Concurrency (v1)
 
@@ -179,8 +175,8 @@ Recommended enforcement:
 
 ## Components (conceptual)
 
-- **BotRunnerService** (baseline; ADR-004): job lifecycle + scheduling + progress + resume.
-- **systemd user unit** (baseline; ADR-004): ensures incomplete runs can resume after reboot without interactive input.
+- **BotRunnerService** (baseline; D135, ADR-004): job lifecycle + scheduling + progress + resume.
+- **systemd user unit** (baseline; D135, ADR-004): ensures incomplete runs can resume after reboot without interactive input.
 - **Ephemeral Runner** (fallback): executes a single run (`code speckit pm bot run ...`) and exits.
 - **Context Builder**: assembles deterministic inputs (work item fields + linked capsule artifacts + repo snapshot metadata).
 - **Research Engine**:
@@ -240,9 +236,17 @@ When write mode is enabled and changes are staged, the bot system must output:
 
 For long-lived review runs, “stale patches” are a UX failure. The bot system should ensure proposed changes remain reviewable against a reasonably current base:
 
-- record base commit(s) used for analysis/checkpoints,
-- rebase or refresh the bot worktree at well-defined boundaries (policy TBD),
-- if conflicts arise, surface them as explicit `needs_input`/blocked outcomes (headless never prompts).
+- **Run-start snapshot**: record the base commit used for analysis/checkpoints (`analysis_base_commit`).
+- **Deterministic checkpoints**: all checkpoint artifacts must reference `analysis_base_commit` so “resume” preserves deterministic progress semantics.
+- **Finalization-only rebase**: immediately before producing the final `PatchBundle`, rebase the bot branch/worktree onto the current target branch (default: `main`) and record:
+  - `rebase_target_commit` (the commit SHA the patch was rebased onto), and
+  - whether the rebase succeeded cleanly.
+- **Conflict posture**: if the finalization rebase conflicts, the run transitions to terminal `needs_attention` and must persist:
+  - the original patch (based on `analysis_base_commit`),
+  - a structured conflict summary, and
+  - manual resolution instructions (headless never prompts).
+
+Checkpoint artifacts remain valid as analysis even if the final patch requires manual conflict resolution.
 
 ## Persistence: Events, Artifacts, Projections (v1)
 
@@ -298,7 +302,7 @@ The bot system should reuse existing primitives rather than inventing new ones:
 - Should `BLOCKED` become a dedicated headless exit code, or remain “exit 2 with structured blocked_reason” (per `SPEC-PM-002`)?
 - Which commands are on the initial allowlist for `NeedsReview`, and how do we represent policy overrides without violating D119/D125?
 - Should “resume after reboot” be timer-driven, socket-activation-driven, or an explicit user action that systemd replays?
-- What is the rebase/refresh strategy for long-lived review runs (checkpoint boundaries vs periodic vs final-only)?
+- What is the exact artifact schema for “finalization rebase conflict” details and manual resolution instructions?
 
 ## Implementation Sequencing (proposed)
 
@@ -308,7 +312,7 @@ The bot system should reuse existing primitives rather than inventing new ones:
 
 ## Risks (initial)
 
-- Decision conflict: service-first runtime must be reconciled with D38/D126 (ADR-004).
+- Service/runtime drift: the bot service must remain strictly within D135 scope (systemd-managed, exit-when-idle; no always-processing daemon loops or heavy frameworks).
 - NotebookLM availability: clarify whether `NeedsResearch` is hard BLOCKED or can operate in a degraded mode.
 - Capture policy regressions: any over-capture violates export safety; enforce at artifact-writer boundaries and via tests.
 - Lock contention: interactive UX must not deadlock behind background jobs; prioritize TUI-triggered runs.
@@ -318,4 +322,4 @@ The bot system should reuse existing primitives rather than inventing new ones:
 - Interface contract: `docs/SPEC-PM-002-bot-runner/spec.md`
 - PM system PRD: `docs/SPEC-PM-001-project-management/PRD.md`
 - External research digest (informational): `docs/SPEC-PM-003-bot-system/research-digest.md`
-- Runtime ADR (proposed): `docs/adr/ADR-004-pm-bot-service-runtime.md`
+- Runtime ADR (accepted): `docs/adr/ADR-004-pm-bot-service-runtime.md`

@@ -57,7 +57,7 @@ This is a product vision gap: the same tools used to build Codex-RS should also 
 Work items have a single **state** at a time:
 
 - `Backlog`: Not scheduled yet (default for new work items).
-- `NeedsResearch`: Optional manual holding state to run "Devin-style" research automation (semantics tracked in `SPEC-PM-002`; NotebookLM-required).
+- `NeedsResearch`: Optional manual holding state to run "Devin-style" research automation (semantics tracked in `SPEC-PM-002`; dependency posture is policy-defined).
 - `Planned`: Scheduled / approved to start. Promotion to `Planned` is explicitly invoked and gated (see below).
 - `InProgress`: Actively being worked.
 - `NeedsReview`: Optional manual holding state to run "Devin-style" review automation (semantics tracked in `SPEC-PM-002`).

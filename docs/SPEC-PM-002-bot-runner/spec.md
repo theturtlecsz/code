@@ -101,8 +101,8 @@ All artifacts must respect capture mode (`none | prompts_only | full_io`) and ex
 
 ### Run
 
-- `code speckit pm bot run --id <WORK_ITEM_ID> --kind research`
-- `code speckit pm bot run --id <WORK_ITEM_ID> --kind review [--write-mode worktree]`
+- `code speckit pm bot run --id <WORK_ITEM_ID> --kind research [--wait]`
+- `code speckit pm bot run --id <WORK_ITEM_ID> --kind review [--write-mode worktree] [--wait]`
 
 Run configuration (proposal):
 
@@ -150,14 +150,21 @@ Worktree/branch naming conventions and enforcement details are specified in `SPE
 
 ### Exit Codes (proposal)
 
-Bot runs should reuse the existing semantics of standard + headless-specific exit codes:
+`pm bot run` is **async by default**: it submits a run request to the bot service, returns `run_id` + initial status JSON, and exits immediately.
 
-- `0`: success (run completed)
-- `2`: hard fail / blocked (includes `NotebookLM unavailable` for `NeedsResearch`)
-- `3`: infrastructure error (runner/service failure, I/O, capsule corruption)
-- `10`: needs input (missing required work item data / work item not eligible / missing required flags)
-- `11`: needs approval (write-mode requested but not explicitly allowed in headless policy/config)
-- `13`: invariant violation (headless attempted to prompt)
+Exit codes:
+
+- For `pm bot run` (default, submit-and-exit):
+  - `0`: submitted (a `run_id` was created/returned; completion is reported via `status`/`show` or `--wait`)
+  - `3`: infrastructure error (unable to submit: service failure, I/O, capsule corruption)
+  - `10`: needs input (invalid request / work item missing required data / work item not eligible / missing required flags)
+  - `11`: needs approval (write-mode requested but not explicitly allowed in headless policy/config)
+  - `13`: invariant violation (headless attempted to prompt)
+- For `pm bot run --wait` (poll until terminal state and then exit):
+  - `0`: terminal `succeeded`
+  - `2`: terminal `blocked` or `cancelled`
+  - `3`: terminal `failed`
+  - `10`: terminal `needs_attention` (manual resolution required)
 
 ### JSON Output Schema (v0)
 
@@ -168,7 +175,7 @@ All headless bot-run commands must emit JSON with:
 - `work_item_id`
 - `kind` (`research | review`)
 - `run_id`
-- `status` (`success | failed | blocked | cancelled`)
+- `status` (`queued | running | succeeded | failed | blocked | needs_attention | cancelled`)
 - `exit_code`
 - `summary` (short, human-readable)
 - `artifact_uris[]` (capsule logical URIs for produced artifacts)
@@ -181,7 +188,7 @@ Long-lived runs must remain usable in headless mode without streaming UI:
 
 - callers can query status and the latest checkpoint summary deterministically,
 - resume must never prompt (missing inputs/prereqs become structured “needs input/blocked” outcomes),
-- synchronous “wait until complete” vs “submit and exit” semantics are an open question (see below).
+- `pm bot run` is async by default; `--wait` is an explicit opt-in for synchronous scripting.
 
 ## Artifact Schemas (v0 — proposal)
 
@@ -267,7 +274,6 @@ Capture-mode compliance:
 ## Open Questions
 
 - Do we want a dedicated headless exit code for `BLOCKED`, or reuse exit code `2` with a structured `blocked_reason`?
-- Are `pm bot run` calls synchronous (wait) by default, or do they submit a job and return `run_id` immediately for long-lived runs?
 - What are the canonical preset names and scope toggles exposed in the TUI (and how are they represented in CLI/headless)?
 - What is the canonical filesystem projection root for PM work items (`docs/specs/<ID>/...` vs `.speckit/pm/...`), and which is Tier‑1 required?
 

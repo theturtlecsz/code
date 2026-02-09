@@ -53,6 +53,7 @@ This PRD defines the product requirements for the runner/service/tooling interna
 These constraints are locked in `docs/DECISIONS.md` and apply to the bot system internals:
 
 - **Prefer no-daemon posture**: D38 (`docs/DECISIONS.md` → “Retrieval & Storage (D21-D40)”).
+- **Bot job management service**: D135 (`docs/DECISIONS.md` → “Addenda (D135+)”).
 - **Tier‑1 parity + headless contract**: D113 + D133 (`docs/DECISIONS.md` → “Product & Parity (A1-A2)” and “ACE + Maieutics (H0-H7)”).
 - **Maieutic pre-execution gate**: D130 (`docs/DECISIONS.md` → “ACE + Maieutics (H0-H7)”).
 - **Capture-mode enforcement + over-capture hard-block**: D131 + D119 (`docs/DECISIONS.md` → “ACE + Maieutics (H0-H7)” and “Capture Mode (C1-C2)”).
@@ -64,7 +65,6 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 ### Proposed (needs confirmation)
 
 - Whether to standardize on **NDJSON streaming progress events** (stdout) vs “final JSON only” for headless callers.
-- Clarify the scope of acceptable “persistence” for a lightweight job-management service vs the D38/D126 no-daemon posture (see ADR-004).
 - Whether to formalize retention/cleanup policies for large projections (worktrees, caches) as a separate spec/decision.
 
 ---
@@ -82,7 +82,7 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 | FR5 | Locking + concurrency | Enforce “at most one active run per `(work_item_id, kind)`”; respect capsule single-writer discipline. |
 | FR6 | Permission enforcement | Central allowlist checks for network/tool/write; deny-by-default with explicit escalation flags. |
 | FR7 | Research physiology | Research runs must be source-grounded and auditable; dependency posture (NotebookLM required vs degraded) is policy-defined. |
-| FR8 | Review physiology | Review write mode stages changes in bot-owned worktree/branch; outputs remain reviewable against a reasonably current base. |
+| FR8 | Review physiology | Review write mode stages changes in bot-owned worktree/branch; at finalization, rebase onto current `main` before producing the final `PatchBundle`. Rebase conflicts produce a terminal `needs_attention` outcome with conflict details and manual resolution instructions. |
 | FR9 | Artifact persistence | Persist `BotRunLog` and kind-specific outputs as capsule artifacts in a capture-mode-compliant way. |
 | FR10 | Best-effort projections | Write rebuildable filesystem projections when allowed; projections never become SoR. |
 | FR11 | Cancellation | Cooperative cancellation marks run terminal state and persists a log artifact with partial context (within capture policy). |
@@ -121,7 +121,7 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 
 - What IPC transport is acceptable between TUI/CLI/headless and the service (Unix socket vs stdio bridge vs in-process only)?
 - What triggers resume after reboot (timer-driven, socket-activated, explicit “resume all incomplete”)?
-- How should the system handle “freshness” for long-lived review runs (rebase/refresh boundaries and conflict posture)?
+- What is the concrete artifact schema for “finalization rebase conflict” details and manual resolution instructions?
 - What are the initial allowlisted local commands for `NeedsReview` validation, and where is that policy defined?
 
 ---
@@ -131,4 +131,4 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 - PM system PRD: `docs/SPEC-PM-001-project-management/PRD.md`
 - Bot runner contract: `docs/SPEC-PM-002-bot-runner/spec.md`
 - Bot system design: `docs/SPEC-PM-003-bot-system/spec.md`
-- Runtime ADR (proposed): `docs/adr/ADR-004-pm-bot-service-runtime.md`
+- Runtime ADR (accepted): `docs/adr/ADR-004-pm-bot-service-runtime.md`
