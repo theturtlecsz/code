@@ -1327,6 +1327,7 @@ dependencies = [
  "codex-exec",
  "codex-login",
  "codex-mcp-server",
+ "codex-pm-service",
  "codex-protocol",
  "codex-protocol-ts",
  "codex-spec-kit",
@@ -1653,6 +1654,24 @@ dependencies = [
  "tokio",
  "tracing",
  "wiremock",
+]
+
+[[package]]
+name = "codex-pm-service"
+version = "0.0.0"
+dependencies = [
+ "chrono",
+ "codex-app-server-protocol",
+ "codex-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.16",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
