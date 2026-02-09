@@ -13,6 +13,8 @@ This document is intentionally an **interface spec**: how callers interact with 
 
 The underlying **bot system architecture** (runner/service/tooling internals, queueing, IPC, allowlists) is tracked separately in `SPEC-PM-003`.
 
+PRD: `docs/SPEC-PM-002-bot-runner/PRD.md`
+
 ## Definitions (v1)
 
 - **Work Item**: A capsule-backed PM object with a stable ID and lifecycle state (defined in `SPEC-PM-001`).

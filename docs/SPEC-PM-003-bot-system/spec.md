@@ -12,6 +12,8 @@ Define the internal **bot system** that executes optional, manual automation for
 `SPEC-PM-002` is the **interface contract** (how callers interact with bot runs across CLI/TUI/headless).  
 `SPEC-PM-003` is the **system design** (how the bot runner/service/tooling actually works).
 
+PRD: `docs/SPEC-PM-003-bot-system/PRD.md`
+
 ## Goals
 
 - Define the bot runner/service architecture and lifecycle.
