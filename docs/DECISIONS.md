@@ -1,7 +1,7 @@
 # Decisions Register
 
-**Version**: 1.0.0 (2026-01-22)
-**Status**: 134 locked decisions (D1-D134)
+**Version**: 1.0.1 (2026-02-09)
+**Status**: 135 locked decisions (D1-D135)
 **Scope**: Codex-RS / Spec-Kit
 
 ***
@@ -21,6 +21,7 @@
   * [Pipeline & Gates (D1-D2, E1-E2)](#pipeline--gates-d1-d2-e1-e2)
   * [Maintenance (F1-F2)](#maintenance-f1-f2)
   * [ACE + Maieutics (H0-H7)](#ace--maieutics-h0-h7)
+* [8. Addenda (D135+)](#8-addenda-d135)
 * [Change History](#change-history)
 
 ## 1. Core Capsule Decisions (D1-D20)
@@ -236,10 +237,19 @@
 
 ***
 
+## 8. Addenda (D135+)
+
+|  ID | Choice | Decision                    | Notes                                                                                                                                                                                          |
+| --: | :----: | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D135 |   A   | Bot job management service  | Lightweight persistent service acceptable for bot job management; must be systemd-managed, auto-resume on reboot, and exit-when-idle. Does not authorize always-processing daemons or heavyweight frameworks. |
+
+***
+
 ## Change History
 
 | Version | Date       | Changes                                                              |
 | ------- | ---------- | -------------------------------------------------------------------- |
+| 1.0.1   | 2026-02-09 | Add D135 clarifying acceptable lightweight persistent service for bot job management (systemd-managed, auto-resume, exit-when-idle). |
 | 1.0.0   | 2026-01-22 | Initial canonical version; migrated from DECISION\_REGISTER.md v0.13 |
 | 0.13    | 2026-01-20 | Added D113-D134 (ARB Pass 2)                                         |
 | 0.12    | 2026-01-19 | Added D99-D112 (Reproducibility)                                     |

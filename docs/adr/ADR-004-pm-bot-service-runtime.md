@@ -1,13 +1,15 @@
 # ADR-004: PM Bot Service Runtime + Systemd Resume
 
-**Status:** Proposed\
+**Status:** Accepted\
 **Date:** 2026-02-09\
 **Deciders:** Product + Architecture\
 **Context:** PM bot runs that may span hours/days and must survive reboots
 
 ***
 
-## Decision (Proposed)
+## Decision
+
+This ADR is locked via D135 in `docs/DECISIONS.md`.
 
 Adopt a **service-first runtime** for PM bot execution (`NeedsResearch` / `NeedsReview`):
 
@@ -26,14 +28,14 @@ Long-running bot runs (hours → days) must be resilient to:
 
 A service + systemd-managed resume makes “run continuation” a product guarantee rather than a best-effort behavior.
 
-## Compatibility with locked decisions (requires clarification)
+## Compatibility with locked decisions (resolved)
 
 This ADR intersects with:
 
 - **D38 Operational footprint** (“prefer single-binary, no-daemon design; daemons only as optional legacy”).
 - **D126 Maintenance posture** (“no permanent daemon”).
 
-If accepted, this ADR likely requires a **new locked decision** (e.g., D135) that clarifies the scope of acceptable persistence:
+This intersection is resolved by **D135** (“Bot job management service”), which clarifies the scope of acceptable persistence:
 
 - *Allowed:* a lightweight, user-scoped service that is idle when no jobs exist and exists solely for job management/resume.
 - *Disallowed:* heavy frameworks, always-processing background agents, or services that become a second source of truth.
@@ -62,4 +64,3 @@ If accepted, this ADR likely requires a **new locked decision** (e.g., D135) tha
 - Canon tracker: `codex-rs/SPEC.md` (Planned: `SPEC-PM-001`/`002`/`003`)
 - Bot runner contract: `docs/SPEC-PM-002-bot-runner/spec.md`
 - Bot system design: `docs/SPEC-PM-003-bot-system/spec.md`
-
