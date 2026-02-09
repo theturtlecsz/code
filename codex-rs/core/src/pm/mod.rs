@@ -5,4 +5,6 @@
 //! - `SPEC-PM-002` (bot runner interface contract)
 //! - `SPEC-PM-003` (bot system design/implementation)
 
+pub mod artifacts;
 pub mod bot;
+pub mod work_item;
