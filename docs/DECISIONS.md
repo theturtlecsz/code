@@ -1,7 +1,7 @@
 # Decisions Register
 
-**Version**: 1.0.1 (2026-02-09)
-**Status**: 135 locked decisions (D1-D135)
+**Version**: 1.0.2 (2026-02-09)
+**Status**: 136 locked decisions (D1-D136)
 **Scope**: Codex-RS / Spec-Kit
 
 ***
@@ -242,6 +242,7 @@
 |  ID | Choice | Decision                    | Notes                                                                                                                                                                                          |
 | --: | :----: | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | D135 |   A   | Bot job management service  | Lightweight persistent service acceptable for bot job management; must be systemd-managed, auto-resume on reboot, and exit-when-idle. Does not authorize always-processing daemons or heavyweight frameworks. |
+| D136 |   A   | Bot service IPC             | IPC between Tier‑1 callers (TUI/CLI/headless) and the bot job management service uses a Unix domain socket; prefer systemd socket activation to satisfy exit-when-idle and reduce manual service management. |
 
 ***
 
@@ -249,6 +250,7 @@
 
 | Version | Date       | Changes                                                              |
 | ------- | ---------- | -------------------------------------------------------------------- |
+| 1.0.2   | 2026-02-09 | Add D136 locking Unix-domain-socket IPC (systemd socket activation preferred) for the bot job management service. |
 | 1.0.1   | 2026-02-09 | Add D135 clarifying acceptable lightweight persistent service for bot job management (systemd-managed, auto-resume, exit-when-idle). |
 | 1.0.0   | 2026-01-22 | Initial canonical version; migrated from DECISION\_REGISTER.md v0.13 |
 | 0.13    | 2026-01-20 | Added D113-D134 (ARB Pass 2)                                         |

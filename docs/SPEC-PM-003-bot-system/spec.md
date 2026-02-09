@@ -38,6 +38,7 @@ PRD: `docs/SPEC-PM-003-bot-system/PRD.md`
 - **Operational footprint posture** (D38): prefer single-binary, no-daemon design; any persistent runtime must be tightly scoped and justified.
 - **No permanent daemon (maintenance posture)** (D126): maintenance triggers are event/scheduled/on-demand; avoid “always processing” background loops.
 - **Bot job management service runtime** (D135): lightweight persistent service is allowed for bot job management; must be systemd-managed, auto-resume on reboot, and exit-when-idle (no heavyweight frameworks or always-processing daemons).
+- **Bot service IPC** (D136): IPC between Tier‑1 callers (TUI/CLI/headless) and the service uses a Unix domain socket; prefer systemd socket activation.
 - **Explainability follows capture mode** (D131) + **over-capture hard-block** (D119): the system must never persist more than policy allows; `capture=none` persists no explainability artifacts.
 - **No silent destructive actions in headless** (`SPEC-PM-001` NFR3): write operations require explicit user intent and must be auditable.
 - **Single-writer capsule** (D7): capsule writes are serialized; runner must not violate lock/queue invariants.
@@ -105,7 +106,7 @@ Fallback runtime: **ephemeral CLI runner**.
 ### CLI/Headless Integration
 
 - CLI/headless must achieve Tier‑1 parity with the TUI semantics (D113/D133).
-- Baseline: CLI/headless talks to the same service endpoint as the TUI (transport TBD).
+- Baseline: CLI/headless talks to the same service endpoint as the TUI (Unix domain socket; systemd socket-activated per D136).
 - Fallback: CLI/headless may execute the ephemeral runner directly, but must preserve identical artifacts and exit codes.
 
 ### TUI Degraded Mode
@@ -297,7 +298,7 @@ The bot system should reuse existing primitives rather than inventing new ones:
 
 ## Open Questions
 
-- What is the concrete IPC transport and auth boundary for TUI/CLI/headless → service (Unix socket vs stdio bridge vs in-process only)?
+- What is the concrete socket path + instance scoping for TUI/CLI/headless → service (e.g., per-workspace vs per-user), and how is it represented in diagnostics without leaking sensitive paths?
 - Where should a persistent run queue live (in-memory only vs capsule-backed queue events vs filesystem queue)?
 - Should `BLOCKED` become a dedicated headless exit code, or remain “exit 2 with structured blocked_reason” (per `SPEC-PM-002`)?
 - Which commands are on the initial allowlist for `NeedsReview`, and how do we represent policy overrides without violating D119/D125?

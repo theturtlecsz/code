@@ -9,12 +9,13 @@
 
 ## Decision
 
-This ADR is locked via D135 in `docs/DECISIONS.md`.
+This ADR is locked via D135 in `docs/DECISIONS.md` (IPC details are locked via D136).
 
 Adopt a **service-first runtime** for PM bot execution (`NeedsResearch` / `NeedsReview`):
 
 - A lightweight local service manages bot run lifecycle (start/stop/status/cancel/resume).
 - A **systemd user unit** ensures incomplete runs can be resumed after reboot **without interactive prompts**.
+- Tier‑1 callers (TUI/CLI/headless) communicate with the service over a **Unix domain socket** (prefer systemd socket activation; D136).
 - The **CLI remains canonical** for Tier‑1 parity: CLI commands talk to the service when available and preserve identical semantics across TUI/CLI/headless.
 - An **ephemeral CLI runner** remains as a fallback/debug mode, but is not the primary runtime for long-lived runs.
 
@@ -55,7 +56,7 @@ This intersection is resolved by **D135** (“Bot job management service”), wh
 
 ## Open Questions
 
-- Service posture: socket-activated + idle-exit vs continuously running while jobs exist.
+- Socket path + instance scoping (per-workspace vs per-user) and how it is represented in diagnostics without leaking sensitive paths.
 - Resume triggers: timer-based, state-based, or explicit “resume all incomplete” action.
 - Determinism boundary: what inputs must be snapshotted vs what drift is permitted during multi-day runs (especially for review worktrees).
 

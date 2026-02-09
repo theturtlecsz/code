@@ -54,6 +54,7 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 
 - **Prefer no-daemon posture**: D38 (`docs/DECISIONS.md` → “Retrieval & Storage (D21-D40)”).
 - **Bot job management service**: D135 (`docs/DECISIONS.md` → “Addenda (D135+)”).
+- **Bot service IPC**: D136 (`docs/DECISIONS.md` → “Addenda (D135+)”).
 - **Tier‑1 parity + headless contract**: D113 + D133 (`docs/DECISIONS.md` → “Product & Parity (A1-A2)” and “ACE + Maieutics (H0-H7)”).
 - **Maieutic pre-execution gate**: D130 (`docs/DECISIONS.md` → “ACE + Maieutics (H0-H7)”).
 - **Capture-mode enforcement + over-capture hard-block**: D131 + D119 (`docs/DECISIONS.md` → “ACE + Maieutics (H0-H7)” and “Capture Mode (C1-C2)”).
@@ -119,7 +120,7 @@ These constraints are locked in `docs/DECISIONS.md` and apply to the bot system 
 
 ## Open Questions
 
-- What IPC transport is acceptable between TUI/CLI/headless and the service (Unix socket vs stdio bridge vs in-process only)?
+- What is the concrete socket path + instance scoping for the service (per-workspace vs per-user), and how do we expose it in `doctor` output without leaking sensitive paths?
 - What triggers resume after reboot (timer-driven, socket-activated, explicit “resume all incomplete”)?
 - What is the concrete artifact schema for “finalization rebase conflict” details and manual resolution instructions?
 - What are the initial allowlisted local commands for `NeedsReview` validation, and where is that policy defined?
