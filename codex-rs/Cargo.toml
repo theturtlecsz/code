@@ -20,6 +20,7 @@ members = [
     "mcp-test-server",
     "mcp-types",
     "ollama",
+    "pm-service",  # SPEC-PM-003: Bot job management service
     "process-hardening",  # SYNC-002: Security hardening
     "protocol",
     "protocol-ts",
@@ -68,6 +69,7 @@ codex-login = { path = "login" }
 codex-mcp-client = { path = "mcp-client" }
 codex-mcp-server = { path = "mcp-server" }
 codex-ollama = { path = "ollama" }
+codex-pm-service = { path = "pm-service" }
 codex-process-hardening = { path = "process-hardening" }
 codex-protocol = { path = "protocol" }
 codex-protocol-ts = { path = "protocol-ts" }
