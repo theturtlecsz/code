@@ -278,5 +278,5 @@ All web research used to form recommendations should be captured into capsule ar
 
 ## Supporting Docs
 
-- `docs/SPEC-PM-001-project-management/ARCHITECT-BRIEF-maieutic-and-prd.md`: research + design drift analysis for assisted maieutics and PRD generation.
+- `docs/SPEC-PM-001-project-management/ARCHITECT-BRIEF-maieutic-and-prd-generation.md`: research + design drift analysis for assisted maieutics and PRD generation.
 - `docs/SPEC-PM-002-bot-runner/spec.md`: SPEC stub for Devin-style research/review bot runner semantics.
