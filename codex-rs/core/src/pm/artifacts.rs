@@ -27,6 +27,8 @@ pub enum BotRunState {
     Succeeded,
     /// Completed with issues requiring human attention.
     NeedsAttention,
+    /// Run is blocked on an external dependency or condition.
+    Blocked,
     /// Run failed due to infrastructure or logic error.
     Failed,
     /// Run was cancelled by user (PM-D13: partial artifacts preserved).
@@ -40,6 +42,7 @@ impl BotRunState {
             self,
             BotRunState::Succeeded
                 | BotRunState::NeedsAttention
+                | BotRunState::Blocked
                 | BotRunState::Failed
                 | BotRunState::Cancelled
         )
@@ -118,6 +121,21 @@ pub struct ResearchReport {
     pub findings: Vec<ResearchFinding>,
     /// Overall summary.
     pub summary: String,
+    /// Whether the report was produced in degraded mode (no NotebookLM).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub degraded: bool,
+    /// Determinism boundary: analysis base commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_commit: Option<String>,
+    /// Determinism boundary: input snapshot URIs/IDs used.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_uris: Vec<String>,
+    /// Data sources used for this report.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources_used: Vec<String>,
+    /// Open questions that need further investigation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_questions: Vec<String>,
 }
 
 impl ResearchReport {
@@ -149,6 +167,12 @@ pub struct ReviewReport {
     pub has_patches: bool,
     /// Overall quality assessment.
     pub summary: String,
+    /// Determinism boundary: analysis base commit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_commit: Option<String>,
+    /// Determinism boundary: input snapshot URIs/IDs used.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_uris: Vec<String>,
 }
 
 impl ReviewReport {
@@ -177,6 +201,69 @@ pub enum ReviewSeverity {
     Critical,
 }
 
+/// Rebase outcome for a patch bundle.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RebaseStatus {
+    /// Rebase succeeded without conflicts.
+    Clean,
+    /// Rebase failed with merge conflicts.
+    Conflict,
+    /// No rebase was attempted (no target specified).
+    NotAttempted,
+}
+
+/// Patch bundle produced by the review engine in write-mode.
+///
+/// Contains the unified diff, branch metadata, and rebase outcome.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct PatchBundle {
+    pub schema_version: String,
+    pub run_id: String,
+    pub work_item_id: String,
+    pub timestamp: String,
+    /// Bot-owned branch name containing the patch commits.
+    pub branch_name: String,
+    /// Commit the patch was created against.
+    pub base_commit: String,
+    /// Branch/commit the patch was rebased onto (if any).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_commit: Option<String>,
+    /// Unified diff of the patch.
+    pub patch_diff: String,
+    /// Files modified by the patch.
+    pub files_changed: Vec<String>,
+    /// Outcome of the rebase step.
+    pub rebase_status: RebaseStatus,
+}
+
+impl PatchBundle {
+    pub const SCHEMA_VERSION: &'static str = "patch_bundle@1.0";
+}
+
+/// Summary of rebase conflicts for human resolution.
+///
+/// Produced when write-mode review hits merge conflicts during rebase.
+/// Accompanies the original `PatchBundle` so the user has both the
+/// original patch and the conflict details.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct ConflictSummary {
+    pub schema_version: String,
+    pub run_id: String,
+    pub work_item_id: String,
+    pub timestamp: String,
+    /// Files that had merge conflicts.
+    pub conflicting_files: Vec<String>,
+    /// URI of the original (pre-rebase) patch bundle artifact.
+    pub original_patch_uri: String,
+    /// Step-by-step instructions for manual resolution.
+    pub resolution_instructions: Vec<String>,
+}
+
+impl ConflictSummary {
+    pub const SCHEMA_VERSION: &'static str = "conflict_summary@1.0";
+}
+
 /// Discriminated union of bot run results.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(tag = "kind")]
@@ -197,6 +284,7 @@ mod tests {
         assert!(!BotRunState::Running.is_terminal());
         assert!(BotRunState::Succeeded.is_terminal());
         assert!(BotRunState::NeedsAttention.is_terminal());
+        assert!(BotRunState::Blocked.is_terminal());
         assert!(BotRunState::Failed.is_terminal());
         assert!(BotRunState::Cancelled.is_terminal());
     }
@@ -262,6 +350,11 @@ mod tests {
                     confidence: None,
                 }],
                 summary: "One finding".to_string(),
+                degraded: false,
+                base_commit: None,
+                input_uris: vec![],
+                sources_used: vec![],
+                open_questions: vec![],
             },
         };
 

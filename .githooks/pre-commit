@@ -52,7 +52,7 @@ if [[ -n "$BRANCH_NAME" && "$BRANCH_NAME" != "HEAD" && "$BRANCH_NAME" != "main" 
     fi
 
     # Check for capsule checkpoint marker
-    if ! grep -q -- "- Capsule checkpoint:" "$BRIEF_PATH"; then
+    if ! grep -qE -- "^[[:space:]]*[-*] Capsule checkpoint:" "$BRIEF_PATH"; then
         echo "❌ Branch brief missing capsule checkpoint: $BRIEF_PATH"
         echo ""
         echo "To add the capsule snapshot, run:"

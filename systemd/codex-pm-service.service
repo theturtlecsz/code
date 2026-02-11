@@ -3,27 +3,31 @@
 # Lightweight per-user service that manages bot runs for work items.
 # Listens on $XDG_RUNTIME_DIR/codex-pm.sock via JSON-RPC-lite (PM-D7, PM-D8).
 #
-# Install:
+# Install (socket activation — preferred):
 #   mkdir -p ~/.config/systemd/user
-#   cp codex-pm-service.service ~/.config/systemd/user/
+#   cp codex-pm-service.{service,socket} ~/.config/systemd/user/
 #   systemctl --user daemon-reload
-#   systemctl --user enable codex-pm-service
+#   systemctl --user enable codex-pm-service.socket   # Enable the SOCKET, not this service
+#
+# Auto-resume after reboot (enable once):
+#   cp codex-pm-resume.{timer,service} ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now codex-pm-resume.timer
+#
+# The socket unit starts this service on first connection.
+# Combined with exit-when-idle (D135), the service only runs while it has work.
+# The resume timer pokes the socket 30s after login so incomplete runs are
+# resumed even if no CLI/TUI client connects.
 #
 # Usage:
-#   systemctl --user start codex-pm-service
 #   systemctl --user status codex-pm-service
 #   journalctl --user -u codex-pm-service -f
-#
-# The service is intended to be **exit-when-idle** (D135). In v1, prefer
-# systemd socket activation (D136) so the service only runs while it has work.
-#
-# NOTE: This unit is a development baseline; production hardening (socket
-# activation + auto-resume semantics) is tracked in SPEC-PM-003 Phase-1.
 
 [Unit]
 Description=Codex PM Bot Job Management Service
 Documentation=https://github.com/anthropics/codex/tree/main/docs/SPEC-PM-003-bot-system
-After=default.target
+Requires=codex-pm-service.socket
+After=codex-pm-service.socket
 
 [Service]
 Type=simple
@@ -40,11 +44,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=%t
+ReadWritePaths=%t %h/.local/share/codex-pm
 
 # Resource limits (lightweight service)
 MemoryMax=256M
 TasksMax=64
 
-[Install]
-WantedBy=default.target

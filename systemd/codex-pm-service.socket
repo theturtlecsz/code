@@ -1,0 +1,21 @@
+# codex-pm-service socket activation (D136)
+#
+# Activates codex-pm-service on first connection to the socket.
+# Combined with exit-when-idle (D135), the service only runs while
+# it has active work.
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp codex-pm-service.socket ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable codex-pm-service.socket
+
+[Unit]
+Description=Codex PM Service Socket (D136)
+
+[Socket]
+ListenStream=%t/codex-pm.sock
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target
