@@ -75,9 +75,9 @@ pub struct BotRunManager {
     terminal_tx: broadcast::Sender<BotTerminalNotification>,
     /// Service start time.
     started_at: Instant,
-    /// Last activity timestamp for idle timeout (D135).
+    /// Last activity timestamp (used for diagnostics).
     last_activity: Arc<Mutex<Instant>>,
-    /// Active connection count for idle timeout tracking.
+    /// Active connection count (used for diagnostics).
     connection_count: Arc<AtomicU32>,
     /// Persistence store for durable run artifacts (local cache).
     store: Arc<PersistenceStore>,

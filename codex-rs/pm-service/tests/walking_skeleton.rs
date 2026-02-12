@@ -687,8 +687,8 @@ async fn capsule_resume_produces_mv2_uris() {
 // ── Auto-resume: reboot simulation ──────────────────────────────────────
 
 /// Start a service that resumes incomplete runs during startup, then
-/// accept client connections.  This mirrors what happens when the
-/// `codex-pm-resume.timer` triggers socket-activation after reboot.
+/// accept client connections. This mirrors the main service startup path
+/// when started on login/restart (D141).
 async fn start_service_with_resume(
     socket_path: &std::path::Path,
     data_dir: &std::path::Path,
@@ -718,11 +718,9 @@ async fn start_service_with_resume(
     (manager, handle)
 }
 
-/// Simulate reboot: incomplete run on disk → service restart (with
-/// resume_incomplete) → ping-style connect → verify run was resumed.
-///
-/// This is the end-to-end proof that `codex-pm-resume.timer` +
-/// `--ping` achieves auto-resume without a real CLI/TUI client.
+/// Simulate restart/login: incomplete run on disk → service restart
+/// (with resume_incomplete at startup) → client connect → verify run
+/// was resumed.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reboot_simulation_resumes_incomplete_runs() {
     use codex_core::pm::bot::{BotCaptureMode, BotKind, BotRunRequest, BotWriteMode};
@@ -809,10 +807,10 @@ async fn reboot_simulation_resumes_incomplete_runs() {
     server_handle.abort();
 }
 
-/// Verify that after reboot-resume, the idle timer (D135) will still
-/// fire correctly: 0 connections + 0 active runs = eligible for idle exit.
+/// Verify that after reboot-resume, the service returns to a quiescent state:
+/// 0 connections + 0 active runs.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn reboot_resume_preserves_idle_exit_eligibility() {
+async fn reboot_resume_preserves_quiescent_state() {
     use codex_core::pm::bot::{BotCaptureMode, BotKind, BotRunRequest, BotWriteMode};
 
     let temp_dir = tempfile::TempDir::new().unwrap();
@@ -1378,19 +1376,16 @@ async fn review_rebase_conflict_yields_needs_attention() {
 
 // ── Auto-resume: full reboot→capsule→mv2:// acceptance test ─────────
 
-/// **Acceptance test for auto-resume after reboot (D135 compliance).**
+/// **Acceptance test for auto-resume after restart/login.**
 ///
-/// Simulates the exact systemd path:
+/// Simulates the systemd behavior:
 ///   1. Service instance #1 accepts a run and crashes mid-flight
 ///      (incomplete request on disk, no terminal log)
 ///   2. Service instance #1 is gone (simulating reboot)
-///   3. `codex-pm-resume.timer` fires → socket-activation starts
-///      service instance #2
-///   4. Instance #2 calls `resume_incomplete()` at startup
-///   5. `--ping` style client connects, handshakes, disconnects
-///   6. Verify: run is now terminal (succeeded), mv2:// capsule
-///      artifacts exist, local cache has all files, and idle-exit
-///      conditions are met (0 connections, 0 active runs → D135)
+///   3. Service instance #2 starts and calls `resume_incomplete()` at startup
+///   4. A client connects and verifies status/artifacts
+///   5. Verify: run is now terminal (succeeded), mv2:// capsule
+///      artifacts exist, local cache has all files
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reboot_resume_full_flow_with_capsule_mv2_artifacts() {
     use codex_core::pm::bot::{BotCaptureMode, BotKind, BotRunRequest, BotWriteMode};
@@ -1424,10 +1419,8 @@ async fn reboot_resume_full_flow_with_capsule_mv2_artifacts() {
 
     // ── Phase 2: "After reboot" — start service with capsule ─────────
     //
-    // This mirrors what happens when:
-    //   codex-pm-resume.timer → codex-pm-resume.service --ping
-    //                        → socket-activation → codex-pm-service
-    //                        → resume_incomplete() before IPC
+    // This mirrors the main service startup path:
+    //   codex-pm-service starts → resume_incomplete() before IPC
     let capsule_path = workspace_path.join(".speckit/memvid/workspace.mv2");
     if let Some(parent) = capsule_path.parent() {
         std::fs::create_dir_all(parent).unwrap();
@@ -1459,7 +1452,7 @@ async fn reboot_resume_full_flow_with_capsule_mv2_artifacts() {
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
 
-    // ── Phase 3: --ping style connect (what the timer does) ──────────
+    // ── Phase 3: client connect + handshake ─────────────────────────
     let mut client = TestClient::connect(&socket_path);
     client.handshake();
 
@@ -1533,8 +1526,8 @@ async fn reboot_resume_full_flow_with_capsule_mv2_artifacts() {
         "Should contain checkpoint URIs in {uri_strs:?}"
     );
 
-    // ── Phase 5: D135 idle-exit eligibility ──────────────────────────
-    // After resume + ping, the service should be idle-exit eligible
+    // ── Phase 5: quiescent state ─────────────────────────────────────
+    // After resume + client disconnect, the service should be quiescent
     drop(client); // disconnect
     tokio::time::sleep(Duration::from_millis(50)).await;
 

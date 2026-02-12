@@ -3,21 +3,16 @@
 # Lightweight per-user service that manages bot runs for work items.
 # Listens on $XDG_RUNTIME_DIR/codex-pm.sock via JSON-RPC-lite (PM-D7, PM-D8).
 #
-# Install (socket activation — preferred):
+# Locked decisions:
+# - D136: Unix-domain-socket IPC (socket activation supported)
+# - D141: start on login (`WantedBy=default.target`)
+# - D142: stay running while logged in (idle is acceptable; no always-processing loops)
+#
+# Install:
 #   mkdir -p ~/.config/systemd/user
 #   cp codex-pm-service.{service,socket} ~/.config/systemd/user/
 #   systemctl --user daemon-reload
-#   systemctl --user enable codex-pm-service.socket   # Enable the SOCKET, not this service
-#
-# Auto-resume after reboot (enable once):
-#   cp codex-pm-resume.{timer,service} ~/.config/systemd/user/
-#   systemctl --user daemon-reload
-#   systemctl --user enable --now codex-pm-resume.timer
-#
-# The socket unit starts this service on first connection.
-# Combined with exit-when-idle (D135), the service only runs while it has work.
-# The resume timer pokes the socket 30s after login so incomplete runs are
-# resumed even if no CLI/TUI client connects.
+#   systemctl --user enable --now codex-pm-service.service
 #
 # Usage:
 #   systemctl --user status codex-pm-service
@@ -31,6 +26,8 @@ After=codex-pm-service.socket
 
 [Service]
 Type=simple
+# Receive the listening socket from codex-pm-service.socket (D136).
+Sockets=codex-pm-service.socket
 ExecStart=%h/.cargo/bin/codex-pm-service
 Restart=on-failure
 RestartSec=5
@@ -50,3 +47,5 @@ ReadWritePaths=%t %h/.local/share/codex-pm
 MemoryMax=256M
 TasksMax=64
 
+[Install]
+WantedBy=default.target

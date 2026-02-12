@@ -1,14 +1,16 @@
-# codex-pm-service socket activation (D136)
+# codex-pm-service socket (D136)
 #
-# Activates codex-pm-service on first connection to the socket.
-# Combined with exit-when-idle (D135), the service only runs while
-# it has active work.
+# Provides the Unix-domain socket for `codex-pm-service`.
+#
+# Locked decisions:
+# - D136: Unix-domain-socket IPC (systemd socket passing supported)
+# - D141: service starts on login (enable the service unit)
 #
 # Install:
 #   mkdir -p ~/.config/systemd/user
-#   cp codex-pm-service.socket ~/.config/systemd/user/
+#   cp codex-pm-service.{service,socket} ~/.config/systemd/user/
 #   systemctl --user daemon-reload
-#   systemctl --user enable codex-pm-service.socket
+#   systemctl --user enable --now codex-pm-service.service
 
 [Unit]
 Description=Codex PM Service Socket (D136)

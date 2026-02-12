@@ -3,17 +3,14 @@
 //! Lightweight per-user service for bot job management (SPEC-PM-003).
 //! Managed by systemd user unit (PM-D6).
 //!
-//! Supports socket activation (D136), exit-when-idle (D135), and
-//! auto-resume of incomplete runs on startup (Phase-1.5).
+//! Supports socket activation (D136) and auto-resume of incomplete runs on startup.
+//! Intended systemd lifecycle: start on login (D141) and stay running while logged in (D142).
 //!
 //! ## Modes
 //!
-//! - **Service mode** (default): start the IPC server, resume incomplete
-//!   runs, accept connections, idle-exit after timeout.
+//! - **Service mode** (default): start the IPC server and resume incomplete runs on startup.
 //! - **`--ping`**: connect to the running service socket, send a hello
-//!   handshake, verify the response, then exit. Used by
-//!   `codex-pm-resume.service` to trigger socket activation after
-//!   reboot so that `resume_incomplete()` runs without a real client.
+//!   handshake, verify the response, then exit. Useful for diagnostics.
 
 use std::io::{BufRead, Write};
 use std::os::unix::io::FromRawFd;
@@ -23,15 +20,9 @@ use codex_pm_service::manager::BotRunManager;
 use codex_pm_service::persistence::PersistenceStore;
 use tokio::net::UnixListener;
 
-/// Idle timeout: exit after 60 seconds with no connections and no active runs.
-const IDLE_TIMEOUT_SECS: u64 = 60;
-
-/// Poll interval for the idle timer.
-const IDLE_POLL_INTERVAL_SECS: u64 = 10;
-
-/// Connect to the service socket, send a hello handshake, verify the
-/// response, then exit.  Used by `codex-pm-resume.timer` to trigger
-/// socket-activation after reboot so `resume_incomplete()` runs.
+/// Connect to the service socket, send a hello handshake, verify the response, then exit.
+///
+/// This is a simple liveness/diagnostics probe.
 fn ping() -> std::io::Result<()> {
     let path = codex_pm_service::default_socket_path();
     let mut stream = std::os::unix::net::UnixStream::connect(&path).map_err(|e| {
@@ -42,7 +33,7 @@ fn ping() -> std::io::Result<()> {
 
     // Send hello JSON-RPC (newline-delimited)
     let hello = format!(
-        r#"{{"id":0,"method":"hello","params":{{"protocol_version":"{}","client_version":"resume-timer"}}}}"#,
+        r#"{{"id":0,"method":"hello","params":{{"protocol_version":"{}","client_version":"ping"}}}}"#,
         codex_pm_service::PROTOCOL_VERSION,
     );
     stream.write_all(hello.as_bytes())?;
@@ -107,7 +98,7 @@ fn create_listener() -> std::io::Result<UnixListener> {
 }
 
 fn main() -> std::io::Result<()> {
-    // --ping: trigger socket activation and exit (used by codex-pm-resume.timer)
+    // --ping: liveness probe and exit.
     if std::env::args().nth(1).as_deref() == Some("--ping") {
         return ping();
     }
@@ -154,28 +145,6 @@ async fn run_service() -> std::io::Result<()> {
             mgr_signal.active_run_count().await
         );
         let _ = shutdown_tx_signal.send(true);
-    });
-
-    // Idle timer task (D135): exit after IDLE_TIMEOUT_SECS with no activity
-    let mgr_idle = Arc::clone(&manager);
-    tokio::spawn(async move {
-        let poll_interval = tokio::time::Duration::from_secs(IDLE_POLL_INTERVAL_SECS);
-        let idle_timeout = std::time::Duration::from_secs(IDLE_TIMEOUT_SECS);
-        loop {
-            tokio::time::sleep(poll_interval).await;
-
-            let active_runs = mgr_idle.active_run_count().await;
-            let connections = mgr_idle.connection_count();
-            let elapsed = mgr_idle.last_activity_elapsed().await;
-
-            if active_runs == 0 && connections == 0 && elapsed >= idle_timeout {
-                tracing::info!(
-                    "Idle timeout ({IDLE_TIMEOUT_SECS}s): no connections, no active runs. Exiting."
-                );
-                let _ = shutdown_tx.send(true);
-                break;
-            }
-        }
     });
 
     // Start IPC listener (blocks until shutdown)
