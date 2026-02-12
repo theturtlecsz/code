@@ -14,6 +14,14 @@ Define the internal **bot system** that executes optional, manual automation for
 
 PRD: `docs/SPEC-PM-003-bot-system/PRD.md`
 
+## Design / Research Inputs (supporting)
+
+These documents capture durable context from design and research sessions. They are **not** part of the locked decision register unless a point is also locked in `docs/DECISIONS.md`.
+
+- Design Q&A transcript (2026-02-09): `docs/SPEC-PM-003-bot-system/design-qa-transcript.md`
+- Product thinking for PM-as-spec-management (SPEC-PM-001): `docs/SPEC-PM-003-bot-system/product-analysis.md`
+- External research digest (informational): `docs/SPEC-PM-003-bot-system/research-digest.md`
+
 ## Goals
 
 - Define the bot runner/service architecture and lifecycle.
@@ -42,6 +50,28 @@ PRD: `docs/SPEC-PM-003-bot-system/PRD.md`
 - **Explainability follows capture mode** (D131) + **over-capture hard-block** (D119): the system must never persist more than policy allows; `capture=none` persists no explainability artifacts.
 - **No silent destructive actions in headless** (`SPEC-PM-001` NFR3): write operations require explicit user intent and must be auditable.
 - **Single-writer capsule** (D7): capsule writes are serialized; runner must not violate lock/queue invariants.
+
+## Current Intended Direction (from design transcript)
+
+The 2026-02-09 design session produced additional decisions that are **not locked** in `docs/DECISIONS.md` (unless they match a D-number above). Where the transcript conflicts with locked decisions, the locked decision wins.
+
+**Proposed (implemented in `codex-rs/pm-service/` + `codex-rs/cli/src/pm_cmd.rs`)**
+
+- **Service scope**: per-user service (single socket) that can manage multiple workspaces; every IPC request includes `workspace_path` for routing.
+- **Socket path**: `$XDG_RUNTIME_DIR/codex-pm.sock` (systemd `%t/codex-pm.sock`).
+- **IPC protocol**: newline-delimited JSON-RPC-lite with an explicit `hello` handshake and protocol versioning.
+- **`--wait` behavior**: keepalive connection with push notifications (`bot.terminal`) rather than polling.
+- **Duplicate handling**: reject duplicate active runs for the same `(workspace_path, work_item_id, kind)`; allow cross-kind concurrency.
+- **Capture posture for bot runs**: reject `capture=none` for `pm bot run` (require `>= prompts_only`).
+
+**Proposed (not yet fully implemented)**
+
+- **Checkpoint cadence**: hybrid event-driven checkpoints with a time floor (e.g., every 30 minutes).
+- **Filesystem projection root**: `docs/specs/<WORK_ITEM_ID>/runs/` (service writes best-effort projections; capsule remains SoR).
+
+**Conflict resolved by locked decisions**
+
+- The transcript contains a “never exit” idle posture; this is superseded by **D135 exit-when-idle**.
 
 ## Service-First Runtime (D135)
 
@@ -202,8 +232,8 @@ Recommended enforcement:
 
 - Network allowed for web research (Tavily MCP preferred; generic fallback allowed).
 - NotebookLM posture is **policy-defined**:
-  - If required but unavailable/unconfigured, the run terminates as `blocked` with structured output.
-  - If allowed to run degraded, the run must label outputs as degraded and persist replay/audit inputs accordingly.
+  - If `allow_degraded=true` (current implementation default), proceed in degraded mode when NotebookLM is unavailable, label outputs degraded, and persist replay/audit inputs accordingly.
+  - If `allow_degraded=false`, the run terminates as `blocked` with structured output.
 - Must not create worktrees/branches or modify repo files.
 
 ### NeedsReview
@@ -255,6 +285,7 @@ Checkpoint artifacts remain valid as analysis even if the final patch requires m
 - All persistence must be capture-mode compliant (D131/D119).
 - `prompts_only` should prefer export-safe templates + hashes (see `WebResearchBundle` contract in `SPEC-PM-001`).
 - `full_io` may store extracted content, but must remain excluded from safe export per policy.
+- Local disk persistence may be used as a **fast resume cache**, but the capsule remains the source of record for audit/replay (D114).
 
 ## Product Knowledge Integration (ADR-003, v1)
 
@@ -298,11 +329,9 @@ The bot system should reuse existing primitives rather than inventing new ones:
 
 ## Open Questions
 
-- What is the concrete socket path + instance scoping for TUI/CLI/headless → service (e.g., per-workspace vs per-user), and how is it represented in diagnostics without leaking sensitive paths?
-- Where should a persistent run queue live (in-memory only vs capsule-backed queue events vs filesystem queue)?
 - Should `BLOCKED` become a dedicated headless exit code, or remain “exit 2 with structured blocked_reason” (per `SPEC-PM-002`)?
 - Which commands are on the initial allowlist for `NeedsReview`, and how do we represent policy overrides without violating D119/D125?
-- Should “resume after reboot” be timer-driven, socket-activation-driven, or an explicit user action that systemd replays?
+- Should “resume after reboot/login” be timer-driven, socket-activation-driven, or an explicit user action that systemd replays?
 - What is the exact artifact schema for “finalization rebase conflict” details and manual resolution instructions?
 
 ## Implementation Sequencing (proposed)

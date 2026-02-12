@@ -9,6 +9,7 @@
 //! - `code speckit pm bot status --id <ID>`
 //! - `code speckit pm bot runs --id <ID>`
 //! - `code speckit pm bot cancel --id <ID> --run <RUN_ID>`
+//! - `code speckit pm bot resume --id <ID> --run <RUN_ID>`
 //! - `code speckit pm service status`
 //! - `code speckit pm service doctor`
 
@@ -55,6 +56,8 @@ pub enum BotSubcommand {
     Show(BotShowArgs),
     /// Cancel an active run.
     Cancel(BotCancelArgs),
+    /// Resume a run that is incomplete/failed but resumable.
+    Resume(BotResumeArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -168,6 +171,29 @@ pub struct BotCancelArgs {
     pub work_item_id: String,
 
     /// Run ID to cancel.
+    #[arg(long = "run", short = 'r')]
+    pub run_id: String,
+
+    /// Working directory.
+    #[arg(long = "cwd", short = 'C')]
+    pub cwd: Option<PathBuf>,
+
+    /// Output as JSON.
+    #[arg(long = "json", short = 'j')]
+    pub json: bool,
+
+    /// Override socket path.
+    #[arg(long = "socket")]
+    pub socket: Option<PathBuf>,
+}
+
+#[derive(Debug, Parser)]
+pub struct BotResumeArgs {
+    /// Work item ID.
+    #[arg(long = "id", short = 'i')]
+    pub work_item_id: String,
+
+    /// Run ID to resume.
     #[arg(long = "run", short = 'r')]
     pub run_id: String,
 
@@ -533,6 +559,7 @@ impl BotCli {
             BotSubcommand::Runs(args) => cmd_bot_runs(args),
             BotSubcommand::Show(args) => cmd_bot_show(args),
             BotSubcommand::Cancel(args) => cmd_bot_cancel(args),
+            BotSubcommand::Resume(args) => cmd_bot_resume(args),
         }
     }
 }
@@ -736,6 +763,31 @@ fn cmd_bot_cancel(args: &BotCancelArgs) -> Result<(), String> {
     } else {
         println!(
             "Run {} cancelled (status: {})",
+            result.get("run_id").and_then(|v| v.as_str()).unwrap_or("?"),
+            result.get("status").and_then(|v| v.as_str()).unwrap_or("?"),
+        );
+    }
+
+    Ok(())
+}
+
+fn cmd_bot_resume(args: &BotResumeArgs) -> Result<(), String> {
+    let params = serde_json::json!({
+        "workspace_path": resolve_cwd(&args.cwd),
+        "work_item_id": args.work_item_id,
+        "run_id": args.run_id,
+    });
+
+    let result = send_rpc(args.socket.as_ref(), "bot.resume", params).map_err(|e| e.to_string())?;
+
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".to_string())
+        );
+    } else {
+        println!(
+            "Run {} resumed (status: {})",
             result.get("run_id").and_then(|v| v.as_str()).unwrap_or("?"),
             result.get("status").and_then(|v| v.as_str()).unwrap_or("?"),
         );

@@ -76,8 +76,8 @@ PRD: `docs/SPEC-PM-002-bot-runner/PRD.md`
 - Work item + attached PRD/intake form data.
 - Capsule artifacts linked to the work item (intake/grounding/reports/evidence).
 - `NeedsResearch` dependency posture is **policy-defined**:
-  - If NotebookLM (or equivalent Tier‑2 grounding) is required but unavailable, the run terminates as **BLOCKED** with structured output.
-  - If degraded operation is allowed, outputs must be labeled degraded and preserve replay/audit inputs.
+  - If degraded operation is disallowed (`allow_degraded=false`) and NotebookLM (or equivalent Tier‑2 grounding) is unavailable, the run terminates as **BLOCKED** with structured output.
+  - If degraded operation is allowed (`allow_degraded=true`; current implementation default), the run proceeds in degraded mode and outputs must be labeled degraded and preserve replay/audit inputs.
 - Web research is allowed via both:
   - Tavily MCP (preferred; pinned locally), and
   - the client’s default/generic web research tooling.
@@ -114,6 +114,13 @@ Run configuration (proposal):
 - `code speckit pm bot status --id <WORK_ITEM_ID> [--json]`
 - `code speckit pm bot runs --id <WORK_ITEM_ID> [--limit N] [--json]`
 - `code speckit pm bot show --id <WORK_ITEM_ID> --run <RUN_ID> [--format md|json]`
+- `code speckit pm bot cancel --id <WORK_ITEM_ID> --run <RUN_ID> [--json]`
+- `code speckit pm bot resume --id <WORK_ITEM_ID> --run <RUN_ID> [--json]`
+
+### Service Management (Tier‑1, proposal)
+
+- `code speckit pm service status [--json]`
+- `code speckit pm service doctor [--json]`
 
 ### TUI Aliases (Tier‑1 parity)
 
@@ -160,7 +167,7 @@ Exit codes:
   - `10`: needs input (invalid request / work item missing required data / work item not eligible / missing required flags)
   - `11`: needs approval (write-mode requested but not explicitly allowed in headless policy/config)
   - `13`: invariant violation (headless attempted to prompt)
-- For `pm bot run --wait` (poll until terminal state and then exit):
+- For `pm bot run --wait` (subscribe and wait for a terminal notification, then exit):
   - `0`: terminal `succeeded`
   - `2`: terminal `blocked` or `cancelled`
   - `3`: terminal `failed`
@@ -260,7 +267,7 @@ Long-lived runs must remain usable in headless mode without streaming UI:
 
 Capture-mode compliance:
 
-- `capture=none`: no projections/artifacts that would violate D131 (the runner may still display in-memory UI guidance).
+- `capture=none`: rejected for bot runs (return “needs input”, exit code `10`).
 - `prompts_only`: projections must be export-safe (bounded snippets + hashes as defined by `WebResearchBundle` rules in `SPEC-PM-001`).
 - `full_io`: projections may include extracted content, but must remain excluded from safe export per policy.
 
