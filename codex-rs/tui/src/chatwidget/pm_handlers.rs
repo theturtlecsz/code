@@ -1,11 +1,28 @@
 //! SPEC-PM-004: PM overlay keyboard handlers
 //!
 //! Follows the pattern established by limits_handlers.rs and help_handlers.rs.
+//! Dispatches between list mode and detail mode based on overlay state.
 
 use super::ChatWidget;
 use crossterm::event::{KeyCode, KeyEvent};
 
 pub(super) fn handle_pm_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
+    let Some(ref overlay) = chat.pm.overlay else {
+        return false;
+    };
+
+    if overlay.is_detail_mode() {
+        handle_detail_key(chat, key_event)
+    } else {
+        handle_list_key(chat, key_event)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// List-mode keys
+// ---------------------------------------------------------------------------
+
+fn handle_list_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
     let Some(ref overlay) = chat.pm.overlay else {
         return false;
     };
@@ -16,11 +33,17 @@ pub(super) fn handle_pm_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> b
             chat.request_redraw();
             true
         }
+        KeyCode::Enter => {
+            let sel = overlay.selected();
+            if overlay.open_detail_for_visible(sel) {
+                chat.request_redraw();
+            }
+            true
+        }
         KeyCode::Up => {
             let sel = overlay.selected();
             if sel > 0 {
                 overlay.set_selected(sel - 1);
-                // Scroll up if selection is above viewport
                 let scroll = overlay.scroll() as usize;
                 if sel - 1 < scroll {
                     overlay.set_scroll((sel - 1) as u16);
@@ -34,7 +57,6 @@ pub(super) fn handle_pm_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> b
             let max = overlay.visible_count().saturating_sub(1);
             if sel < max {
                 overlay.set_selected(sel + 1);
-                // Scroll down if selection is below viewport
                 let scroll = overlay.scroll() as usize;
                 let visible = overlay.visible_rows().max(1) as usize;
                 if sel + 1 >= scroll + visible {
@@ -53,13 +75,11 @@ pub(super) fn handle_pm_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> b
         }
         KeyCode::Left => {
             let sel = overlay.selected();
-            // If expanded, collapse; otherwise jump to parent
             if overlay.is_expanded_visible(sel) {
                 overlay.collapse_visible(sel);
                 chat.request_redraw();
             } else if let Some(parent) = overlay.parent_of_visible(sel) {
                 overlay.set_selected(parent);
-                // Adjust scroll if needed
                 let scroll = overlay.scroll() as usize;
                 if parent < scroll {
                     overlay.set_scroll(parent as u16);
@@ -109,6 +129,66 @@ pub(super) fn handle_pm_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> b
             chat.request_redraw();
             true
         }
+        _ => false,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Detail-mode keys
+// ---------------------------------------------------------------------------
+
+fn handle_detail_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
+    let Some(ref overlay) = chat.pm.overlay else {
+        return false;
+    };
+
+    match key_event.code {
+        KeyCode::Esc => {
+            // Return to list — do NOT close overlay. Selection/scroll preserved.
+            overlay.close_detail();
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Up => {
+            let s = overlay.detail_scroll();
+            if s > 0 {
+                overlay.set_detail_scroll(s - 1);
+                chat.request_redraw();
+            }
+            true
+        }
+        KeyCode::Down => {
+            let s = overlay.detail_scroll();
+            overlay.set_detail_scroll(s + 1); // clamped by setter
+            chat.request_redraw();
+            true
+        }
+        KeyCode::PageUp => {
+            let step = overlay.detail_visible_rows();
+            let s = overlay.detail_scroll();
+            overlay.set_detail_scroll(s.saturating_sub(step));
+            chat.request_redraw();
+            true
+        }
+        KeyCode::PageDown => {
+            let step = overlay.detail_visible_rows();
+            let s = overlay.detail_scroll();
+            overlay.set_detail_scroll(s + step); // clamped by setter
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Home => {
+            overlay.set_detail_scroll(0);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::End => {
+            overlay.set_detail_scroll(u16::MAX); // clamped to max by setter
+            chat.request_redraw();
+            true
+        }
+        // Left/Right ignored in detail mode per PM-UX-D12
+        KeyCode::Left | KeyCode::Right => true,
         _ => false,
     }
 }
