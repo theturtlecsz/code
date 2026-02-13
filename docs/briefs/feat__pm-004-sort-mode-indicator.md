@@ -72,9 +72,16 @@ cd codex-rs && cargo test -p codex-tui --lib pm_overlay
 
 Expected output: All tests pass, including 5 new sort mode tests.
 
+## Fixes Applied
+
+* Made `SortMode` enum `pub(super)` to match method visibility (fixes `private_interfaces` warning)
+* Added `#[allow(dead_code)]` to `SortMode` enum and `cycle_sort_mode()` method (used in tests)
+* Simplified boolean expression in test per clippy suggestion
+
 ## Verification Checklist
 
 * [x] `cargo fmt --all -- --check` passes
+* [x] `cargo clippy -p codex-tui --all-targets --all-features -- -D warnings` passes
 * [x] `cargo test -p codex-tui --lib pm_overlay` passes (37/37 tests)
 * [x] Default sort mode is UpdatedDesc
 * [x] Cycle behavior works correctly

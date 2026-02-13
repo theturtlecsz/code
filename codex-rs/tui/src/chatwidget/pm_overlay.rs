@@ -63,7 +63,8 @@ enum NodeType {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum SortMode {
+#[allow(dead_code)] // Variants used in tests
+pub(super) enum SortMode {
     UpdatedDesc,   // Most recently updated first
     StatePriority, // By state priority (InProgress, NeedsReview, etc.)
     IdAsc,         // Alphabetically by ID
@@ -468,6 +469,7 @@ impl PmOverlay {
     }
 
     /// Cycle to the next sort mode (for read-only demo/testing).
+    #[allow(dead_code)] // Used in tests
     pub(super) fn cycle_sort_mode(&self) {
         let next = match self.sort_mode.get() {
             SortMode::UpdatedDesc => SortMode::StatePriority,
@@ -2171,7 +2173,7 @@ mod tests {
         // should NOT be called when nodes exist. We can't easily test the full
         // render path here, but we verify the data conditions that prevent it.
         assert!(
-            !(!overlay.degraded && overlay.nodes.is_empty()),
+            overlay.degraded || !overlay.nodes.is_empty(),
             "onboarding condition should be false when nodes exist"
         );
     }
