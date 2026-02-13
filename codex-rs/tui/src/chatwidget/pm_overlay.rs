@@ -47,6 +47,7 @@ pub(super) struct PmOverlay {
     detail_scroll: Cell<u16>,
     detail_max_scroll: Cell<u16>,
     detail_visible_rows: Cell<u16>,
+    detail_auto_scroll_pending: Cell<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -66,6 +67,7 @@ struct TreeNode {
     state: String,
     updated_at: String,
     latest_run: String,
+    latest_run_status: String,
     depth: u16,
     parent_idx: Option<usize>,
     children: Vec<usize>,
@@ -86,6 +88,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: String::new(),
         updated_at: "2026-02-12T10:30:00Z".into(),
         latest_run: String::new(),
+        latest_run_status: String::new(),
         depth: 0,
         parent_idx: None,
         children: vec![1, 8],
@@ -98,6 +101,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "InProgress".into(),
         updated_at: "2026-02-12T10:30:00Z".into(),
         latest_run: String::new(),
+        latest_run_status: String::new(),
         depth: 1,
         parent_idx: Some(0),
         children: vec![2, 5],
@@ -110,6 +114,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "NeedsReview (-> InProgress)".into(),
         updated_at: "2026-02-12T09:15:00Z".into(),
         latest_run: "run-042".into(),
+        latest_run_status: String::new(),
         depth: 2,
         parent_idx: Some(1),
         children: vec![3, 4],
@@ -122,6 +127,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "completed".into(),
         updated_at: "2026-02-11T14:00:00Z".into(),
         latest_run: "run-041".into(),
+        latest_run_status: "succeeded".into(),
         depth: 3,
         parent_idx: Some(2),
         children: vec![],
@@ -134,6 +140,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "open".into(),
         updated_at: "2026-02-12T09:15:00Z".into(),
         latest_run: "run-042".into(),
+        latest_run_status: "needs_attention".into(),
         depth: 3,
         parent_idx: Some(2),
         children: vec![],
@@ -146,6 +153,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "Backlog".into(),
         updated_at: "2026-02-10T16:00:00Z".into(),
         latest_run: String::new(),
+        latest_run_status: String::new(),
         depth: 2,
         parent_idx: Some(1),
         children: vec![6, 7],
@@ -158,6 +166,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "open".into(),
         updated_at: "2026-02-10T16:00:00Z".into(),
         latest_run: String::new(),
+        latest_run_status: String::new(),
         depth: 3,
         parent_idx: Some(5),
         children: vec![],
@@ -170,6 +179,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "failed".into(),
         updated_at: "2026-02-10T18:00:00Z".into(),
         latest_run: "run-039".into(),
+        latest_run_status: "failed".into(),
         depth: 3,
         parent_idx: Some(5),
         children: vec![],
@@ -183,6 +193,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "NeedsResearch (-> Backlog)".into(),
         updated_at: "2026-02-11T11:00:00Z".into(),
         latest_run: String::new(),
+        latest_run_status: String::new(),
         depth: 1,
         parent_idx: Some(0),
         children: vec![9, 11],
@@ -195,6 +206,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "Planned".into(),
         updated_at: "2026-02-11T11:00:00Z".into(),
         latest_run: "run-038".into(),
+        latest_run_status: String::new(),
         depth: 2,
         parent_idx: Some(8),
         children: vec![10],
@@ -207,6 +219,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "open".into(),
         updated_at: "2026-02-11T11:00:00Z".into(),
         latest_run: "run-038".into(),
+        latest_run_status: String::new(),
         depth: 3,
         parent_idx: Some(9),
         children: vec![],
@@ -219,6 +232,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "Completed".into(),
         updated_at: "2026-02-09T08:00:00Z".into(),
         latest_run: "run-035".into(),
+        latest_run_status: String::new(),
         depth: 2,
         parent_idx: Some(8),
         children: vec![12, 13],
@@ -231,6 +245,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "completed".into(),
         updated_at: "2026-02-09T08:00:00Z".into(),
         latest_run: "run-034".into(),
+        latest_run_status: String::new(),
         depth: 3,
         parent_idx: Some(11),
         children: vec![],
@@ -243,6 +258,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "completed".into(),
         updated_at: "2026-02-08T17:30:00Z".into(),
         latest_run: "run-033".into(),
+        latest_run_status: String::new(),
         depth: 3,
         parent_idx: Some(11),
         children: vec![],
@@ -269,6 +285,7 @@ impl PmOverlay {
             detail_scroll: Cell::new(0),
             detail_max_scroll: Cell::new(0),
             detail_visible_rows: Cell::new(0),
+            detail_auto_scroll_pending: Cell::new(false),
         }
     }
 
@@ -287,6 +304,7 @@ impl PmOverlay {
             detail_scroll: Cell::new(0),
             detail_max_scroll: Cell::new(0),
             detail_visible_rows: Cell::new(0),
+            detail_auto_scroll_pending: Cell::new(false),
         }
     }
 
@@ -325,6 +343,9 @@ impl PmOverlay {
             Some(node_idx) => {
                 self.detail_node_idx.set(Some(node_idx));
                 self.detail_scroll.set(0);
+                // PM-UX-D11: auto-scroll to Run History for needs_attention
+                self.detail_auto_scroll_pending
+                    .set(self.nodes[node_idx].latest_run_status == "needs_attention");
                 true
             }
             None => false,
@@ -667,13 +688,57 @@ fn detail_content_lines(node: &TreeNode, width: usize) -> Vec<RLine<'static>> {
             Span::styled("Started", label_style),
         ]));
         // Single demo row from latest_run
+        let status_text = if node.latest_run_status == "needs_attention" {
+            "needs_attn "
+        } else {
+            "completed  "
+        };
+        let status_style = if node.latest_run_status == "needs_attention" {
+            Style::default().fg(colors::warning())
+        } else {
+            dim
+        };
         lines.push(RLine::from(vec![
             Span::styled(format!("  {:<14}", node.latest_run), bright),
             Span::styled("review     ", dim),
             Span::styled("standard   ", dim),
-            Span::styled("completed  ", dim),
+            Span::styled(status_text, status_style),
             Span::styled(short_date(&node.updated_at), dim),
         ]));
+        // PM-UX-D11: conflict summary + resolution for needs_attention
+        if node.latest_run_status == "needs_attention" {
+            let warning_style = Style::default().fg(colors::warning());
+            lines.push(RLine::from(Span::styled("", dim)));
+            lines.push(RLine::from(Span::styled(
+                "  Conflict summary:",
+                warning_style,
+            )));
+            lines.push(RLine::from(Span::styled(
+                "    Review found conflicting recommendations between",
+                bright,
+            )));
+            lines.push(RLine::from(Span::styled(
+                "    PKCE flow and existing OAuth2 token refresh.",
+                bright,
+            )));
+            lines.push(RLine::from(Span::styled("", dim)));
+            lines.push(RLine::from(Span::styled(
+                "  Resolution instructions:",
+                warning_style,
+            )));
+            lines.push(RLine::from(Span::styled(
+                "    1. Review conflicting artifacts in the run output",
+                bright,
+            )));
+            lines.push(RLine::from(Span::styled(
+                "    2. Choose a resolution and apply changes",
+                bright,
+            )));
+            lines.push(RLine::from(Span::styled(
+                "    3. Re-run review once resolved",
+                bright,
+            )));
+        }
     }
     lines.push(RLine::from(Span::styled("", dim)));
 
@@ -780,6 +845,20 @@ fn render_detail(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     overlay.detail_visible_rows.set(scroll_area_height);
     let max_scroll = total.saturating_sub(scroll_area_height as usize);
     overlay.detail_max_scroll.set(max_scroll as u16);
+    // PM-UX-D11: auto-scroll to Run History for needs_attention nodes
+    if overlay.detail_auto_scroll_pending.get() {
+        overlay.detail_auto_scroll_pending.set(false);
+        let target = content_lines
+            .iter()
+            .position(|line| {
+                line.spans
+                    .first()
+                    .is_some_and(|s| s.content.contains("Run History"))
+            })
+            .unwrap_or(0);
+        let target = (target as u16).min(max_scroll as u16);
+        overlay.detail_scroll.set(target);
+    }
     let scroll = (overlay.detail_scroll.get() as usize).min(max_scroll);
     overlay.detail_scroll.set(scroll as u16);
 
@@ -1062,8 +1141,18 @@ fn render_row(
             Span::styled(" ", base),
             Span::styled(pad_or_trunc(&short_date(&node.updated_at), updated_w), base),
             Span::styled(" ", base),
-            Span::styled(pad_or_trunc(&node.latest_run, run_w), base),
         ];
+        // PM-UX-D11: needs_attention badge on latest-run column
+        if node.latest_run_status == "needs_attention" && !node.latest_run.is_empty() {
+            let warn = Style::default().fg(colors::warning()).bg(bg);
+            spans.push(Span::styled("! ", warn));
+            spans.push(Span::styled(
+                pad_or_trunc(&node.latest_run, run_w.saturating_sub(2)),
+                base,
+            ));
+        } else {
+            spans.push(Span::styled(pad_or_trunc(&node.latest_run, run_w), base));
+        }
         // Fill remaining with bg
         let used: usize = spans.iter().map(|s| s.content.len()).sum();
         if used < width {
@@ -1084,10 +1173,28 @@ fn render_row(
             Span::styled(" ", base),
             Span::styled(pad_or_trunc(&node.title, title_w), base),
             Span::styled(" ", base),
-            Span::styled(pad_or_trunc(&node.state, state_w), state_style),
-            Span::styled(" ", base),
-            Span::styled(pad_or_trunc(&short_date(&node.updated_at), updated_w), base),
         ];
+        // PM-UX-D11: needs_attention indicator on state column (medium)
+        if node.latest_run_status == "needs_attention" {
+            spans.push(Span::styled(
+                pad_or_trunc(&node.state, state_w.saturating_sub(2)),
+                state_style,
+            ));
+            spans.push(Span::styled(
+                " !",
+                Style::default().fg(colors::warning()).bg(bg),
+            ));
+        } else {
+            spans.push(Span::styled(
+                pad_or_trunc(&node.state, state_w),
+                state_style,
+            ));
+        }
+        spans.push(Span::styled(" ", base));
+        spans.push(Span::styled(
+            pad_or_trunc(&short_date(&node.updated_at), updated_w),
+            base,
+        ));
         let used: usize = spans.iter().map(|s| s.content.len()).sum();
         if used < width {
             spans.push(Span::styled(" ".repeat(width - used), base));
@@ -1106,8 +1213,23 @@ fn render_row(
             Span::styled(" ", base),
             Span::styled(pad_or_trunc(&node.title, title_w), base),
             Span::styled(" ", base),
-            Span::styled(pad_or_trunc(&node.state, state_w), state_style),
         ];
+        // PM-UX-D11: needs_attention indicator on state column (narrow)
+        if node.latest_run_status == "needs_attention" {
+            spans.push(Span::styled(
+                pad_or_trunc(&node.state, state_w.saturating_sub(2)),
+                state_style,
+            ));
+            spans.push(Span::styled(
+                " !",
+                Style::default().fg(colors::warning()).bg(bg),
+            ));
+        } else {
+            spans.push(Span::styled(
+                pad_or_trunc(&node.state, state_w),
+                state_style,
+            ));
+        }
         let used: usize = spans.iter().map(|s| s.content.len()).sum();
         if used < width {
             spans.push(Span::styled(" ".repeat(width - used), base));
@@ -1407,6 +1529,138 @@ mod tests {
         assert!(
             top_row.contains(DEGRADED_BANNER_TEXT),
             "detail banner should match PM-UX-D14 text"
+        );
+    }
+
+    // --- PM-UX-D11 tests ---------------------------------------------------
+
+    /// Helper: expand tree to make node 4 (TASK-002, needs_attention) visible
+    /// and return its flat index.
+    fn expand_to_task_002(overlay: &PmOverlay) -> usize {
+        overlay.expand(0); // Project
+        overlay.expand(1); // FEAT-001
+        overlay.expand(2); // SPEC-AUTH-001
+        // visible: [0,1,2,3,4,5,6,7,8] — node 4 is flat index 4
+        overlay
+            .visible_indices()
+            .iter()
+            .position(|&n| n == 4)
+            .expect("node 4 should be visible")
+    }
+
+    #[test]
+    fn test_needs_attention_wide_badge() {
+        let overlay = PmOverlay::new(false);
+        let flat = expand_to_task_002(&overlay);
+        overlay.set_selected(flat);
+
+        let node = &overlay.nodes[4];
+        let line = render_row(node, 4, &overlay, 140, true);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(
+            text.contains("! run-042"),
+            "wide row should contain '! run-042', got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_needs_attention_narrow_indicator() {
+        let overlay = PmOverlay::new(false);
+        let flat = expand_to_task_002(&overlay);
+        overlay.set_selected(flat);
+
+        let node = &overlay.nodes[4];
+        let line = render_row(node, 4, &overlay, 60, true);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(
+            text.contains(" !"),
+            "narrow row should contain ' !' indicator, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_needs_attention_medium_indicator() {
+        let overlay = PmOverlay::new(false);
+        let flat = expand_to_task_002(&overlay);
+        overlay.set_selected(flat);
+
+        let node = &overlay.nodes[4];
+        let line = render_row(node, 4, &overlay, 100, true);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(
+            text.contains(" !"),
+            "medium row should contain ' !' indicator, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_detail_auto_scroll_needs_attention() {
+        let overlay = PmOverlay::new(false);
+        let flat = expand_to_task_002(&overlay);
+        assert!(overlay.open_detail_for_visible(flat));
+        assert!(
+            overlay.detail_auto_scroll_pending.get(),
+            "flag should be set for needs_attention node"
+        );
+        assert_eq!(overlay.detail_node_idx.get(), Some(4));
+
+        // Render to consume the flag
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buf = Buffer::empty(area);
+        render_detail(&overlay, area, &mut buf);
+
+        assert!(
+            !overlay.detail_auto_scroll_pending.get(),
+            "flag should be consumed after render"
+        );
+        assert!(
+            overlay.detail_scroll() > 0,
+            "scroll should be > 0 (scrolled to Run History)"
+        );
+    }
+
+    #[test]
+    fn test_detail_no_auto_scroll_normal_node() {
+        let overlay = PmOverlay::new(false);
+        overlay.expand(0); // Project
+        // visible: [0, 1, 8] — open detail for node 1 (FEAT-001, no needs_attention)
+        assert!(overlay.open_detail_for_visible(1));
+        assert!(
+            !overlay.detail_auto_scroll_pending.get(),
+            "flag should NOT be set for normal node"
+        );
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buf = Buffer::empty(area);
+        render_detail(&overlay, area, &mut buf);
+
+        assert_eq!(
+            overlay.detail_scroll(),
+            0,
+            "scroll should stay 0 for normal node"
+        );
+    }
+
+    #[test]
+    fn test_detail_content_needs_attention_conflict() {
+        let node = &demo_tree()[4]; // TASK-002
+        let lines = detail_content_lines(node, 100);
+        let text: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            text.contains("Conflict summary"),
+            "detail should contain 'Conflict summary'"
+        );
+        assert!(
+            text.contains("Resolution instructions"),
+            "detail should contain 'Resolution instructions'"
+        );
+        assert!(
+            text.contains("needs_attn"),
+            "status should show 'needs_attn'"
         );
     }
 }
