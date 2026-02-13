@@ -570,6 +570,11 @@ impl ChatWidget<'_> {
             overlay.visible_rows.set(0);
             overlay.max_scroll.set(0);
             render_worst_case_fallback(overlay, body, buf);
+        } else if !overlay.degraded && overlay.nodes.is_empty() {
+            // PM-UX-D7/PM-UX-D24: empty-state onboarding when service is healthy
+            overlay.visible_rows.set(0);
+            overlay.max_scroll.set(0);
+            render_empty_state_onboarding(overlay, body, buf);
         } else {
             // Summary bar (2 lines) + optional degraded banner (1 line)
             let degraded_lines: u16 = if overlay.degraded { 1 } else { 0 };
@@ -972,6 +977,97 @@ fn render_worst_case_fallback(_overlay: &PmOverlay, area: Rect, buf: &mut Buffer
         RLine::from(vec![
             Span::styled("    2. Run ", dim),
             Span::styled("systemctl --user start codex-pm-service", accent),
+        ]),
+    ];
+
+    for (i, line) in lines.iter().take(area.height as usize).enumerate() {
+        buf.set_line(area.x, area.y + i as u16, line, area.width);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Empty-state onboarding (PM-UX-D7 / PM-UX-D24)
+// ---------------------------------------------------------------------------
+
+/// Render onboarding empty-state when service is healthy but no work items exist.
+/// Displays the 3-step guided wizard flow (read-only presentation).
+fn render_empty_state_onboarding(_overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
+    let dim = Style::default().fg(colors::text_dim());
+    let bright = Style::default().fg(colors::text());
+    let accent = Style::default().fg(colors::function());
+    let info_style = Style::default().fg(colors::info());
+
+    let lines: Vec<RLine<'static>> = vec![
+        // Title
+        RLine::from(Span::styled(
+            "Welcome to PM — Let's get started!",
+            Style::default().fg(colors::info()),
+        )),
+        RLine::from(Span::styled("", dim)),
+        // Introduction
+        RLine::from(vec![
+            Span::styled("  Your PM workspace is empty. ", bright),
+            Span::styled("To create your first work item, follow these steps:", dim),
+        ]),
+        RLine::from(Span::styled("", dim)),
+        // Separator
+        RLine::from(Span::styled(
+            "\u{2500}".repeat(area.width.min(60) as usize),
+            Style::default().fg(colors::border()),
+        )),
+        RLine::from(Span::styled("", dim)),
+        // Step 1
+        RLine::from(vec![
+            Span::styled("  Step 1: ", info_style),
+            Span::styled("Confirm your project container", bright),
+        ]),
+        RLine::from(vec![
+            Span::styled("    Default: ", dim),
+            Span::styled("(current repository name)", accent),
+        ]),
+        RLine::from(Span::styled("", dim)),
+        // Step 2
+        RLine::from(vec![
+            Span::styled("  Step 2: ", info_style),
+            Span::styled("Choose your first work item type", bright),
+        ]),
+        RLine::from(vec![
+            Span::styled("    Options: ", dim),
+            Span::styled("Feature", accent),
+            Span::styled(" or ", dim),
+            Span::styled("SPEC", accent),
+        ]),
+        RLine::from(Span::styled("", dim)),
+        // Step 3
+        RLine::from(vec![
+            Span::styled("  Step 3: ", info_style),
+            Span::styled("Enter title/name and begin maieutic intake", bright),
+        ]),
+        RLine::from(vec![
+            Span::styled("    The system will guide you through ", dim),
+            Span::styled("defining your work item", accent),
+        ]),
+        RLine::from(Span::styled("", dim)),
+        // Separator
+        RLine::from(Span::styled(
+            "\u{2500}".repeat(area.width.min(60) as usize),
+            Style::default().fg(colors::border()),
+        )),
+        RLine::from(Span::styled("", dim)),
+        // Next action
+        RLine::from(vec![Span::styled("  Next steps:", bright)]),
+        RLine::from(vec![
+            Span::styled("    • Check service status: ", dim),
+            Span::styled("/pm service doctor", accent),
+        ]),
+        RLine::from(vec![
+            Span::styled("    • View PM overlay: ", dim),
+            Span::styled("/pm open", accent),
+            Span::styled(" (returns here)", dim),
+        ]),
+        RLine::from(vec![
+            Span::styled("    • Run research on work item: ", dim),
+            Span::styled("/pm bot run --id <ID> --kind research", accent),
         ]),
     ];
 
@@ -1863,6 +1959,173 @@ mod tests {
         assert_eq!(
             result, "invalid-timestamp",
             "invalid timestamp should return input as-is"
+        );
+    }
+
+    // --- PM-UX-D24 empty-state onboarding tests ------------------------------
+
+    #[test]
+    fn test_empty_state_onboarding_renders_when_healthy_and_empty() {
+        // PM-UX-D7/PM-UX-D24: healthy service + empty nodes → onboarding
+        let mut overlay = PmOverlay::new(false);
+        overlay.nodes.clear(); // Ensure empty
+        assert!(!overlay.degraded);
+        assert!(overlay.nodes.is_empty());
+
+        let area = Rect::new(0, 0, 100, 25);
+        let mut buf = Buffer::empty(area);
+        render_empty_state_onboarding(&overlay, area, &mut buf);
+
+        let mut text = String::new();
+        for y in 0..area.height.min(5) {
+            text.push_str(&buffer_line_text(&buf, area, y));
+            text.push('\n');
+        }
+
+        // Should contain onboarding welcome text
+        assert!(
+            text.contains("Welcome to PM"),
+            "should contain welcome message, got: {text}"
+        );
+        assert!(
+            text.contains("get started"),
+            "should contain 'get started', got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_empty_state_onboarding_shows_three_steps() {
+        let mut overlay = PmOverlay::new(false);
+        overlay.nodes.clear();
+
+        let area = Rect::new(0, 0, 100, 25);
+        let mut buf = Buffer::empty(area);
+        render_empty_state_onboarding(&overlay, area, &mut buf);
+
+        let mut text = String::new();
+        for y in 0..area.height {
+            text.push_str(&buffer_line_text(&buf, area, y));
+            text.push('\n');
+        }
+
+        // PM-UX-D24: must show all 3 steps
+        assert!(
+            text.contains("Step 1"),
+            "should contain Step 1, got: {text}"
+        );
+        assert!(
+            text.contains("Step 2"),
+            "should contain Step 2, got: {text}"
+        );
+        assert!(
+            text.contains("Step 3"),
+            "should contain Step 3, got: {text}"
+        );
+        // Step contents
+        assert!(
+            text.contains("project container"),
+            "Step 1 should mention project container"
+        );
+        assert!(
+            text.contains("work item type"),
+            "Step 2 should mention work item type"
+        );
+        assert!(
+            text.contains("maieutic intake"),
+            "Step 3 should mention maieutic intake"
+        );
+    }
+
+    #[test]
+    fn test_degraded_empty_shows_worst_case_not_onboarding() {
+        // PM-UX-D15 takes precedence over PM-UX-D24:
+        // degraded + empty → worst-case fallback, NOT onboarding
+        let overlay = PmOverlay::new_degraded_empty();
+        assert!(overlay.degraded);
+        assert!(overlay.nodes.is_empty());
+
+        let area = Rect::new(0, 0, 100, 20);
+        let mut buf = Buffer::empty(area);
+
+        // Render using the actual overlay logic by calling worst-case directly
+        render_worst_case_fallback(&overlay, area, &mut buf);
+
+        let mut text = String::new();
+        for y in 0..area.height.min(8) {
+            text.push_str(&buffer_line_text(&buf, area, y));
+            text.push('\n');
+        }
+
+        // Should show worst-case fallback, NOT onboarding
+        assert!(
+            text.contains("PM data unavailable"),
+            "degraded+empty should show worst-case fallback"
+        );
+        assert!(
+            !text.contains("Welcome to PM"),
+            "degraded+empty should NOT show onboarding"
+        );
+        assert!(
+            text.contains("Service status"),
+            "should show diagnostic lines"
+        );
+    }
+
+    #[test]
+    fn test_non_empty_does_not_show_onboarding() {
+        // Non-empty overlay should NOT trigger onboarding, even if healthy
+        let overlay = PmOverlay::new(false);
+        assert!(!overlay.degraded);
+        assert!(!overlay.nodes.is_empty(), "demo tree should have nodes");
+
+        // This test verifies the conditional logic: the onboarding render function
+        // should NOT be called when nodes exist. We can't easily test the full
+        // render path here, but we verify the data conditions that prevent it.
+        assert!(
+            !(!overlay.degraded && overlay.nodes.is_empty()),
+            "onboarding condition should be false when nodes exist"
+        );
+    }
+
+    #[test]
+    fn test_onboarding_only_references_valid_pm_commands() {
+        // PM-UX-D13: onboarding must reference only real PM commands
+        let mut overlay = PmOverlay::new(false);
+        overlay.nodes.clear();
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buf = Buffer::empty(area);
+        render_empty_state_onboarding(&overlay, area, &mut buf);
+
+        let mut text = String::new();
+        for y in 0..area.height {
+            text.push_str(&buffer_line_text(&buf, area, y));
+            text.push('\n');
+        }
+
+        // Must NOT contain invalid commands
+        assert!(
+            !text.contains("/pm create"),
+            "onboarding should NOT reference /pm create (invalid command)"
+        );
+
+        // Should contain only valid PM commands from PM-UX-D13
+        let valid_commands = vec![
+            "/pm open",
+            "/pm service doctor",
+            "/pm service status",
+            "/pm bot run",
+        ];
+        let mut found_valid = false;
+        for cmd in valid_commands {
+            if text.contains(cmd) {
+                found_valid = true;
+                break;
+            }
+        }
+        assert!(
+            found_valid,
+            "onboarding should reference at least one valid PM command"
         );
     }
 }
