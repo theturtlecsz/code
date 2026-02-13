@@ -485,12 +485,40 @@ impl PmOverlay {
         let exp = self.expanded.borrow();
         let mut out = Vec::new();
         self.collect_visible(0, &exp, &mut out);
-        self.apply_sort(&mut out);
         out
     }
 
-    /// Apply current sort mode to visible node indices (in-place).
-    fn apply_sort(&self, indices: &mut Vec<usize>) {
+    fn collect_visible(&self, start: usize, exp: &HashSet<usize>, out: &mut Vec<usize>) {
+        // Collect root nodes (depth 0) and sort them
+        let mut roots: Vec<usize> = self
+            .nodes
+            .iter()
+            .enumerate()
+            .filter(|(i, node)| *i >= start && node.depth == 0)
+            .map(|(i, _)| i)
+            .collect();
+        self.sort_siblings(&mut roots);
+
+        // Walk sorted roots
+        for &root_idx in &roots {
+            self.collect_subtree(root_idx, exp, out);
+        }
+    }
+
+    fn collect_subtree(&self, idx: usize, exp: &HashSet<usize>, out: &mut Vec<usize>) {
+        out.push(idx);
+        if exp.contains(&idx) {
+            // Sort children according to current sort mode before adding them
+            let mut children = self.nodes[idx].children.clone();
+            self.sort_siblings(&mut children);
+            for &child in &children {
+                self.collect_subtree(child, exp, out);
+            }
+        }
+    }
+
+    /// Sort sibling node indices according to current sort mode.
+    fn sort_siblings(&self, indices: &mut Vec<usize>) {
         let mode = self.sort_mode.get();
         match mode {
             SortMode::UpdatedDesc => {
@@ -516,27 +544,6 @@ impl PmOverlay {
                     let b_id = &self.nodes[b].id;
                     a_id.cmp(b_id)
                 });
-            }
-        }
-    }
-
-    fn collect_visible(&self, start: usize, exp: &HashSet<usize>, out: &mut Vec<usize>) {
-        // Walk top-level roots (depth 0)
-        for (i, node) in self.nodes.iter().enumerate() {
-            if i < start {
-                continue;
-            }
-            if node.depth == 0 {
-                self.collect_subtree(i, exp, out);
-            }
-        }
-    }
-
-    fn collect_subtree(&self, idx: usize, exp: &HashSet<usize>, out: &mut Vec<usize>) {
-        out.push(idx);
-        if exp.contains(&idx) {
-            for &child in &self.nodes[idx].children {
-                self.collect_subtree(child, exp, out);
             }
         }
     }
@@ -2264,26 +2271,46 @@ mod tests {
         let overlay = PmOverlay::new(false);
         overlay.expand(0); // Expand Project
         overlay.expand(1); // Expand FEAT-001
-        // visible: [0, 1, 2, 5, 8]
 
         // Default mode: UpdatedDesc (most recent first)
         assert_eq!(overlay.sort_mode(), SortMode::UpdatedDesc);
         let visible = overlay.visible_indices();
 
-        // All nodes should be sorted by updated_at descending
-        // Check that timestamps are in descending order (most recent first)
-        for i in 0..visible.len().saturating_sub(1) {
-            let curr_ts = &overlay.nodes[visible[i]].updated_at;
-            let next_ts = &overlay.nodes[visible[i + 1]].updated_at;
-            assert!(
-                curr_ts >= next_ts,
-                "UpdatedDesc: node {} ({}) should not come before node {} ({})",
-                visible[i],
-                curr_ts,
-                visible[i + 1],
-                next_ts
-            );
+        // Verify hierarchy is preserved: parent appears before children
+        for (i, &node_idx) in visible.iter().enumerate() {
+            let node = &overlay.nodes[node_idx];
+            if let Some(parent_idx) = node.parent_idx {
+                // Find parent in visible list
+                let parent_pos = visible.iter().position(|&idx| idx == parent_idx);
+                assert!(
+                    parent_pos.is_some(),
+                    "Parent {} should be visible for child {}",
+                    parent_idx,
+                    node_idx
+                );
+                assert!(
+                    parent_pos.unwrap() < i,
+                    "Parent {} should appear before child {} in visible list",
+                    parent_idx,
+                    node_idx
+                );
+            }
         }
+
+        // Verify siblings are sorted by updated_at descending
+        // Check FEAT-001's children (nodes 2 and 5)
+        let feat001_children: Vec<usize> = visible
+            .iter()
+            .copied()
+            .filter(|&idx| overlay.nodes[idx].parent_idx == Some(1))
+            .collect();
+        assert_eq!(feat001_children.len(), 2, "FEAT-001 should have 2 children");
+        // Node 2 (2026-02-12T09:15) is more recent than node 5 (2026-02-10T16:00)
+        assert_eq!(
+            feat001_children[0], 2,
+            "More recent child should come first"
+        );
+        assert_eq!(feat001_children[1], 5, "Older child should come second");
     }
 
     #[test]
@@ -2299,19 +2326,36 @@ mod tests {
 
         let visible = overlay.visible_indices();
 
-        // All nodes should be sorted by ID ascending
-        for i in 0..visible.len().saturating_sub(1) {
-            let curr_id = &overlay.nodes[visible[i]].id;
-            let next_id = &overlay.nodes[visible[i + 1]].id;
-            assert!(
-                curr_id <= next_id,
-                "IdAsc: node {} ({}) should not come before node {} ({})",
-                visible[i],
-                curr_id,
-                visible[i + 1],
-                next_id
-            );
+        // Verify hierarchy is preserved: parent appears before children
+        for (i, &node_idx) in visible.iter().enumerate() {
+            let node = &overlay.nodes[node_idx];
+            if let Some(parent_idx) = node.parent_idx {
+                let parent_pos = visible.iter().position(|&idx| idx == parent_idx);
+                assert!(
+                    parent_pos.is_some(),
+                    "Parent {} should be visible for child {}",
+                    parent_idx,
+                    node_idx
+                );
+                assert!(
+                    parent_pos.unwrap() < i,
+                    "Parent {} should appear before child {} in visible list",
+                    parent_idx,
+                    node_idx
+                );
+            }
         }
+
+        // Verify siblings are sorted by ID ascending
+        // Check FEAT-001's children (SPEC-AUTH-001=node2, SPEC-AUTH-002=node5)
+        let feat001_children: Vec<usize> = visible
+            .iter()
+            .copied()
+            .filter(|&idx| overlay.nodes[idx].parent_idx == Some(1))
+            .collect();
+        assert_eq!(feat001_children.len(), 2, "FEAT-001 should have 2 children");
+        assert_eq!(feat001_children[0], 2, "SPEC-AUTH-001 should come first");
+        assert_eq!(feat001_children[1], 5, "SPEC-AUTH-002 should come second");
     }
 
     #[test]
