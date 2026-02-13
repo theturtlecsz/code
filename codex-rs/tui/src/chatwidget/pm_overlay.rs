@@ -1055,16 +1055,19 @@ fn render_empty_state_onboarding(_overlay: &PmOverlay, area: Rect, buf: &mut Buf
         )),
         RLine::from(Span::styled("", dim)),
         // Next action
+        RLine::from(vec![Span::styled("  Next steps:", bright)]),
         RLine::from(vec![
-            Span::styled("  To begin: ", bright),
-            Span::styled(
-                "Close this view and use CLI commands to create your first work item",
-                dim,
-            ),
+            Span::styled("    • Check service status: ", dim),
+            Span::styled("/pm service doctor", accent),
         ]),
         RLine::from(vec![
-            Span::styled("  Example: ", dim),
-            Span::styled("/pm create feature \"User Authentication\"", accent),
+            Span::styled("    • View PM overlay: ", dim),
+            Span::styled("/pm open", accent),
+            Span::styled(" (returns here)", dim),
+        ]),
+        RLine::from(vec![
+            Span::styled("    • Run research on work item: ", dim),
+            Span::styled("/pm bot run --id <ID> --kind research", accent),
         ]),
     ];
 
@@ -2081,6 +2084,48 @@ mod tests {
         assert!(
             !(!overlay.degraded && overlay.nodes.is_empty()),
             "onboarding condition should be false when nodes exist"
+        );
+    }
+
+    #[test]
+    fn test_onboarding_only_references_valid_pm_commands() {
+        // PM-UX-D13: onboarding must reference only real PM commands
+        let mut overlay = PmOverlay::new(false);
+        overlay.nodes.clear();
+
+        let area = Rect::new(0, 0, 120, 30);
+        let mut buf = Buffer::empty(area);
+        render_empty_state_onboarding(&overlay, area, &mut buf);
+
+        let mut text = String::new();
+        for y in 0..area.height {
+            text.push_str(&buffer_line_text(&buf, area, y));
+            text.push('\n');
+        }
+
+        // Must NOT contain invalid commands
+        assert!(
+            !text.contains("/pm create"),
+            "onboarding should NOT reference /pm create (invalid command)"
+        );
+
+        // Should contain only valid PM commands from PM-UX-D13
+        let valid_commands = vec![
+            "/pm open",
+            "/pm service doctor",
+            "/pm service status",
+            "/pm bot run",
+        ];
+        let mut found_valid = false;
+        for cmd in valid_commands {
+            if text.contains(cmd) {
+                found_valid = true;
+                break;
+            }
+        }
+        assert!(
+            found_valid,
+            "onboarding should reference at least one valid PM command"
         );
     }
 }
