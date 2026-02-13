@@ -219,7 +219,7 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "open".into(),
         updated_at: "2026-02-11T11:00:00Z".into(),
         latest_run: "run-038".into(),
-        latest_run_status: String::new(),
+        latest_run_status: "running".into(),
         depth: 3,
         parent_idx: Some(9),
         children: vec![],
@@ -690,11 +690,15 @@ fn detail_content_lines(node: &TreeNode, width: usize) -> Vec<RLine<'static>> {
         // Single demo row from latest_run
         let status_text = if node.latest_run_status == "needs_attention" {
             "needs_attn "
+        } else if node.latest_run_status == "running" {
+            "running    "
         } else {
             "completed  "
         };
         let status_style = if node.latest_run_status == "needs_attention" {
             Style::default().fg(colors::warning())
+        } else if node.latest_run_status == "running" {
+            Style::default().fg(colors::function())
         } else {
             dim
         };
@@ -1017,7 +1021,20 @@ fn render_summary_bar(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
             ));
         }
     }
-    chips.push(Span::styled("  |  Active runs: 0", dim));
+    let active_count = overlay
+        .nodes
+        .iter()
+        .filter(|n| n.latest_run_status == "running")
+        .count();
+    let active_style = if active_count > 0 {
+        Style::default().fg(colors::function())
+    } else {
+        dim
+    };
+    chips.push(Span::styled(
+        format!("  |  Active runs: {active_count}"),
+        active_style,
+    ));
 
     if overlay.degraded {
         chips.push(Span::styled(
@@ -1030,8 +1047,11 @@ fn render_summary_bar(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     let line1_y = area.y;
     buf.set_line(area.x, line1_y, &line1, area.width);
 
-    // Line 2: run meter placeholder
-    let line2 = RLine::from(Span::styled("Active run meter: 0 running", dim));
+    // Line 2: run meter
+    let line2 = RLine::from(Span::styled(
+        format!("Active run meter: {active_count} running"),
+        active_style,
+    ));
     buf.set_line(area.x, line1_y + 1, &line2, area.width);
 
     // Degraded banner
@@ -1150,6 +1170,13 @@ fn render_row(
                 pad_or_trunc(&node.latest_run, run_w.saturating_sub(2)),
                 base,
             ));
+        } else if node.latest_run_status == "running" && !node.latest_run.is_empty() {
+            let run_style = Style::default().fg(colors::function()).bg(bg);
+            spans.push(Span::styled("\u{25b6} ", run_style));
+            spans.push(Span::styled(
+                pad_or_trunc(&node.latest_run, run_w.saturating_sub(2)),
+                base,
+            ));
         } else {
             spans.push(Span::styled(pad_or_trunc(&node.latest_run, run_w), base));
         }
@@ -1183,6 +1210,15 @@ fn render_row(
             spans.push(Span::styled(
                 " !",
                 Style::default().fg(colors::warning()).bg(bg),
+            ));
+        } else if node.latest_run_status == "running" {
+            spans.push(Span::styled(
+                pad_or_trunc(&node.state, state_w.saturating_sub(2)),
+                state_style,
+            ));
+            spans.push(Span::styled(
+                " \u{25b6}",
+                Style::default().fg(colors::function()).bg(bg),
             ));
         } else {
             spans.push(Span::styled(
@@ -1223,6 +1259,15 @@ fn render_row(
             spans.push(Span::styled(
                 " !",
                 Style::default().fg(colors::warning()).bg(bg),
+            ));
+        } else if node.latest_run_status == "running" {
+            spans.push(Span::styled(
+                pad_or_trunc(&node.state, state_w.saturating_sub(2)),
+                state_style,
+            ));
+            spans.push(Span::styled(
+                " \u{25b6}",
+                Style::default().fg(colors::function()).bg(bg),
             ));
         } else {
             spans.push(Span::styled(
@@ -1661,6 +1706,116 @@ mod tests {
         assert!(
             text.contains("needs_attn"),
             "status should show 'needs_attn'"
+        );
+    }
+
+    // --- Active run indicator tests (PM-004) --------------------------------
+
+    /// Helper: expand tree to make node 10 (TASK-005, running) visible
+    /// and return its flat index.
+    fn expand_to_task_005(overlay: &PmOverlay) -> usize {
+        overlay.expand(0); // Project
+        overlay.expand(8); // FEAT-002
+        overlay.expand(9); // SPEC-PIPE-001
+        overlay
+            .visible_indices()
+            .iter()
+            .position(|&n| n == 10)
+            .expect("node 10 should be visible")
+    }
+
+    #[test]
+    fn test_demo_tree_has_running_node() {
+        let nodes = demo_tree();
+        assert!(
+            nodes
+                .iter()
+                .any(|n| n.latest_run_status == "running" && !n.latest_run.is_empty()),
+            "demo tree must have at least 1 running node"
+        );
+    }
+
+    #[test]
+    fn test_summary_bar_active_run_count() {
+        let overlay = PmOverlay::new(false);
+        let area = Rect::new(0, 0, 200, 3);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 200, 5));
+        render_summary_bar(&overlay, area, &mut buf);
+
+        let row0 = buffer_line_text(&buf, area, 0);
+        assert!(
+            row0.contains("Active runs: 1"),
+            "summary bar should show computed 'Active runs: 1', got: {row0}"
+        );
+        let row1 = buffer_line_text(&buf, area, 1);
+        assert!(
+            row1.contains("1 running"),
+            "run meter should show '1 running', got: {row1}"
+        );
+    }
+
+    #[test]
+    fn test_running_wide_indicator() {
+        let overlay = PmOverlay::new(false);
+        let flat = expand_to_task_005(&overlay);
+        overlay.set_selected(flat);
+
+        let node = &overlay.nodes[10];
+        let line = render_row(node, 10, &overlay, 140, true);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(
+            text.contains("\u{25b6} run-038"),
+            "wide row should contain '\u{25b6} run-038', got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_running_medium_indicator() {
+        let overlay = PmOverlay::new(false);
+        let flat = expand_to_task_005(&overlay);
+        overlay.set_selected(flat);
+
+        let node = &overlay.nodes[10];
+        let line = render_row(node, 10, &overlay, 100, true);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(
+            text.contains(" \u{25b6}"),
+            "medium row should contain ' \u{25b6}' indicator, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_running_narrow_indicator() {
+        let overlay = PmOverlay::new(false);
+        let flat = expand_to_task_005(&overlay);
+        overlay.set_selected(flat);
+
+        let node = &overlay.nodes[10];
+        let line = render_row(node, 10, &overlay, 60, true);
+        let text: String = line.spans.iter().map(|s| s.content.to_string()).collect();
+        assert!(
+            text.contains(" \u{25b6}"),
+            "narrow row should contain ' \u{25b6}' indicator, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_detail_content_running_status() {
+        let node = &demo_tree()[10]; // TASK-005, running
+        let lines = detail_content_lines(node, 100);
+        let text: String = lines
+            .iter()
+            .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            text.contains("running"),
+            "detail should show 'running' status, got: {text}"
+        );
+        // Should NOT contain needs_attention content
+        assert!(
+            !text.contains("Conflict summary"),
+            "running node should not show conflict summary"
         );
     }
 }
