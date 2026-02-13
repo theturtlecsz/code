@@ -1,0 +1,23 @@
+# codex-pm-service socket (D136)
+#
+# Provides the Unix-domain socket for `codex-pm-service`.
+#
+# Locked decisions:
+# - D136: Unix-domain-socket IPC (systemd socket passing supported)
+# - D141: service starts on login (enable the service unit)
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp codex-pm-service.{service,socket} ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now codex-pm-service.service
+
+[Unit]
+Description=Codex PM Service Socket (D136)
+
+[Socket]
+ListenStream=%t/codex-pm.sock
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target

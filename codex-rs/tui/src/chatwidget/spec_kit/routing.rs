@@ -123,6 +123,8 @@ pub fn try_dispatch_spec_kit_command(
         | "speckit.constitution"   // ACE constitution extraction
         | "speckit.ace-status"     // ACE playbook status
         | "speckit.stage-agents"   // SPEC-KIT-983: Stage→agent UI
+        | "speckit.pm"             // SPEC-PM-004: PM overlay + service commands
+        | "pm"                     // SPEC-PM-004: PM alias
         // Legacy aliases
         | "spec-auto"
         | "spec-cancel"            // SPEC-DOGFOOD-001

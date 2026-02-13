@@ -106,39 +106,40 @@ These invariants MUST NOT be violated:
 
 ### Planned
 
-| Spec | Description |
-| ---- | ----------- |
-| SPEC-DOGFOOD-002 | Canonical gold run: prove `/speckit.auto` happy path + complete evidence chain on Linux; add a scheduled CI run once stable. |
-| SPEC-PK-001 | Product knowledge (codex-product) dogfood + measurement: validate determinism (snapshot/evidence pack) and quantify Tier2 reduction/curation quality. |
-| SPEC-PM-001 | Project management deep dive: capsule-backed feature + task tracking (SoR) with filesystem projections (including `SPEC.md`), maieutic PRD sessions, and status surfaces (CLI/TUI/headless). PRD: `docs/SPEC-PM-001-project-management/PRD.md`. |
-| SPEC-PM-002 | Bot runner interface contract: commands + headless exit codes + artifacts for manual `NeedsResearch` / `NeedsReview` runs. PRD: `docs/SPEC-PM-002-bot-runner/PRD.md`. Spec: `docs/SPEC-PM-002-bot-runner/spec.md`. |
-| SPEC-PM-003 | Bot system design: runner/service/tooling implementation for `NeedsResearch` / `NeedsReview` automation (queueing, permissions, worktrees, projections). PRD: `docs/SPEC-PM-003-bot-system/PRD.md`. Spec: `docs/SPEC-PM-003-bot-system/spec.md`. |
-| DOC-DRIFT-001 | Docs drift control: maintain `docs/DEPRECATIONS.md`, deprecate/update legacy PRDs/roadmaps that conflict with current product vision, and keep doc maps pointing at canonical trackers. |
+| Spec             | Description                                                                                                                                                                                                                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SPEC-DOGFOOD-002 | Canonical gold run: prove `/speckit.auto` happy path + complete evidence chain on Linux; add a scheduled CI run once stable.                                                                                                                     |
+| SPEC-PK-001      | Product knowledge (codex-product) dogfood + measurement: validate determinism (snapshot/evidence pack) and quantify Tier2 reduction/curation quality.                                                                                            |
+| SPEC-PM-001      | Project management deep dive: capsule-backed feature + task tracking (SoR) with filesystem projections (including `SPEC.md`), maieutic PRD sessions, and status surfaces (CLI/TUI/headless). PRD: `docs/SPEC-PM-001-project-management/PRD.md`.  |
+| SPEC-PM-002      | Bot runner interface contract: commands + headless exit codes + artifacts for manual `NeedsResearch` / `NeedsReview` runs. PRD: `docs/SPEC-PM-002-bot-runner/PRD.md`. Spec: `docs/SPEC-PM-002-bot-runner/spec.md`.                               |
+| SPEC-PM-003      | Bot system design: runner/service/tooling implementation for `NeedsResearch` / `NeedsReview` automation (queueing, permissions, worktrees, projections). PRD: `docs/SPEC-PM-003-bot-system/PRD.md`. Spec: `docs/SPEC-PM-003-bot-system/spec.md`. |
+| SPEC-PM-004      | TUI PM UX/UI: interaction design for list view, detail view, run config, navigation, degraded mode, status indicators. Spec: `docs/SPEC-PM-004-tui-ux/spec.md`.                                                                                  |
+| DOC-DRIFT-001    | Docs drift control: maintain `docs/DEPRECATIONS.md`, deprecate/update legacy PRDs/roadmaps that conflict with current product vision, and keep doc maps pointing at canonical trackers.                                                          |
 
 ### Completed (Recent)
 
-| Spec                | Completion Date | Key Deliverables                                                                              |
-| ------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| Spec                | Completion Date | Key Deliverables                                                                                       |
+| ------------------- | --------------- | ------------------------------------------------------------------------------------------------------ |
 | MAINT-930           | 2026-02-01      | D133 enforcement: prompt guard, needs-approval gates (LOCK E2), TUI/headless artifact parity (LOCK E3) |
-| SPEC-KIT-983        | 2026-02-01      | Stage→agent defaults modal + root-only persistence with user-visible errors                   |
-| MAINT-17            | 2026-02-01      | Fix codex-cli hermetic speckit tests to set \[speckit.stage\_agents] under GPT defaults       |
-| MAINT-16            | 2026-01-31      | Headless ACE init + runtime-safe fetch + git repo-root parity (D113/D133)                     |
-| SPEC-KIT-982        | 2026-01-31      | ACE + maieutic injection into per-agent prompts via unified builder (D113/D133 parity)        |
-| SPEC-KIT-981        | 2026-01-31      | Config-driven stage→agent mapping with GPT-5.2 defaults, TUI/headless parity                  |
-| MAINT-14            | 2026-01-31      | Fix ${ARTIFACTS}/${PREVIOUS\_OUTPUTS} placeholder leakage, NEXT\_FOCUS\_ROADMAP refresh       |
-| SPEC-KIT-905        | 2026-01-30      | CLI stage parity: ID rename, docstring fixes, table-driven test, D113/D133 alignment          |
-| SPEC-KIT-900        | 2026-01-29      | Headless CLI execution parity, real agent spawning via AGENT\_MANAGER, exit codes (D113/D133) |
-| SPEC-KIT-980        | 2026-01-28      | PDF/DOCX ingest with feature gates, text extraction, searchable capsule persistence           |
-| SPEC-KIT-974        | 2026-01-27      | Export/import, encryption, safe export, risk auto-export, GC enhancements                     |
-| SPEC-KIT-979        | 2026-01-21      | Local-memory sunset phases, CLI flags, nightly parity workflow, import CLI, diagnostics       |
-| SPEC-KIT-976        | 2026-01-19      | Logic Mesh graph foundation: Card/Edge schemas, CLI commands, 6 tests passing                 |
-| SPEC-KIT-973        | 2026-01-19      | Time-travel TUI commands (timeline, asof, diff), label lookup, 3 tests passing                |
-| SPEC-KIT-978        | 2026-01-18      | Circuit breaker types, BreakerState/BreakerStateChangedPayload, EventType integration         |
-| SPEC-KIT-975        | 2026-01-18      | Replay timeline determinism, offline retrieval exactness, 5 replay tests passing              |
-| SPEC-KIT-971        | 2026-01-17      | Branch isolation, time-travel URI, checkpoints, merge at unlock, CLI complete                 |
-| SPEC-KIT-977        | 2026-01-17      | PolicySnapshot capture, dual storage, CLI/TUI commands, drift detection                       |
-| SPEC-KIT-978 (core) | 2026-01-16      | JSON schema enforcement, bakeoff CLI, reflex routing decisions                                |
-| SPEC-KIT-972        | 2026-01-12      | Hybrid retrieval, A/B harness, HybridBackend                                                  |
+| SPEC-KIT-983        | 2026-02-01      | Stage→agent defaults modal + root-only persistence with user-visible errors                            |
+| MAINT-17            | 2026-02-01      | Fix codex-cli hermetic speckit tests to set \[speckit.stage\_agents] under GPT defaults                |
+| MAINT-16            | 2026-01-31      | Headless ACE init + runtime-safe fetch + git repo-root parity (D113/D133)                              |
+| SPEC-KIT-982        | 2026-01-31      | ACE + maieutic injection into per-agent prompts via unified builder (D113/D133 parity)                 |
+| SPEC-KIT-981        | 2026-01-31      | Config-driven stage→agent mapping with GPT-5.2 defaults, TUI/headless parity                           |
+| MAINT-14            | 2026-01-31      | Fix ${ARTIFACTS}/${PREVIOUS\_OUTPUTS} placeholder leakage, NEXT\_FOCUS\_ROADMAP refresh                |
+| SPEC-KIT-905        | 2026-01-30      | CLI stage parity: ID rename, docstring fixes, table-driven test, D113/D133 alignment                   |
+| SPEC-KIT-900        | 2026-01-29      | Headless CLI execution parity, real agent spawning via AGENT\_MANAGER, exit codes (D113/D133)          |
+| SPEC-KIT-980        | 2026-01-28      | PDF/DOCX ingest with feature gates, text extraction, searchable capsule persistence                    |
+| SPEC-KIT-974        | 2026-01-27      | Export/import, encryption, safe export, risk auto-export, GC enhancements                              |
+| SPEC-KIT-979        | 2026-01-21      | Local-memory sunset phases, CLI flags, nightly parity workflow, import CLI, diagnostics                |
+| SPEC-KIT-976        | 2026-01-19      | Logic Mesh graph foundation: Card/Edge schemas, CLI commands, 6 tests passing                          |
+| SPEC-KIT-973        | 2026-01-19      | Time-travel TUI commands (timeline, asof, diff), label lookup, 3 tests passing                         |
+| SPEC-KIT-978        | 2026-01-18      | Circuit breaker types, BreakerState/BreakerStateChangedPayload, EventType integration                  |
+| SPEC-KIT-975        | 2026-01-18      | Replay timeline determinism, offline retrieval exactness, 5 replay tests passing                       |
+| SPEC-KIT-971        | 2026-01-17      | Branch isolation, time-travel URI, checkpoints, merge at unlock, CLI complete                          |
+| SPEC-KIT-977        | 2026-01-17      | PolicySnapshot capture, dual storage, CLI/TUI commands, drift detection                                |
+| SPEC-KIT-978 (core) | 2026-01-16      | JSON schema enforcement, bakeoff CLI, reflex routing decisions                                         |
+| SPEC-KIT-972        | 2026-01-12      | Hybrid retrieval, A/B harness, HybridBackend                                                           |
 
 ### Blocked
 

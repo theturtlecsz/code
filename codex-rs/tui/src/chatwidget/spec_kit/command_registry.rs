@@ -212,6 +212,9 @@ pub static SPEC_KIT_REGISTRY: Lazy<Mutex<CommandRegistry>> = Lazy::new(|| {
     // Policy commands (SPEC-KIT-977)
     registry.register(Box::new(SpecKitPolicyCommand));
 
+    // PM commands (SPEC-PM-004)
+    registry.register(Box::new(PmCommand));
+
     // Search commands
     registry.register(Box::new(SearchCommand));
     registry.register(Box::new(MemorySearchCommand)); // SPEC-KIT-972: Memory search with --explain
@@ -350,7 +353,7 @@ mod tests {
         // SPEC-KIT-978: Added speckit.reflex (already counted above)
         // SPEC-KIT-981: Additional commands may have been added - update as needed
         // SPEC-KIT-983: Added speckit.stage-agents (1 new)
-        assert_eq!(registry.len(), 51, "Registry should have 51 commands");
+        assert_eq!(registry.len(), 52, "Registry should have 52 commands");
 
         // Verify key commands are registered
         assert!(registry.find("speckit.status").is_some());

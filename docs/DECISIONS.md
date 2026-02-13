@@ -1,7 +1,7 @@
 # Decisions Register
 
-**Version**: 1.0.2 (2026-02-09)
-**Status**: 136 locked decisions (D1-D136)
+**Version**: 1.0.3 (2026-02-12)
+**Status**: 143 locked decisions (D1-D143)
 **Scope**: Codex-RS / Spec-Kit
 
 ***
@@ -239,23 +239,31 @@
 
 ## 8. Addenda (D135+)
 
-|  ID | Choice | Decision                    | Notes                                                                                                                                                                                          |
-| --: | :----: | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D135 |   A   | Bot job management service  | Lightweight persistent service acceptable for bot job management; must be systemd-managed, auto-resume on reboot, and exit-when-idle. Does not authorize always-processing daemons or heavyweight frameworks. |
-| D136 |   A   | Bot service IPC             | IPC between Tier‑1 callers (TUI/CLI/headless) and the bot job management service uses a Unix domain socket; prefer systemd socket activation to satisfy exit-when-idle and reduce manual service management. |
+|   ID | Choice | Decision                     | Notes                                                                                                                                                                                                         |
+| ---: | :----: | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D135 |    A   | Bot job management service   | Lightweight persistent service acceptable for bot job management; must be systemd-managed, auto-resume on reboot, and exit-when-idle. Does not authorize always-processing daemons or heavyweight frameworks. |
+| D136 |    A   | Bot service IPC              | IPC between Tier‑1 callers (TUI/CLI/headless) and the bot job management service uses a Unix domain socket; prefer systemd socket activation to satisfy exit-when-idle and reduce manual service management.  |
+| D137 |    A   | Full PM hierarchy next cycle | All 4 levels (Projects > Features > SPECs > Tasks) schema-defined and TUI-manageable (PM-D25).                                                                                                                |
+| D138 |    A   | TUI PM UX = SPEC-PM-004      | Interaction design extracted from PM-001 to dedicated spec. PM-001 = data model; PM-004 = UX (PM-D26).                                                                                                        |
+| D139 |    A   | BLOCKED = exit 2 + reason    | No dedicated exit code. Reuse exit 2 with `blocked_reason` in JSON output (PM-D29). Resolves PM-002/PM-003 open question.                                                                                     |
+| D140 |    A   | Hybrid holding states        | NeedsResearch/NeedsReview are lifecycle states with `return_state` for auto-return on run completion (PM-D28).                                                                                                |
+| D141 |    A   | Service starts on login      | systemd `WantedBy=default.target`; checks for stale runs on startup (PM-D33).                                                                                                                                 |
+| D142 |    A   | Service stays running        | D135 reinterpreted: no always-processing loops, but idle service is acceptable. Service exits on logout/shutdown only (PM-D34).                                                                               |
+| D143 |    A   | Cache reads, capsule writes  | TUI reads local cache; writes via capsule SoR; cache rebuilt if stale (PM-D35).                                                                                                                               |
 
 ***
 
 ## Change History
 
-| Version | Date       | Changes                                                              |
-| ------- | ---------- | -------------------------------------------------------------------- |
-| 1.0.2   | 2026-02-09 | Add D136 locking Unix-domain-socket IPC (systemd socket activation preferred) for the bot job management service. |
-| 1.0.1   | 2026-02-09 | Add D135 clarifying acceptable lightweight persistent service for bot job management (systemd-managed, auto-resume, exit-when-idle). |
-| 1.0.0   | 2026-01-22 | Initial canonical version; migrated from DECISION\_REGISTER.md v0.13 |
-| 0.13    | 2026-01-20 | Added D113-D134 (ARB Pass 2)                                         |
-| 0.12    | 2026-01-19 | Added D99-D112 (Reproducibility)                                     |
-| 0.11    | 2026-01-18 | Added D81-D98 (Memvid Integration)                                   |
+| Version | Date       | Changes                                                                                                                                     |
+| ------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0.3   | 2026-02-12 | Add D137-D143: PM hierarchy, TUI UX extraction, BLOCKED exit code, hybrid states, service lifecycle, cache model. Session 2 Q\&A decisions. |
+| 1.0.2   | 2026-02-09 | Add D136 locking Unix-domain-socket IPC (systemd socket activation preferred) for the bot job management service.                           |
+| 1.0.1   | 2026-02-09 | Add D135 clarifying acceptable lightweight persistent service for bot job management (systemd-managed, auto-resume, exit-when-idle).        |
+| 1.0.0   | 2026-01-22 | Initial canonical version; migrated from DECISION\_REGISTER.md v0.13                                                                        |
+| 0.13    | 2026-01-20 | Added D113-D134 (ARB Pass 2)                                                                                                                |
+| 0.12    | 2026-01-19 | Added D99-D112 (Reproducibility)                                                                                                            |
+| 0.11    | 2026-01-18 | Added D81-D98 (Memvid Integration)                                                                                                          |
 
 ***
 

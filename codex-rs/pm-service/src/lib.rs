@@ -16,6 +16,7 @@
 pub mod engine;
 pub mod ipc;
 pub mod manager;
+pub mod persistence;
 pub mod protocol;
 
 /// Protocol version for the PM service IPC.

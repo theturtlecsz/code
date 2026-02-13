@@ -18,6 +18,7 @@ pub const ERR_METHOD_NOT_FOUND: i64 = -32601;
 pub const ERR_INVALID_PARAMS: i64 = -32602;
 
 /// PM-specific error codes.
+pub const ERR_NOT_IMPLEMENTED: i64 = -32000;
 pub const ERR_NEEDS_INPUT: i64 = 10;
 pub const ERR_NEEDS_APPROVAL: i64 = 11;
 pub const ERR_INVARIANT: i64 = 13;
@@ -61,6 +62,13 @@ pub struct BotRunParams {
     /// If true, client wants push notifications (PM-D24).
     #[serde(default)]
     pub subscribe: bool,
+    /// If false, engine blocks (terminal) when NotebookLM is unavailable
+    /// instead of proceeding in degraded mode. Default: true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allow_degraded: Option<bool>,
+    /// Override NotebookLM health URL (testing/debug only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notebooklm_health_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,6 +77,15 @@ pub struct BotRunResult {
     pub status: BotRunState,
     pub work_item_id: String,
     pub kind: BotKind,
+    /// Exit code (included for --wait synthesized terminal notifications).
+    #[serde(default)]
+    pub exit_code: i32,
+    /// Human-readable summary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Artifact URIs for the run (if terminal).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_uris: Vec<String>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,6 +131,26 @@ pub struct BotShowParams {
     pub format: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BotShowResult {
+    pub run_id: String,
+    pub work_item_id: String,
+    pub kind: BotKind,
+    pub status: BotRunState,
+    pub capture_mode: BotCaptureMode,
+    pub write_mode: BotWriteMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report_json: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_uris: Vec<String>,
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // bot.runs (list)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,6 +163,12 @@ pub struct BotRunsParams {
     pub limit: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BotRunsResult {
+    pub runs: Vec<RunSummary>,
+    pub total: usize,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
