@@ -18,6 +18,8 @@ use crate::util::buffer::fill_rect;
 
 use super::ChatWidget;
 
+const DEGRADED_BANNER_TEXT: &str = "PM service unavailable -- read-only";
+
 // ---------------------------------------------------------------------------
 // State wrapper (follows LimitsState / ProState pattern)
 // ---------------------------------------------------------------------------
@@ -673,18 +675,32 @@ fn render_detail(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
 
     let width = area.width as usize;
 
-    // --- Fixed header (3 lines) -------------------------------------------
+    // --- Fixed header (3 lines) + optional degraded banner ----------------
+    let banner_height: u16 = if overlay.degraded { 1 } else { 0 };
     let header_height: u16 = 3;
-    if area.height <= header_height {
+    let fixed_top_height = banner_height + header_height;
+
+    if overlay.degraded {
+        let banner = RLine::from(Span::styled(
+            DEGRADED_BANNER_TEXT,
+            Style::default()
+                .fg(colors::error())
+                .bg(colors::background()),
+        ));
+        buf.set_line(area.x, area.y, &banner, area.width);
+    }
+
+    if area.height <= fixed_top_height {
         overlay.detail_visible_rows.set(0);
         overlay.detail_max_scroll.set(0);
         return;
     }
+    let header_y = area.y + banner_height;
 
     // Line 1: ID + title
     let id_title = format!("{} \u{2014} {}", node.id, node.title);
     let header1 = RLine::from(Span::styled(pad_or_trunc(&id_title, width), bright));
-    buf.set_line(area.x, area.y, &header1, area.width);
+    buf.set_line(area.x, header_y, &header1, area.width);
 
     // Line 2: state + updated + latest run
     let state_style = Style::default()
@@ -706,13 +722,13 @@ fn render_detail(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
         Span::styled(updated_label, dim),
         Span::styled(run_label, dim),
     ]);
-    buf.set_line(area.x, area.y + 1, &header2, area.width);
+    buf.set_line(area.x, header_y + 1, &header2, area.width);
 
     // Line 3: separator
     let sep = "\u{2500}".repeat(width); // ─
     buf.set_line(
         area.x,
-        area.y + 2,
+        header_y + 2,
         &RLine::from(Span::styled(
             sep.clone(),
             Style::default().fg(colors::border()),
@@ -722,14 +738,14 @@ fn render_detail(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
 
     // --- Pinned run config (bottom, 4 lines) ------------------------------
     let config_height: u16 = 4;
-    let remaining = area.height - header_height;
+    let remaining = area.height - fixed_top_height;
     let scroll_area_height = remaining.saturating_sub(config_height);
     if scroll_area_height == 0 {
         overlay.detail_visible_rows.set(0);
         overlay.detail_max_scroll.set(0);
         // Still render config if space
         if remaining >= config_height {
-            render_pinned_config(area.x, area.y + header_height, area.width, buf);
+            render_pinned_config(area.x, area.y + fixed_top_height, area.width, buf);
         }
         return;
     }
@@ -744,7 +760,7 @@ fn render_detail(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     let scroll = (overlay.detail_scroll.get() as usize).min(max_scroll);
     overlay.detail_scroll.set(scroll as u16);
 
-    let scroll_y = area.y + header_height;
+    let scroll_y = area.y + fixed_top_height;
     for (i, line) in content_lines
         .iter()
         .skip(scroll)
@@ -863,7 +879,7 @@ fn render_summary_bar(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     // Degraded banner
     if overlay.degraded && area.height >= 3 {
         let banner = RLine::from(Span::styled(
-            "PM service unavailable -- read-only demo data",
+            DEGRADED_BANNER_TEXT,
             Style::default()
                 .fg(colors::error())
                 .bg(colors::background()),
@@ -1075,6 +1091,20 @@ fn check_service_status() -> bool {
 mod tests {
     use super::*;
 
+    fn buffer_line_text(buf: &Buffer, area: Rect, y: u16) -> String {
+        let mut row = String::new();
+        for x in 0..area.width {
+            row.push(
+                buf[(area.x + x, area.y + y)]
+                    .symbol()
+                    .chars()
+                    .next()
+                    .unwrap_or(' '),
+            );
+        }
+        row
+    }
+
     #[test]
     fn test_demo_tree_valid() {
         let nodes = demo_tree();
@@ -1230,5 +1260,35 @@ mod tests {
         ] {
             let _ = state_color(state);
         }
+    }
+
+    #[test]
+    fn test_render_summary_bar_degraded_banner_text_matches_spec() {
+        let overlay = PmOverlay::new(true);
+        let area = Rect::new(0, 0, 120, 3);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 120, 5));
+        render_summary_bar(&overlay, area, &mut buf);
+
+        let banner_row = buffer_line_text(&buf, area, 2);
+        assert!(
+            banner_row.contains(DEGRADED_BANNER_TEXT),
+            "summary banner should match PM-UX-D14 text"
+        );
+    }
+
+    #[test]
+    fn test_render_detail_degraded_banner_text_matches_spec() {
+        let overlay = PmOverlay::new(true);
+        assert!(overlay.open_detail_for_visible(0));
+
+        let area = Rect::new(0, 0, 120, 18);
+        let mut buf = Buffer::empty(area);
+        render_detail(&overlay, area, &mut buf);
+
+        let top_row = buffer_line_text(&buf, area, 0);
+        assert!(
+            top_row.contains(DEGRADED_BANNER_TEXT),
+            "detail banner should match PM-UX-D14 text"
+        );
     }
 }
