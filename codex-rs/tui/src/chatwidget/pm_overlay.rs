@@ -272,6 +272,24 @@ impl PmOverlay {
         }
     }
 
+    /// Create a worst-case overlay: degraded with no data available.
+    #[cfg(test)]
+    fn new_degraded_empty() -> Self {
+        Self {
+            scroll: Cell::new(0),
+            max_scroll: Cell::new(0),
+            visible_rows: Cell::new(0),
+            selected: Cell::new(0),
+            expanded: std::cell::RefCell::new(HashSet::new()),
+            nodes: Vec::new(),
+            degraded: true,
+            detail_node_idx: Cell::new(None),
+            detail_scroll: Cell::new(0),
+            detail_max_scroll: Cell::new(0),
+            detail_visible_rows: Cell::new(0),
+        }
+    }
+
     // -- Accessors used by pm_handlers ----------------------------------------
 
     pub(super) fn selected(&self) -> usize {
@@ -525,6 +543,11 @@ impl ChatWidget<'_> {
 
         if is_detail {
             render_detail(overlay, body, buf);
+        } else if overlay.degraded && overlay.nodes.is_empty() {
+            // PM-UX-D15: worst-case fallback — no data available at all
+            overlay.visible_rows.set(0);
+            overlay.max_scroll.set(0);
+            render_worst_case_fallback(overlay, body, buf);
         } else {
             // Summary bar (2 lines) + optional degraded banner (1 line)
             let degraded_lines: u16 = if overlay.degraded { 1 } else { 0 };
@@ -815,6 +838,62 @@ fn render_pinned_config(x: u16, y: u16, width: u16, buf: &mut Buffer) {
         Span::styled("(disabled)", dim),
     ]);
     buf.set_line(x, y + 2, &actions, width);
+}
+
+// ---------------------------------------------------------------------------
+// Worst-case fallback (PM-UX-D15)
+// ---------------------------------------------------------------------------
+
+/// Full-screen error state when service is down, cache is missing, and capsule
+/// access has failed.  Renders three diagnostic lines and two remedy commands.
+fn render_worst_case_fallback(_overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
+    let dim = Style::default().fg(colors::text_dim());
+    let err = Style::default().fg(colors::error());
+    let bright = Style::default().fg(colors::text());
+    let accent = Style::default().fg(colors::function());
+
+    let lines: Vec<RLine<'static>> = vec![
+        // Title
+        RLine::from(Span::styled(
+            "PM data unavailable",
+            Style::default().fg(colors::error()),
+        )),
+        RLine::from(Span::styled("", dim)),
+        // Diagnostic lines
+        RLine::from(vec![
+            Span::styled("  Service status:  ", bright),
+            Span::styled("not running / connection refused", err),
+        ]),
+        RLine::from(vec![
+            Span::styled("  Cache status:    ", bright),
+            Span::styled("missing / stale / corrupt", err),
+        ]),
+        RLine::from(vec![
+            Span::styled("  Capsule status:  ", bright),
+            Span::styled("locked / unreadable / missing", err),
+        ]),
+        RLine::from(Span::styled("", dim)),
+        // Separator
+        RLine::from(Span::styled(
+            "\u{2500}".repeat(area.width as usize),
+            Style::default().fg(colors::border()),
+        )),
+        RLine::from(Span::styled("", dim)),
+        // Remedies
+        RLine::from(Span::styled("  Remedies:", bright)),
+        RLine::from(vec![
+            Span::styled("    1. Run ", dim),
+            Span::styled("/pm service doctor", accent),
+        ]),
+        RLine::from(vec![
+            Span::styled("    2. Run ", dim),
+            Span::styled("systemctl --user start codex-pm-service", accent),
+        ]),
+    ];
+
+    for (i, line) in lines.iter().take(area.height as usize).enumerate() {
+        buf.set_line(area.x, area.y + i as u16, line, area.width);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1236,6 +1315,45 @@ mod tests {
 
         overlay.set_detail_scroll(0);
         assert_eq!(overlay.detail_scroll(), 0);
+    }
+
+    #[test]
+    fn test_render_worst_case_fallback_diagnostic_and_remedy_lines() {
+        let overlay = PmOverlay::new_degraded_empty();
+        let area = Rect::new(0, 0, 100, 15);
+        let mut buf = Buffer::empty(area);
+        render_worst_case_fallback(&overlay, area, &mut buf);
+
+        // Collect all rendered text
+        let mut text = String::new();
+        for y in 0..area.height {
+            text.push_str(&buffer_line_text(&buf, area, y));
+            text.push('\n');
+        }
+
+        // PM-UX-D15: three diagnostic lines
+        assert!(
+            text.contains("Service status"),
+            "should contain 'Service status' diagnostic"
+        );
+        assert!(
+            text.contains("Cache status"),
+            "should contain 'Cache status' diagnostic"
+        );
+        assert!(
+            text.contains("Capsule status"),
+            "should contain 'Capsule status' diagnostic"
+        );
+
+        // PM-UX-D15: remedy commands
+        assert!(
+            text.contains("/pm service doctor"),
+            "should contain '/pm service doctor' remedy"
+        );
+        assert!(
+            text.contains("systemctl --user start codex-pm-service"),
+            "should contain 'systemctl --user start codex-pm-service' remedy"
+        );
     }
 
     #[test]
