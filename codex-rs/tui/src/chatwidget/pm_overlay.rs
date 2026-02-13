@@ -17,6 +17,7 @@ use crate::colors;
 use crate::util::buffer::fill_rect;
 
 use super::ChatWidget;
+use super::session_handlers::human_ago;
 
 const DEGRADED_BANNER_TEXT: &str = "PM service unavailable -- read-only";
 
@@ -1159,7 +1160,7 @@ fn render_row(
             Span::styled(" ", base),
             Span::styled(pad_or_trunc(&node.state, state_w), state_style),
             Span::styled(" ", base),
-            Span::styled(pad_or_trunc(&short_date(&node.updated_at), updated_w), base),
+            Span::styled(pad_or_trunc(&human_ago(&node.updated_at), updated_w), base),
             Span::styled(" ", base),
         ];
         // PM-UX-D11: needs_attention badge on latest-run column
@@ -1228,7 +1229,7 @@ fn render_row(
         }
         spans.push(Span::styled(" ", base));
         spans.push(Span::styled(
-            pad_or_trunc(&short_date(&node.updated_at), updated_w),
+            pad_or_trunc(&human_ago(&node.updated_at), updated_w),
             base,
         ));
         let used: usize = spans.iter().map(|s| s.content.len()).sum();
@@ -1816,6 +1817,52 @@ mod tests {
         assert!(
             !text.contains("Conflict summary"),
             "running node should not show conflict summary"
+        );
+    }
+
+    // --- PM-004 relative time tests ------------------------------------------
+
+    #[test]
+    fn test_relative_time_recent_timestamp() {
+        use chrono::Utc;
+        // Create a timestamp 2 hours ago
+        let two_hours_ago = (Utc::now() - chrono::Duration::hours(2))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let result = human_ago(&two_hours_ago);
+        assert!(
+            result.contains("h ago") || result == "just now",
+            "recent timestamp should show relative time, got: {result}"
+        );
+        assert!(
+            !result.contains("-"),
+            "recent timestamp should NOT show YYYY-MM-DD, got: {result}"
+        );
+    }
+
+    #[test]
+    fn test_relative_time_old_timestamp() {
+        use chrono::Utc;
+        // Create a timestamp 10 days ago
+        let ten_days_ago = (Utc::now() - chrono::Duration::days(10))
+            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let result = human_ago(&ten_days_ago);
+        assert!(
+            result.contains("-"),
+            "old timestamp (>= 7 days) should show YYYY-MM-DD, got: {result}"
+        );
+        assert!(
+            !result.contains("ago"),
+            "old timestamp should NOT show 'ago', got: {result}"
+        );
+    }
+
+    #[test]
+    fn test_relative_time_invalid_timestamp() {
+        let result = human_ago("invalid-timestamp");
+        // Should return the input string as fallback
+        assert_eq!(
+            result, "invalid-timestamp",
+            "invalid timestamp should return input as-is"
         );
     }
 }
