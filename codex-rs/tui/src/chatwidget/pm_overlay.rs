@@ -1,7 +1,7 @@
 //! SPEC-PM-004: PM overview overlay
 //!
 //! Read-only list view showing a hierarchical tree of work items
-//! (Feature > Spec > Task) with adaptive columns, summary bar, and
+//! (Project > Feature > Spec > Task) with adaptive columns, summary bar, and
 //! degraded-mode detection.
 
 use std::cell::Cell;
@@ -39,10 +39,18 @@ pub(super) struct PmOverlay {
     expanded: std::cell::RefCell<HashSet<usize>>,
     nodes: Vec<TreeNode>,
     degraded: bool,
+    /// When `Some(node_idx)`, the overlay shows a read-only detail view for
+    /// that node instead of the tree list.
+    detail_node_idx: Cell<Option<usize>>,
+    detail_scroll: Cell<u16>,
+    detail_max_scroll: Cell<u16>,
+    detail_visible_rows: Cell<u16>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // Variants stored for future detail view / filtering
 enum NodeType {
+    Project,
     Feature,
     Spec,
     Task,
@@ -68,7 +76,19 @@ struct TreeNode {
 fn demo_tree() -> Vec<TreeNode> {
     let mut nodes: Vec<TreeNode> = Vec::new();
 
-    // Feature 0
+    // Project 0
+    nodes.push(TreeNode {
+        id: "PROJ-001".into(),
+        title: "Spec-Kit Platform".into(),
+        node_type: NodeType::Project,
+        state: String::new(),
+        updated_at: "2026-02-12T10:30:00Z".into(),
+        latest_run: String::new(),
+        depth: 0,
+        parent_idx: None,
+        children: vec![1, 8],
+    });
+    // Feature 1
     nodes.push(TreeNode {
         id: "FEAT-001".into(),
         title: "User Authentication".into(),
@@ -76,141 +96,153 @@ fn demo_tree() -> Vec<TreeNode> {
         state: "InProgress".into(),
         updated_at: "2026-02-12T10:30:00Z".into(),
         latest_run: String::new(),
-        depth: 0,
-        parent_idx: None,
-        children: vec![1, 4],
+        depth: 1,
+        parent_idx: Some(0),
+        children: vec![2, 5],
     });
-    // Spec 1
+    // Spec 2
     nodes.push(TreeNode {
         id: "SPEC-AUTH-001".into(),
         title: "OAuth2 Integration".into(),
         node_type: NodeType::Spec,
-        state: "InProgress".into(),
+        state: "NeedsReview (-> InProgress)".into(),
         updated_at: "2026-02-12T09:15:00Z".into(),
         latest_run: "run-042".into(),
-        depth: 1,
-        parent_idx: Some(0),
-        children: vec![2, 3],
+        depth: 2,
+        parent_idx: Some(1),
+        children: vec![3, 4],
     });
-    // Task 2
+    // Task 3
     nodes.push(TreeNode {
         id: "TASK-001".into(),
         title: "Implement token refresh".into(),
         node_type: NodeType::Task,
-        state: "Done".into(),
+        state: "completed".into(),
         updated_at: "2026-02-11T14:00:00Z".into(),
         latest_run: "run-041".into(),
-        depth: 2,
-        parent_idx: Some(1),
+        depth: 3,
+        parent_idx: Some(2),
         children: vec![],
     });
-    // Task 3
+    // Task 4
     nodes.push(TreeNode {
         id: "TASK-002".into(),
         title: "Add PKCE flow".into(),
         node_type: NodeType::Task,
-        state: "InProgress".into(),
+        state: "open".into(),
         updated_at: "2026-02-12T09:15:00Z".into(),
         latest_run: "run-042".into(),
-        depth: 2,
-        parent_idx: Some(1),
+        depth: 3,
+        parent_idx: Some(2),
         children: vec![],
     });
-    // Spec 4
+    // Spec 5
     nodes.push(TreeNode {
         id: "SPEC-AUTH-002".into(),
         title: "Session Management".into(),
         node_type: NodeType::Spec,
-        state: "Draft".into(),
+        state: "Backlog".into(),
         updated_at: "2026-02-10T16:00:00Z".into(),
         latest_run: String::new(),
-        depth: 1,
-        parent_idx: Some(0),
-        children: vec![5],
+        depth: 2,
+        parent_idx: Some(1),
+        children: vec![6, 7],
     });
-    // Task 5
+    // Task 6
     nodes.push(TreeNode {
         id: "TASK-003".into(),
         title: "Design session store".into(),
         node_type: NodeType::Task,
-        state: "Draft".into(),
+        state: "open".into(),
         updated_at: "2026-02-10T16:00:00Z".into(),
         latest_run: String::new(),
-        depth: 2,
-        parent_idx: Some(4),
+        depth: 3,
+        parent_idx: Some(5),
+        children: vec![],
+    });
+    // Task 7
+    nodes.push(TreeNode {
+        id: "TASK-004".into(),
+        title: "Implement session expiry".into(),
+        node_type: NodeType::Task,
+        state: "failed".into(),
+        updated_at: "2026-02-10T18:00:00Z".into(),
+        latest_run: "run-039".into(),
+        depth: 3,
+        parent_idx: Some(5),
         children: vec![],
     });
 
-    // Feature 6
+    // Feature 8
     nodes.push(TreeNode {
         id: "FEAT-002".into(),
         title: "Pipeline Orchestration".into(),
         node_type: NodeType::Feature,
-        state: "Blocked".into(),
+        state: "NeedsResearch (-> Backlog)".into(),
         updated_at: "2026-02-11T11:00:00Z".into(),
         latest_run: String::new(),
-        depth: 0,
-        parent_idx: None,
-        children: vec![7, 9],
+        depth: 1,
+        parent_idx: Some(0),
+        children: vec![9, 11],
     });
-    // Spec 7
+    // Spec 9
     nodes.push(TreeNode {
         id: "SPEC-PIPE-001".into(),
         title: "Stage execution engine".into(),
         node_type: NodeType::Spec,
-        state: "Blocked".into(),
-        updated_at: "2026-02-11T11:00:00Z".into(),
-        latest_run: "run-038".into(),
-        depth: 1,
-        parent_idx: Some(6),
-        children: vec![8],
-    });
-    // Task 8
-    nodes.push(TreeNode {
-        id: "TASK-004".into(),
-        title: "Implement retry logic".into(),
-        node_type: NodeType::Task,
-        state: "Blocked".into(),
+        state: "Planned".into(),
         updated_at: "2026-02-11T11:00:00Z".into(),
         latest_run: "run-038".into(),
         depth: 2,
-        parent_idx: Some(7),
-        children: vec![],
-    });
-    // Spec 9
-    nodes.push(TreeNode {
-        id: "SPEC-PIPE-002".into(),
-        title: "Guardrail validation".into(),
-        node_type: NodeType::Spec,
-        state: "Done".into(),
-        updated_at: "2026-02-09T08:00:00Z".into(),
-        latest_run: "run-035".into(),
-        depth: 1,
-        parent_idx: Some(6),
-        children: vec![10, 11],
+        parent_idx: Some(8),
+        children: vec![10],
     });
     // Task 10
     nodes.push(TreeNode {
         id: "TASK-005".into(),
-        title: "Schema validation".into(),
+        title: "Implement retry logic".into(),
         node_type: NodeType::Task,
-        state: "Done".into(),
-        updated_at: "2026-02-09T08:00:00Z".into(),
-        latest_run: "run-034".into(),
-        depth: 2,
+        state: "open".into(),
+        updated_at: "2026-02-11T11:00:00Z".into(),
+        latest_run: "run-038".into(),
+        depth: 3,
         parent_idx: Some(9),
         children: vec![],
     });
-    // Task 11
+    // Spec 11
+    nodes.push(TreeNode {
+        id: "SPEC-PIPE-002".into(),
+        title: "Guardrail validation".into(),
+        node_type: NodeType::Spec,
+        state: "Completed".into(),
+        updated_at: "2026-02-09T08:00:00Z".into(),
+        latest_run: "run-035".into(),
+        depth: 2,
+        parent_idx: Some(8),
+        children: vec![12, 13],
+    });
+    // Task 12
     nodes.push(TreeNode {
         id: "TASK-006".into(),
+        title: "Schema validation".into(),
+        node_type: NodeType::Task,
+        state: "completed".into(),
+        updated_at: "2026-02-09T08:00:00Z".into(),
+        latest_run: "run-034".into(),
+        depth: 3,
+        parent_idx: Some(11),
+        children: vec![],
+    });
+    // Task 13
+    nodes.push(TreeNode {
+        id: "TASK-007".into(),
         title: "Evidence checks".into(),
         node_type: NodeType::Task,
-        state: "Done".into(),
+        state: "completed".into(),
         updated_at: "2026-02-08T17:30:00Z".into(),
         latest_run: "run-033".into(),
-        depth: 2,
-        parent_idx: Some(9),
+        depth: 3,
+        parent_idx: Some(11),
         children: vec![],
     });
 
@@ -231,6 +263,10 @@ impl PmOverlay {
             expanded: std::cell::RefCell::new(HashSet::new()),
             nodes: demo_tree(),
             degraded,
+            detail_node_idx: Cell::new(None),
+            detail_scroll: Cell::new(0),
+            detail_max_scroll: Cell::new(0),
+            detail_visible_rows: Cell::new(0),
         }
     }
 
@@ -254,6 +290,50 @@ impl PmOverlay {
 
     pub(super) fn visible_rows(&self) -> u16 {
         self.visible_rows.get()
+    }
+
+    // -- Detail-mode accessors -------------------------------------------------
+
+    pub(super) fn is_detail_mode(&self) -> bool {
+        self.detail_node_idx.get().is_some()
+    }
+
+    /// Open detail view for the node at the given *visible-row* index.
+    /// Returns `true` if detail was opened.
+    pub(super) fn open_detail_for_visible(&self, flat_idx: usize) -> bool {
+        match self.node_idx_of_visible(flat_idx) {
+            Some(node_idx) => {
+                self.detail_node_idx.set(Some(node_idx));
+                self.detail_scroll.set(0);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Close detail view, returning to the list.  List selection/scroll are
+    /// preserved because we never touch them.
+    pub(super) fn close_detail(&self) {
+        self.detail_node_idx.set(None);
+        self.detail_scroll.set(0);
+    }
+
+    /// The node currently shown in detail view, if any.
+    fn detail_node(&self) -> Option<&TreeNode> {
+        self.detail_node_idx.get().map(|i| &self.nodes[i])
+    }
+
+    pub(super) fn detail_scroll(&self) -> u16 {
+        self.detail_scroll.get()
+    }
+
+    pub(super) fn set_detail_scroll(&self, val: u16) {
+        self.detail_scroll
+            .set(val.min(self.detail_max_scroll.get()));
+    }
+
+    pub(super) fn detail_visible_rows(&self) -> u16 {
+        self.detail_visible_rows.get()
     }
 
     /// Toggle expand on the selected node (returns true if changed).
@@ -391,20 +471,36 @@ impl ChatWidget<'_> {
         };
         Clear.render(overlay_area, buf);
 
-        // Title bar
+        // Branch on detail vs list mode
         let dim = Style::default().fg(colors::text_dim());
         let bright = Style::default().fg(colors::text());
         let accent = Style::default().fg(colors::function());
-        let title = RLine::from(vec![
-            Span::styled(" PM Overview ", bright),
-            Span::styled("--- ", dim),
-            Span::styled("Up/Dn", accent),
-            Span::styled(" navigate  ", dim),
-            Span::styled("Left/Right", accent),
-            Span::styled(" expand/collapse  ", dim),
-            Span::styled("Esc", bright),
-            Span::styled(" close ", dim),
-        ]);
+
+        let is_detail = overlay.is_detail_mode();
+
+        let title = if is_detail {
+            RLine::from(vec![
+                Span::styled(" PM Detail ", bright),
+                Span::styled("--- ", dim),
+                Span::styled("Up/Dn", accent),
+                Span::styled(" scroll  ", dim),
+                Span::styled("Esc", bright),
+                Span::styled(" back to list ", dim),
+            ])
+        } else {
+            RLine::from(vec![
+                Span::styled(" PM Overview ", bright),
+                Span::styled("--- ", dim),
+                Span::styled("Up/Dn", accent),
+                Span::styled(" navigate  ", dim),
+                Span::styled("Left/Right", accent),
+                Span::styled(" expand/collapse  ", dim),
+                Span::styled("Enter", accent),
+                Span::styled(" detail  ", dim),
+                Span::styled("Esc", bright),
+                Span::styled(" close ", dim),
+            ])
+        };
 
         let block = Block::default()
             .borders(Borders::ALL)
@@ -425,31 +521,284 @@ impl ChatWidget<'_> {
             return;
         }
 
-        // Summary bar (2 lines) + optional degraded banner (1 line)
-        let degraded_lines: u16 = if overlay.degraded { 1 } else { 0 };
-        let summary_height = 2 + degraded_lines;
-        if body.height <= summary_height {
-            overlay.visible_rows.set(0);
-            overlay.max_scroll.set(0);
-            return;
+        if is_detail {
+            render_detail(overlay, body, buf);
+        } else {
+            // Summary bar (2 lines) + optional degraded banner (1 line)
+            let degraded_lines: u16 = if overlay.degraded { 1 } else { 0 };
+            let summary_height = 2 + degraded_lines;
+            if body.height <= summary_height {
+                overlay.visible_rows.set(0);
+                overlay.max_scroll.set(0);
+                return;
+            }
+
+            let summary_area = Rect {
+                x: body.x,
+                y: body.y,
+                width: body.width,
+                height: summary_height,
+            };
+            let list_area = Rect {
+                x: body.x,
+                y: body.y + summary_height,
+                width: body.width,
+                height: body.height - summary_height,
+            };
+
+            render_summary_bar(overlay, summary_area, buf);
+            render_list(overlay, list_area, buf);
         }
-
-        let summary_area = Rect {
-            x: body.x,
-            y: body.y,
-            width: body.width,
-            height: summary_height,
-        };
-        let list_area = Rect {
-            x: body.x,
-            y: body.y + summary_height,
-            width: body.width,
-            height: body.height - summary_height,
-        };
-
-        render_summary_bar(overlay, summary_area, buf);
-        render_list(overlay, list_area, buf);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Detail view (read-only, PM-UX-D6/D20)
+// ---------------------------------------------------------------------------
+
+/// Build all detail-view lines for `node`.  The caller handles scrolling.
+fn detail_content_lines(node: &TreeNode, width: usize) -> Vec<RLine<'static>> {
+    let dim = Style::default().fg(colors::text_dim());
+    let bright = Style::default().fg(colors::text());
+    let label_style = Style::default().fg(colors::info());
+
+    let mut lines: Vec<RLine<'static>> = Vec::new();
+
+    // --- Fixed header is rendered separately; these are the scrollable sections ---
+
+    // ── Metadata ──────────────────────────────────────────────
+    let sep = "\u{2500}".repeat(width.min(60)); // ─
+    lines.push(RLine::from(Span::styled(
+        format!("\u{2500}\u{2500} Metadata {sep}"),
+        dim,
+    )));
+
+    let node_type_label = match node.node_type {
+        NodeType::Project => "Project",
+        NodeType::Feature => "Feature",
+        NodeType::Spec => "Spec",
+        NodeType::Task => "Task",
+    };
+    lines.push(RLine::from(vec![
+        Span::styled("  Type:     ", label_style),
+        Span::styled(node_type_label.to_string(), bright),
+    ]));
+    lines.push(RLine::from(vec![
+        Span::styled("  Parent:   ", label_style),
+        Span::styled(
+            node.parent_idx
+                .map_or_else(|| "(root)".to_string(), |p| format!("node {p}")),
+            bright,
+        ),
+    ]));
+    if matches!(node.node_type, NodeType::Feature) {
+        lines.push(RLine::from(vec![
+            Span::styled("  Priority: ", label_style),
+            Span::styled("(not set)", dim),
+        ]));
+    }
+    if matches!(node.node_type, NodeType::Spec) {
+        lines.push(RLine::from(vec![
+            Span::styled("  Quality:  ", label_style),
+            Span::styled("(not set)", dim),
+        ]));
+        lines.push(RLine::from(vec![
+            Span::styled("  PRD URI:  ", label_style),
+            Span::styled("(none)", dim),
+        ]));
+    }
+    lines.push(RLine::from(Span::styled("", dim)));
+
+    // ── State Controls (disabled) ─────────────────────────────
+    lines.push(RLine::from(Span::styled(
+        format!("\u{2500}\u{2500} State Controls {sep}"),
+        dim,
+    )));
+    lines.push(RLine::from(vec![
+        Span::styled("  [F5] Promote   ", dim),
+        Span::styled("[F6] Hold   ", dim),
+        Span::styled("[F7] Complete", dim),
+    ]));
+    lines.push(RLine::from(Span::styled(
+        "  (disabled \u{2014} read-only view)",
+        dim,
+    )));
+    lines.push(RLine::from(Span::styled("", dim)));
+
+    // ── Run History ───────────────────────────────────────────
+    lines.push(RLine::from(Span::styled(
+        format!("\u{2500}\u{2500} Run History {sep}"),
+        dim,
+    )));
+    if node.latest_run.is_empty() {
+        lines.push(RLine::from(Span::styled("  (no runs)", dim)));
+    } else {
+        // Header row
+        lines.push(RLine::from(vec![
+            Span::styled("  Run ID       ", label_style),
+            Span::styled("Kind       ", label_style),
+            Span::styled("Preset     ", label_style),
+            Span::styled("Status     ", label_style),
+            Span::styled("Started", label_style),
+        ]));
+        // Single demo row from latest_run
+        lines.push(RLine::from(vec![
+            Span::styled(format!("  {:<14}", node.latest_run), bright),
+            Span::styled("review     ", dim),
+            Span::styled("standard   ", dim),
+            Span::styled("completed  ", dim),
+            Span::styled(short_date(&node.updated_at), dim),
+        ]));
+    }
+    lines.push(RLine::from(Span::styled("", dim)));
+
+    // ── Checkpoints ───────────────────────────────────────────
+    lines.push(RLine::from(Span::styled(
+        format!("\u{2500}\u{2500} Checkpoints {sep}"),
+        dim,
+    )));
+    lines.push(RLine::from(Span::styled("  (no active checkpoint)", dim)));
+    lines.push(RLine::from(Span::styled("", dim)));
+
+    lines
+}
+
+fn render_detail(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
+    let Some(node) = overlay.detail_node() else {
+        return;
+    };
+
+    let dim = Style::default().fg(colors::text_dim());
+    let bright = Style::default().fg(colors::text());
+
+    let width = area.width as usize;
+
+    // --- Fixed header (3 lines) -------------------------------------------
+    let header_height: u16 = 3;
+    if area.height <= header_height {
+        overlay.detail_visible_rows.set(0);
+        overlay.detail_max_scroll.set(0);
+        return;
+    }
+
+    // Line 1: ID + title
+    let id_title = format!("{} \u{2014} {}", node.id, node.title);
+    let header1 = RLine::from(Span::styled(pad_or_trunc(&id_title, width), bright));
+    buf.set_line(area.x, area.y, &header1, area.width);
+
+    // Line 2: state + updated + latest run
+    let state_style = Style::default()
+        .fg(state_color(&node.state))
+        .bg(colors::background());
+    let state_text = if node.state.is_empty() {
+        "(container)".to_string()
+    } else {
+        node.state.clone()
+    };
+    let updated_label = format!("  Updated: {}  ", short_date(&node.updated_at));
+    let run_label = if node.latest_run.is_empty() {
+        String::new()
+    } else {
+        format!("Latest run: {}", node.latest_run)
+    };
+    let header2 = RLine::from(vec![
+        Span::styled(state_text, state_style),
+        Span::styled(updated_label, dim),
+        Span::styled(run_label, dim),
+    ]);
+    buf.set_line(area.x, area.y + 1, &header2, area.width);
+
+    // Line 3: separator
+    let sep = "\u{2500}".repeat(width); // ─
+    buf.set_line(
+        area.x,
+        area.y + 2,
+        &RLine::from(Span::styled(
+            sep.clone(),
+            Style::default().fg(colors::border()),
+        )),
+        area.width,
+    );
+
+    // --- Pinned run config (bottom, 4 lines) ------------------------------
+    let config_height: u16 = 4;
+    let remaining = area.height - header_height;
+    let scroll_area_height = remaining.saturating_sub(config_height);
+    if scroll_area_height == 0 {
+        overlay.detail_visible_rows.set(0);
+        overlay.detail_max_scroll.set(0);
+        // Still render config if space
+        if remaining >= config_height {
+            render_pinned_config(area.x, area.y + header_height, area.width, buf);
+        }
+        return;
+    }
+
+    // --- Scrollable middle ------------------------------------------------
+    let content_lines = detail_content_lines(node, width);
+    let total = content_lines.len();
+
+    overlay.detail_visible_rows.set(scroll_area_height);
+    let max_scroll = total.saturating_sub(scroll_area_height as usize);
+    overlay.detail_max_scroll.set(max_scroll as u16);
+    let scroll = (overlay.detail_scroll.get() as usize).min(max_scroll);
+    overlay.detail_scroll.set(scroll as u16);
+
+    let scroll_y = area.y + header_height;
+    for (i, line) in content_lines
+        .iter()
+        .skip(scroll)
+        .take(scroll_area_height as usize)
+        .enumerate()
+    {
+        buf.set_line(area.x, scroll_y + i as u16, line, area.width);
+    }
+
+    // --- Pinned run config ------------------------------------------------
+    let config_y = scroll_y + scroll_area_height;
+    // Config separator
+    buf.set_line(
+        area.x,
+        config_y,
+        &RLine::from(Span::styled(sep, Style::default().fg(colors::border()))),
+        area.width,
+    );
+    render_pinned_config(area.x, config_y + 1, area.width, buf);
+}
+
+fn render_pinned_config(x: u16, y: u16, width: u16, buf: &mut Buffer) {
+    let dim = Style::default().fg(colors::text_dim());
+    let label_style = Style::default().fg(colors::info());
+
+    // Line 1: Presets
+    let presets = RLine::from(vec![
+        Span::styled("  Preset: ", label_style),
+        Span::styled("quick  ", dim),
+        Span::styled("[standard]  ", Style::default().fg(colors::text())),
+        Span::styled("deep  ", dim),
+        Span::styled("exhaustive", dim),
+        Span::styled("  (read-only)", dim),
+    ]);
+    buf.set_line(x, y, &presets, width);
+
+    // Line 2: Scopes
+    let scopes = RLine::from(vec![
+        Span::styled("  Scopes: ", label_style),
+        Span::styled(
+            "[x] correctness  [x] security  [x] performance  [x] style  [x] architecture",
+            dim,
+        ),
+    ]);
+    buf.set_line(x, y + 1, &scopes, width);
+
+    // Line 3: Actions (disabled)
+    let actions = RLine::from(vec![
+        Span::styled("  Actions: ", label_style),
+        Span::styled("[F8] Run Research  ", dim),
+        Span::styled("[F9] Run Review  ", dim),
+        Span::styled("(disabled)", dim),
+    ]);
+    buf.set_line(x, y + 2, &actions, width);
 }
 
 // ---------------------------------------------------------------------------
@@ -457,24 +806,39 @@ impl ChatWidget<'_> {
 // ---------------------------------------------------------------------------
 
 fn render_summary_bar(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
-    // Count states
-    let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-    for node in &overlay.nodes {
-        *counts.entry(node.state.as_str()).or_default() += 1;
-    }
-
     let dim = Style::default().fg(colors::text_dim());
 
-    // Line 1: state chips + active runs
+    // PM-001 canonical display states (Feature/Spec lifecycle + Task ternary)
+    let display_states: &[&str] = &[
+        "Backlog",
+        "NeedsResearch",
+        "Planned",
+        "InProgress",
+        "NeedsReview",
+        "Completed",
+        "Deprecated",
+        "Archived",
+        "open",
+        "completed",
+        "failed",
+    ];
+
+    // Count each label: exact matches + holding variants like "Label (-> ...)"
     let mut chips: Vec<Span<'static>> = Vec::new();
-    for state in &["Draft", "InProgress", "Done", "Blocked", "Failed"] {
-        if let Some(&count) = counts.get(state) {
+    for &label in display_states {
+        let count = overlay
+            .nodes
+            .iter()
+            .filter(|n| !n.state.is_empty())
+            .filter(|n| n.state == label || n.state.starts_with(&format!("{label} (->")))
+            .count();
+        if count > 0 {
             if !chips.is_empty() {
                 chips.push(Span::styled("  ", dim));
             }
-            let color = state_color(state);
+            let color = state_color(label);
             chips.push(Span::styled(
-                format!("{state}:{count}"),
+                format!("{label}:{count}"),
                 Style::default().fg(color),
             ));
         }
@@ -662,11 +1026,18 @@ fn render_row(
 // ---------------------------------------------------------------------------
 
 fn state_color(state: &str) -> ratatui::style::Color {
+    // Holding states (e.g. "NeedsReview (-> InProgress)") get amber
+    if state.contains("(->") {
+        return colors::warning();
+    }
     match state {
-        "Done" => colors::success(),
+        "Backlog" | "Deprecated" | "Archived" => colors::text_dim(),
+        "NeedsResearch" | "NeedsReview" => colors::warning(),
+        "Planned" => colors::info(),
         "InProgress" => colors::function(),
-        "Draft" => colors::text_dim(),
-        "Blocked" | "Failed" => colors::error(),
+        "Completed" | "completed" => colors::success(),
+        "failed" => colors::error(),
+        "open" => colors::text(),
         _ => colors::text(),
     }
 }
@@ -707,7 +1078,7 @@ mod tests {
     #[test]
     fn test_demo_tree_valid() {
         let nodes = demo_tree();
-        assert!(nodes.len() >= 10, "Demo tree should have >= 10 nodes");
+        assert!(nodes.len() >= 14, "Demo tree should have >= 14 nodes");
         // All children indices should be valid
         for (i, node) in nodes.iter().enumerate() {
             for &child in &node.children {
@@ -724,45 +1095,53 @@ mod tests {
     #[test]
     fn test_overlay_visible_count_collapsed() {
         let overlay = PmOverlay::new(false);
-        // All collapsed: only root (depth=0) nodes visible
+        // All collapsed: only root (depth=0) nodes visible — single Project
         let count = overlay.visible_count();
-        assert_eq!(count, 2, "Only 2 features should be visible when collapsed");
+        assert_eq!(
+            count, 1,
+            "Only 1 project root should be visible when collapsed"
+        );
     }
 
     #[test]
     fn test_overlay_expand_collapse() {
         let overlay = PmOverlay::new(false);
-        assert_eq!(overlay.visible_count(), 2);
+        assert_eq!(overlay.visible_count(), 1);
 
-        // Expand first feature
+        // Expand Project → Project + 2 Features = 3
         assert!(overlay.expand(0));
-        // Now feature + its 2 specs visible = 4
-        assert_eq!(overlay.visible_count(), 4);
+        assert_eq!(overlay.visible_count(), 3);
 
-        // Expand first spec (idx 1)
+        // Expand FEAT-001 (node 1) → +2 Specs = 5
         assert!(overlay.expand(1));
-        // Now feature + spec1 + 2 tasks + spec2 = 6
-        assert_eq!(overlay.visible_count(), 6);
+        assert_eq!(overlay.visible_count(), 5);
 
-        // Collapse feature
+        // Expand SPEC-AUTH-001 (node 2) → +2 Tasks = 7
+        assert!(overlay.expand(2));
+        assert_eq!(overlay.visible_count(), 7);
+
+        // Collapse Project → back to 1
         assert!(overlay.collapse(0));
-        assert_eq!(overlay.visible_count(), 2);
+        assert_eq!(overlay.visible_count(), 1);
     }
 
     #[test]
-    fn test_node_idx_of_visible_second_root() {
+    fn test_node_idx_of_visible_second_feature() {
         let overlay = PmOverlay::new(false);
-        // Collapsed: visible = [0, 6] (two root features)
+        // Collapsed: visible = [0] (single Project root)
         assert_eq!(overlay.node_idx_of_visible(0), Some(0));
-        assert_eq!(overlay.node_idx_of_visible(1), Some(6));
-        assert_eq!(overlay.visible_count(), 2);
+        assert_eq!(overlay.visible_count(), 1);
 
-        // Expand visible index 1 → should expand node 6 (FEAT-002)
-        assert!(overlay.expand_visible(1));
-        // Now visible: [0, 6, 7, 9] = 4 items
-        assert_eq!(overlay.visible_count(), 4);
-        assert!(overlay.is_expanded(6)); // node 6 is expanded
-        assert!(!overlay.is_expanded(1)); // node 1 is NOT expanded
+        // Expand Project → visible = [0, 1, 8] (Project, FEAT-001, FEAT-002)
+        assert!(overlay.expand(0));
+        assert_eq!(overlay.visible_count(), 3);
+
+        // expand_visible(2) → should expand node 8 (FEAT-002)
+        assert!(overlay.expand_visible(2));
+        // Now visible: [0, 1, 8, 9, 11] = 5 items
+        assert_eq!(overlay.visible_count(), 5);
+        assert!(overlay.is_expanded(8)); // node 8 (FEAT-002) is expanded
+        assert!(!overlay.is_expanded(2)); // node 2 (SPEC-AUTH-001) is NOT expanded
     }
 
     #[test]
@@ -779,14 +1158,74 @@ mod tests {
     }
 
     #[test]
+    fn test_detail_opens_correct_node_for_second_feature() {
+        // Guards against the visible-index → node-index mapping bug:
+        // When Project is expanded, visible row 2 is FEAT-002 (node 8),
+        // NOT node 2 (SPEC-AUTH-001).
+        let overlay = PmOverlay::new(false);
+
+        // Expand Project → visible = [0, 1, 8]
+        overlay.expand(0);
+        assert_eq!(overlay.visible_count(), 3);
+
+        // Select visible row 2 (should be FEAT-002 = node 8)
+        overlay.set_selected(2);
+        assert_eq!(overlay.node_idx_of_visible(2), Some(8));
+
+        // Open detail for selected row
+        assert!(overlay.open_detail_for_visible(2));
+        assert!(overlay.is_detail_mode());
+        assert_eq!(overlay.detail_node_idx.get(), Some(8));
+
+        // Verify it's FEAT-002, not SPEC-AUTH-001
+        let node = overlay.detail_node().expect("detail node should exist");
+        assert_eq!(node.id, "FEAT-002");
+        assert_eq!(node.title, "Pipeline Orchestration");
+
+        // Close detail and verify list selection preserved
+        overlay.close_detail();
+        assert!(!overlay.is_detail_mode());
+        assert_eq!(overlay.selected(), 2, "list selection should be preserved");
+    }
+
+    #[test]
+    fn test_detail_scroll_clamped() {
+        let overlay = PmOverlay::new(false);
+        overlay.expand(0);
+        overlay.set_selected(1);
+        overlay.open_detail_for_visible(1);
+
+        // detail_max_scroll is 0 initially (no rendering has happened)
+        overlay.detail_max_scroll.set(5);
+        overlay.set_detail_scroll(100);
+        assert_eq!(
+            overlay.detail_scroll(),
+            5,
+            "scroll should be clamped to max"
+        );
+
+        overlay.set_detail_scroll(0);
+        assert_eq!(overlay.detail_scroll(), 0);
+    }
+
+    #[test]
     fn test_state_color_variants() {
-        // Just ensure no panics for all known states
+        // Ensure no panics for all PM-001 canonical states + holding + empty
         for state in &[
-            "Done",
+            "Backlog",
+            "NeedsResearch",
+            "Planned",
             "InProgress",
-            "Draft",
-            "Blocked",
-            "Failed",
+            "NeedsReview",
+            "Completed",
+            "Deprecated",
+            "Archived",
+            "open",
+            "completed",
+            "failed",
+            "NeedsReview (-> InProgress)",
+            "NeedsResearch (-> Backlog)",
+            "",
             "Unknown",
         ] {
             let _ = state_color(state);
