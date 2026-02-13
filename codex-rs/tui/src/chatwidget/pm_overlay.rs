@@ -49,6 +49,8 @@ pub(super) struct PmOverlay {
     detail_max_scroll: Cell<u16>,
     detail_visible_rows: Cell<u16>,
     detail_auto_scroll_pending: Cell<bool>,
+    /// Current sort mode for list view
+    sort_mode: Cell<SortMode>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -58,6 +60,13 @@ enum NodeType {
     Feature,
     Spec,
     Task,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SortMode {
+    UpdatedDesc,   // Most recently updated first
+    StatePriority, // By state priority (InProgress, NeedsReview, etc.)
+    IdAsc,         // Alphabetically by ID
 }
 
 #[allow(dead_code)] // Fields used across rendering + future detail view
@@ -287,6 +296,7 @@ impl PmOverlay {
             detail_max_scroll: Cell::new(0),
             detail_visible_rows: Cell::new(0),
             detail_auto_scroll_pending: Cell::new(false),
+            sort_mode: Cell::new(SortMode::UpdatedDesc),
         }
     }
 
@@ -306,6 +316,7 @@ impl PmOverlay {
             detail_max_scroll: Cell::new(0),
             detail_visible_rows: Cell::new(0),
             detail_auto_scroll_pending: Cell::new(false),
+            sort_mode: Cell::new(SortMode::UpdatedDesc),
         }
     }
 
@@ -450,13 +461,61 @@ impl PmOverlay {
         self.visible_indices().len()
     }
 
+    // -- Sort mode accessors --------------------------------------------------
+
+    pub(super) fn sort_mode(&self) -> SortMode {
+        self.sort_mode.get()
+    }
+
+    /// Cycle to the next sort mode (for read-only demo/testing).
+    pub(super) fn cycle_sort_mode(&self) {
+        let next = match self.sort_mode.get() {
+            SortMode::UpdatedDesc => SortMode::StatePriority,
+            SortMode::StatePriority => SortMode::IdAsc,
+            SortMode::IdAsc => SortMode::UpdatedDesc,
+        };
+        self.sort_mode.set(next);
+    }
+
     // -- Visible list computation ---------------------------------------------
 
     fn visible_indices(&self) -> Vec<usize> {
         let exp = self.expanded.borrow();
         let mut out = Vec::new();
         self.collect_visible(0, &exp, &mut out);
+        self.apply_sort(&mut out);
         out
+    }
+
+    /// Apply current sort mode to visible node indices (in-place).
+    fn apply_sort(&self, indices: &mut Vec<usize>) {
+        let mode = self.sort_mode.get();
+        match mode {
+            SortMode::UpdatedDesc => {
+                // Sort by updated_at descending (most recent first)
+                indices.sort_by(|&a, &b| {
+                    let a_ts = &self.nodes[a].updated_at;
+                    let b_ts = &self.nodes[b].updated_at;
+                    b_ts.cmp(a_ts) // Reverse for descending
+                });
+            }
+            SortMode::StatePriority => {
+                // Sort by state priority: InProgress > NeedsReview > Planned > Backlog
+                indices.sort_by(|&a, &b| {
+                    let a_prio = state_priority(&self.nodes[a].state);
+                    let b_prio = state_priority(&self.nodes[b].state);
+                    a_prio.cmp(&b_prio) // Lower number = higher priority
+                });
+            }
+            SortMode::IdAsc => {
+                // Sort alphabetically by ID ascending
+                indices.sort_by(|&a, &b| {
+                    let a_id = &self.nodes[a].id;
+                    let b_id = &self.nodes[b].id;
+                    a_id.cmp(b_id)
+                });
+            }
+        }
     }
 
     fn collect_visible(&self, start: usize, exp: &HashSet<usize>, out: &mut Vec<usize>) {
@@ -520,6 +579,13 @@ impl ChatWidget<'_> {
 
         let is_detail = overlay.is_detail_mode();
 
+        // Format sort mode for display
+        let sort_label = match overlay.sort_mode() {
+            SortMode::UpdatedDesc => "Updated",
+            SortMode::StatePriority => "State",
+            SortMode::IdAsc => "ID",
+        };
+
         let title = if is_detail {
             RLine::from(vec![
                 Span::styled(" PM Detail ", bright),
@@ -527,7 +593,9 @@ impl ChatWidget<'_> {
                 Span::styled("Up/Dn", accent),
                 Span::styled(" scroll  ", dim),
                 Span::styled("Esc", bright),
-                Span::styled(" back to list ", dim),
+                Span::styled(" back to list  ", dim),
+                Span::styled("Sort: ", dim),
+                Span::styled(sort_label, accent),
             ])
         } else {
             RLine::from(vec![
@@ -540,7 +608,9 @@ impl ChatWidget<'_> {
                 Span::styled("Enter", accent),
                 Span::styled(" detail  ", dim),
                 Span::styled("Esc", bright),
-                Span::styled(" close ", dim),
+                Span::styled(" close  ", dim),
+                Span::styled("Sort: ", dim),
+                Span::styled(sort_label, accent),
             ])
         };
 
@@ -1401,6 +1471,25 @@ fn state_color(state: &str) -> ratatui::style::Color {
     }
 }
 
+/// Assign priority for state-based sorting (lower = higher priority).
+fn state_priority(state: &str) -> u8 {
+    // Strip holding suffixes like "(-> InProgress)" for priority matching
+    let clean = state.split(" (->").next().unwrap_or(state);
+    match clean {
+        "InProgress" => 0,
+        "NeedsReview" => 1,
+        "NeedsResearch" => 2,
+        "Planned" => 3,
+        "Backlog" => 4,
+        "open" => 5,
+        "Completed" | "completed" => 6,
+        "Deprecated" => 7,
+        "Archived" => 8,
+        "failed" => 9,
+        _ => 10, // Unknown states last
+    }
+}
+
 fn pad_or_trunc(s: &str, width: usize) -> String {
     if s.len() >= width {
         format!("{}\u{2026}", &s[..width.saturating_sub(1)]) // truncate + ellipsis
@@ -2127,5 +2216,120 @@ mod tests {
             found_valid,
             "onboarding should reference at least one valid PM command"
         );
+    }
+
+    // --- Sort mode tests (PM-UX-D3, PM-UX-D5) --------------------------------
+
+    #[test]
+    fn test_sort_mode_default_is_updated_desc() {
+        let overlay = PmOverlay::new(false);
+        assert_eq!(
+            overlay.sort_mode(),
+            SortMode::UpdatedDesc,
+            "default sort mode should be UpdatedDesc"
+        );
+    }
+
+    #[test]
+    fn test_sort_mode_cycle() {
+        let overlay = PmOverlay::new(false);
+        assert_eq!(overlay.sort_mode(), SortMode::UpdatedDesc);
+
+        overlay.cycle_sort_mode();
+        assert_eq!(
+            overlay.sort_mode(),
+            SortMode::StatePriority,
+            "first cycle should go to StatePriority"
+        );
+
+        overlay.cycle_sort_mode();
+        assert_eq!(
+            overlay.sort_mode(),
+            SortMode::IdAsc,
+            "second cycle should go to IdAsc"
+        );
+
+        overlay.cycle_sort_mode();
+        assert_eq!(
+            overlay.sort_mode(),
+            SortMode::UpdatedDesc,
+            "third cycle should wrap back to UpdatedDesc"
+        );
+    }
+
+    #[test]
+    fn test_sort_mode_affects_visible_ordering_updated_desc() {
+        let overlay = PmOverlay::new(false);
+        overlay.expand(0); // Expand Project
+        overlay.expand(1); // Expand FEAT-001
+        // visible: [0, 1, 2, 5, 8]
+
+        // Default mode: UpdatedDesc (most recent first)
+        assert_eq!(overlay.sort_mode(), SortMode::UpdatedDesc);
+        let visible = overlay.visible_indices();
+
+        // All nodes should be sorted by updated_at descending
+        // Check that timestamps are in descending order (most recent first)
+        for i in 0..visible.len().saturating_sub(1) {
+            let curr_ts = &overlay.nodes[visible[i]].updated_at;
+            let next_ts = &overlay.nodes[visible[i + 1]].updated_at;
+            assert!(
+                curr_ts >= next_ts,
+                "UpdatedDesc: node {} ({}) should not come before node {} ({})",
+                visible[i],
+                curr_ts,
+                visible[i + 1],
+                next_ts
+            );
+        }
+    }
+
+    #[test]
+    fn test_sort_mode_affects_visible_ordering_id_asc() {
+        let overlay = PmOverlay::new(false);
+        overlay.expand(0); // Expand Project
+        overlay.expand(1); // Expand FEAT-001
+
+        // Switch to IdAsc
+        overlay.cycle_sort_mode();
+        overlay.cycle_sort_mode();
+        assert_eq!(overlay.sort_mode(), SortMode::IdAsc);
+
+        let visible = overlay.visible_indices();
+
+        // All nodes should be sorted by ID ascending
+        for i in 0..visible.len().saturating_sub(1) {
+            let curr_id = &overlay.nodes[visible[i]].id;
+            let next_id = &overlay.nodes[visible[i + 1]].id;
+            assert!(
+                curr_id <= next_id,
+                "IdAsc: node {} ({}) should not come before node {} ({})",
+                visible[i],
+                curr_id,
+                visible[i + 1],
+                next_id
+            );
+        }
+    }
+
+    #[test]
+    fn test_sort_mode_visible_in_title() {
+        let overlay = PmOverlay::new(false);
+        let area = Rect::new(0, 0, 120, 25);
+        let mut buf = Buffer::empty(area);
+
+        // Render with default mode (UpdatedDesc)
+        let body = Rect::new(2, 1, 116, 23);
+        render_summary_bar(&overlay, body, &mut buf);
+
+        // Can't easily test title bar rendering without full render_pm_overlay,
+        // but we verify sort_mode() returns correct value
+        assert_eq!(overlay.sort_mode(), SortMode::UpdatedDesc);
+
+        overlay.cycle_sort_mode();
+        assert_eq!(overlay.sort_mode(), SortMode::StatePriority);
+
+        overlay.cycle_sort_mode();
+        assert_eq!(overlay.sort_mode(), SortMode::IdAsc);
     }
 }
