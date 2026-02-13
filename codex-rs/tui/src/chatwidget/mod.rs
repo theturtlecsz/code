@@ -68,6 +68,8 @@ mod limits_handlers;
 mod limits_overlay;
 mod message;
 mod perf;
+mod pm_handlers;
+mod pm_overlay;
 mod rate_limit_refresh;
 mod streaming;
 mod terminal;
@@ -424,6 +426,9 @@ pub(crate) struct ChatWidget<'a> {
 
     // Limits overlay state
     limits: LimitsState,
+
+    // PM overlay state (SPEC-PM-004)
+    pm: pm_overlay::PmState,
 
     // Terminal overlay state
     terminal: TerminalState,
@@ -2457,6 +2462,7 @@ impl ChatWidget<'_> {
                 body_visible_rows: std::cell::Cell::new(0),
             },
             limits: LimitsState::default(),
+            pm: pm_overlay::PmState::default(),
             terminal: TerminalState::default(),
             pending_manual_terminal: HashMap::new(),
             agents_overview_selected_index: 0,
@@ -2696,6 +2702,7 @@ impl ChatWidget<'_> {
                 body_visible_rows: std::cell::Cell::new(0),
             },
             limits: LimitsState::default(),
+            pm: pm_overlay::PmState::default(),
             terminal: TerminalState::default(),
             pending_manual_terminal: HashMap::new(),
             agents_overview_selected_index: 0,
@@ -2910,6 +2917,7 @@ impl ChatWidget<'_> {
                 body_visible_rows: std::cell::Cell::new(0),
             },
             limits: LimitsState::default(),
+            pm: pm_overlay::PmState::default(),
             terminal: TerminalState::default(),
             pending_manual_terminal: HashMap::new(),
             agents_overview_selected_index: 0,
@@ -3278,6 +3286,12 @@ impl ChatWidget<'_> {
             return;
         }
         if self.diffs.overlay.is_some() {
+            return;
+        }
+        if pm_handlers::handle_pm_key(self, key_event) {
+            return;
+        }
+        if self.pm.overlay.is_some() {
             return;
         }
         if self.pro.overlay_visible {
@@ -16151,6 +16165,8 @@ impl WidgetRef for &ChatWidget<'_> {
         if self.terminal.overlay().is_none() && !self.agents_terminal.active {
             if self.limits.overlay.is_some() {
                 self.render_limits_overlay(area, history_area, buf);
+            } else if self.pm.overlay.is_some() {
+                self.render_pm_overlay(area, history_area, buf);
             } else if self.pro.overlay_visible {
                 self.render_pro_overlay(area, history_area, buf);
             } else if let Some(overlay) = &self.diffs.overlay {

@@ -13,6 +13,7 @@ mod intel; // SPEC-KIT-2XX: Project Intel for NotebookLM
 mod librarian; // SPEC-KIT-103: Librarian memory quality engine
 mod msearch; // SPEC-KIT-972: Memory search with --explain
 mod plan;
+pub(crate) mod pm; // SPEC-PM-004: PM service TUI commands
 mod policy; // SPEC-KIT-977: Policy management commands
 mod project; // SPEC-KIT-960: Project scaffolding command
 mod projections; // WP-A: Filesystem projections rebuild
@@ -36,6 +37,7 @@ pub use intel::*;
 pub use librarian::*;
 pub use msearch::*;
 pub use plan::*;
+pub use pm::*;
 pub use policy::*;
 pub use project::*;
 pub use projections::*;

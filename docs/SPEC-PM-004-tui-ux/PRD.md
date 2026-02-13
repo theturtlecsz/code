@@ -50,4 +50,5 @@ The PM layer (PM-001/002/003) defines a data model, bot interface, and service r
 ## References
 
 * Spec: `docs/SPEC-PM-004-tui-ux/spec.md`
-* Design transcript: `docs/SPEC-PM-003-bot-system/design-qa-transcript.md`
+* PM-003 design transcript: `docs/SPEC-PM-003-bot-system/design-qa-transcript.md`
+* PM-004 design transcript: `docs/SPEC-PM-004-tui-ux/design-qa-transcript.md`
