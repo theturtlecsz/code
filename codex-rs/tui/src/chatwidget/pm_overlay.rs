@@ -3618,166 +3618,163 @@ mod tests {
         }
     }
 
-    // --- v9 behavior-lock tests (freeze current semantics) -------------------
+    // --- v10 consolidated lock test (single source of truth) ----------------
+    // Removed: test_footer_separator_policy_lock (consolidated below)
+    // Removed: test_footer_show_vs_showing_breakpoint_lock (consolidated below)
 
     #[test]
-    fn test_footer_golden_matrix_exact_strings() {
-        // Item A (v9): Exact string assertions for all tiers
+    fn test_footer_unified_tier_contract() {
+        // v10: Consolidated lock test - all tier expectations in one table
         let overlay = create_test_overlay();
 
-        struct Expected {
+        struct TierContract {
             width: u16,
-            contains_row: &'static str,
-            contains_sort: bool,
-            contains_window: Option<&'static str>, // None if dropped
+            row: &'static str,
+            window: Option<&'static str>,
+            window_form: &'static str, // "Show"|"Showing"|"N/A"
+            separator: &'static str,   // " | "|"|"|"N/A"
+            has_sort: bool,
         }
 
-        let expectations = [
-            Expected {
+        let contracts = [
+            TierContract {
                 width: 120,
-                contains_row: " Row 3/5 ",
-                contains_sort: true,
-                contains_window: Some("Show 2-5/5"), // window_end = min(scroll+viewport, visible) = min(11, 5) = 5
+                row: " Row 3/5 ",
+                window: Some("Show 2-5/5"),
+                window_form: "Show",
+                separator: " | ",
+                has_sort: true,
             },
-            Expected {
+            TierContract {
                 width: 100,
-                contains_row: " Row 3/5 ",
-                contains_sort: true,
-                contains_window: Some("Show 2-5/5"),
+                row: " Row 3/5 ",
+                window: Some("Show 2-5/5"),
+                window_form: "Show",
+                separator: " | ",
+                has_sort: true,
             },
-            Expected {
+            TierContract {
                 width: 80,
-                contains_row: " Row 3/5 ",
-                contains_sort: true,
-                contains_window: Some("Showing 2-5 of 5"),
+                row: " Row 3/5 ",
+                window: Some("Showing 2-5 of 5"),
+                window_form: "Showing",
+                separator: " | ",
+                has_sort: true,
             },
-            Expected {
+            TierContract {
                 width: 60,
-                contains_row: " Row 3/5 ",
-                contains_sort: true,
-                contains_window: Some("Show"),
+                row: " Row 3/5 ",
+                window: Some("Show"),
+                window_form: "Show",
+                separator: "|",
+                has_sort: true,
             },
-            Expected {
+            TierContract {
                 width: 50,
-                contains_row: " Row 3/5 ",
-                contains_sort: true,
-                contains_window: None,
+                row: " Row 3/5 ",
+                window: None,
+                window_form: "N/A",
+                separator: "|",
+                has_sort: true,
             },
-            Expected {
+            TierContract {
                 width: 40,
-                contains_row: " Row 3/5 ",
-                contains_sort: true,
-                contains_window: None,
+                row: " Row 3/5 ",
+                window: None,
+                window_form: "N/A",
+                separator: "|",
+                has_sort: true,
             },
-            Expected {
+            TierContract {
                 width: 30,
-                contains_row: " Row 3/5 ",
-                contains_sort: false,
-                contains_window: None,
+                row: " Row 3/5 ",
+                window: None,
+                window_form: "N/A",
+                separator: "N/A",
+                has_sort: false,
             },
         ];
 
-        for exp in &expectations {
-            let area = Rect::new(0, 0, exp.width, 1);
+        for contract in &contracts {
+            let area = Rect::new(0, 0, contract.width, 1);
             let mut buf = Buffer::empty(area);
             render_list_footer(&overlay, area, &mut buf);
             let text = buffer_line_text(&buf, area, 0);
 
+            // Row contract (exact string)
             assert!(
-                text.contains(exp.contains_row),
+                text.contains(contract.row),
                 "w={}: must contain '{}', got: {}",
-                exp.width,
-                exp.contains_row,
+                contract.width,
+                contract.row,
                 text
             );
 
-            if exp.contains_sort {
-                assert!(text.contains("Sort:"), "w={}: needs Sort", exp.width);
-            } else {
-                assert!(!text.contains("Sort:"), "w={}: no Sort", exp.width);
-            }
-
-            if let Some(window_pat) = exp.contains_window {
+            // Window contract (exact pattern)
+            if let Some(window) = contract.window {
                 assert!(
-                    text.contains(window_pat),
-                    "w={}: needs '{}', got: {}",
-                    exp.width,
-                    window_pat,
+                    text.contains(window),
+                    "w={}: must contain window '{}', got: {}",
+                    contract.width,
+                    window,
                     text
                 );
             }
+
+            // Window form contract (Show vs Showing)
+            match contract.window_form {
+                "Show" => {
+                    assert!(
+                        text.contains("Show") && !text.contains("Showing 2-"),
+                        "w={}: must use Show, got: {}",
+                        contract.width,
+                        text
+                    );
+                }
+                "Showing" => {
+                    assert!(
+                        text.contains("Showing") && !text.contains("Show 2-5/5"),
+                        "w={}: must use Showing, got: {}",
+                        contract.width,
+                        text
+                    );
+                }
+                "N/A" => {}
+                _ => {}
+            }
+
+            // Separator contract
+            if contract.separator == " | " {
+                assert!(
+                    text.contains(" | "),
+                    "w={}: must use spaced sep, got: {}",
+                    contract.width,
+                    text
+                );
+            } else if contract.separator == "|" {
+                assert!(
+                    text.contains('|') && !text.contains(" | "),
+                    "w={}: must use compact sep, got: {}",
+                    contract.width,
+                    text
+                );
+            }
+
+            // Sort contract
+            if contract.has_sort {
+                assert!(
+                    text.contains("Sort:"),
+                    "w={}: must have Sort",
+                    contract.width
+                );
+            } else {
+                assert!(
+                    !text.contains("Sort:"),
+                    "w={}: must NOT have Sort",
+                    contract.width
+                );
+            }
         }
-    }
-
-    #[test]
-    fn test_footer_separator_policy_lock() {
-        // Item B (v9): Separator policy explicit per tier
-        let overlay = create_test_overlay();
-
-        // Wide tiers (>=80): spaced separator " | "
-        for &w in &[80, 100, 120] {
-            let area = Rect::new(0, 0, w, 1);
-            let mut buf = Buffer::empty(area);
-            render_list_footer(&overlay, area, &mut buf);
-            let text = buffer_line_text(&buf, area, 0);
-
-            assert!(
-                text.contains(" | "),
-                "w={}: wide tier must use spaced separator, got: {}",
-                w,
-                text
-            );
-        }
-
-        // Narrow tiers (<80): compact separator "|" (no spaces)
-        for &w in &[50, 60] {
-            let area = Rect::new(0, 0, w, 1);
-            let mut buf = Buffer::empty(area);
-            render_list_footer(&overlay, area, &mut buf);
-            let text = buffer_line_text(&buf, area, 0);
-
-            // Compact sep: should have "|" but not " | "
-            assert!(text.contains('|'), "w={}: needs separator", w);
-            assert!(
-                !text.contains(" | "),
-                "w={}: narrow tier must use compact separator, got: {}",
-                w,
-                text
-            );
-        }
-    }
-
-    #[test]
-    fn test_footer_show_vs_showing_breakpoint_lock() {
-        // Item C (v9): Abbreviation breakpoint behavior lock
-        let overlay = create_test_overlay();
-
-        // >=100: "Show" (abbreviated)
-        for &w in &[100, 120] {
-            let area = Rect::new(0, 0, w, 1);
-            let mut buf = Buffer::empty(area);
-            render_list_footer(&overlay, area, &mut buf);
-            let text = buffer_line_text(&buf, area, 0);
-
-            assert!(
-                text.contains("Show") && !text.contains("Showing"),
-                "w={}: must use 'Show' abbreviation, got: {}",
-                w,
-                text
-            );
-        }
-
-        // 80-99: "Showing" (full)
-        let area = Rect::new(0, 0, 80, 1);
-        let mut buf = Buffer::empty(area);
-        render_list_footer(&overlay, area, &mut buf);
-        let text = buffer_line_text(&buf, area, 0);
-
-        assert!(
-            text.contains("Showing") && !text.contains("Show 2-7/5"),
-            "w=80-99: must use 'Showing' full form, got: {}",
-            text
-        );
     }
 
     #[test]
