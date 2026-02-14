@@ -1344,72 +1344,116 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
 
     let width = area.width as usize;
 
-    // Key hint symbols (Item B: ASCII fallback for unicode safety)
+    // Key hint symbols (ASCII fallback)
     let (up_down, left_right, enter_sym) = if USE_ASCII_HINTS {
         ("^v", "<>", "Enter")
     } else {
         ("\u{2191}\u{2193}", "\u{2190}\u{2192}", "\u{23ce}") // ↑↓ ←→ ⏎
     };
 
-    // Item A: Pre-compute text for deterministic width budgeting
+    // Item B: Adaptive separators (compact at widths < 80)
+    let sep = if width >= 80 { " | " } else { "|" };
+
+    // Pre-compute base components
     let row_text = format!(" Row {}/{} ", current_row, visible_count);
-    let window_text = format!(
-        "Showing {}-{} of {} ",
-        window_start, window_end, visible_count
-    );
     let sort_text = format!("Sort: {}", sort_label);
 
-    // Priority-based layout with width tiers (Item A, B, C)
+    // Item D: Width-aware abbreviation rule: >=100 "Show", 80-99 "Showing", <80 tier-based
+    let window_text_fn = |abbrev: bool| {
+        if abbrev {
+            format!("Show {}-{}/{}", window_start, window_end, visible_count)
+        } else {
+            format!(
+                "Showing {}-{} of {}",
+                window_start, window_end, visible_count
+            )
+        }
+    };
+
+    // Item C: Priority-based layout (Row > Sort > Showing > Hints)
     let footer = if width >= 120 {
-        // Full: Row + Window + Sort + Full hints
-        // Estimated budget: ~15 + 2 + ~20 + 2 + ~15 + 5 + ~50 = ~109 chars
+        // Item A: Right-aligned hints
+        let window = window_text_fn(true); // "Show" at >=100
+        let context = format!("{}{}{}{}{}", row_text, sep, window, sep, sort_text);
+        let hints = format!(
+            "{} nav  {} tree  {} detail  s sort  Esc close",
+            up_down, left_right, enter_sym
+        );
+        let context_len = context.len();
+        let hints_len = hints.len();
+        let sep_len = sep.len();
+        let padding = width
+            .saturating_sub(context_len + sep_len + hints_len)
+            .max(1);
+
         RLine::from(vec![
-            Span::styled(row_text.clone(), bright),
-            Span::styled("| ", dim),
-            Span::styled(window_text.clone(), dim),
-            Span::styled("| ", dim),
-            Span::styled(sort_text.clone(), accent),
-            Span::styled("  |  ", dim),
-            Span::styled(up_down, accent),
-            Span::styled(" nav  ", dim),
-            Span::styled(left_right, accent),
-            Span::styled(" tree  ", dim),
-            Span::styled(enter_sym, accent),
-            Span::styled(" detail  ", dim),
-            Span::styled("s", accent),
-            Span::styled(" sort  ", dim),
-            Span::styled("Esc", accent),
-            Span::styled(" close ", dim),
+            Span::styled(context, bright),
+            Span::styled(" ".repeat(padding), dim),
+            Span::styled(sep.to_string(), dim),
+            Span::styled(hints, accent),
         ])
-    } else if width >= 80 {
-        // Medium: Row + Window + Sort + Compact hints (symbols only)
-        // Budget: ~15 + 2 + ~20 + 2 + ~15 + 5 + ~20 = ~79 chars
+    } else if width >= 100 {
+        // Item D: "Show" abbreviation
+        let window = window_text_fn(true);
         RLine::from(vec![
             Span::styled(row_text.clone(), bright),
-            Span::styled("| ", dim),
-            Span::styled(window_text.clone(), dim),
-            Span::styled("| ", dim),
+            Span::styled(sep, dim),
+            Span::styled(window, dim),
+            Span::styled(sep, dim),
             Span::styled(sort_text.clone(), accent),
-            Span::styled("  |  ", dim),
+            Span::styled(sep, dim),
             Span::styled(format!("{} {} {} ", up_down, left_right, enter_sym), accent),
             Span::styled("s ", accent),
             Span::styled("Esc", accent),
         ])
-    } else if width >= 50 {
-        // Narrow: Row + Sort + minimal hints
-        // Budget: ~15 + 2 + ~15 + 5 + ~15 = ~52 chars
+    } else if width >= 80 {
+        // Item D: "Showing" (full) at 80-99
+        let window = window_text_fn(false);
         RLine::from(vec![
             Span::styled(row_text.clone(), bright),
-            Span::styled("| ", dim),
-            Span::styled(sort_text, accent),
-            Span::styled("  |  ", dim),
+            Span::styled(sep, dim),
+            Span::styled(window, dim),
+            Span::styled(sep, dim),
+            Span::styled(sort_text.clone(), accent),
+            Span::styled(sep, dim),
+            Span::styled(format!("{} {} {} ", up_down, left_right, enter_sym), accent),
+            Span::styled("s ", accent),
+            Span::styled("Esc", accent),
+        ])
+    } else if width >= 60 {
+        // Item B: Compact sep ("|"), Item D: "Show" abbrev
+        let window = window_text_fn(true);
+        RLine::from(vec![
+            Span::styled(row_text.clone(), bright),
+            Span::styled(sep, dim),
+            Span::styled(window, dim),
+            Span::styled(sep, dim),
+            Span::styled(sort_text.clone(), accent),
+            Span::styled(sep, dim),
             Span::styled(format!("{} {} ", up_down, enter_sym), accent),
             Span::styled("s ", accent),
             Span::styled("Esc", accent),
         ])
+    } else if width >= 50 {
+        // Item C: Row + Sort + minimal hints (Showing dropped)
+        RLine::from(vec![
+            Span::styled(row_text.clone(), bright),
+            Span::styled(sep, dim),
+            Span::styled(sort_text.clone(), accent),
+            Span::styled(sep, dim),
+            Span::styled(format!("{} {} ", up_down, enter_sym), accent),
+            Span::styled("s ", accent),
+            Span::styled("Esc", accent),
+        ])
+    } else if width >= 40 {
+        // Item C: Row + Sort only (preserve Sort longer, drop hints)
+        RLine::from(vec![
+            Span::styled(row_text.clone(), bright),
+            Span::styled(sep, dim),
+            Span::styled(sort_text, accent),
+        ])
     } else {
-        // Very narrow: Row only with ellipsis
-        // Budget: ~15 + 1 = ~16 chars
+        // Ultra narrow: Row + ellipsis
         RLine::from(vec![
             Span::styled(row_text, bright),
             Span::styled("\u{2026}", dim), // …
@@ -2890,8 +2934,8 @@ mod tests {
             "footer should still show row position, got: {text}"
         );
         assert!(
-            text.contains("Showing"),
-            "footer should still show window range, got: {text}"
+            text.contains("Show"),
+            "footer should still show window range (abbreviated), got: {text}"
         );
         assert!(
             text.contains("Sort:"),
@@ -2920,7 +2964,10 @@ mod tests {
 
         // At width >= 120, should show everything
         assert!(text.contains("Row"), "should show Row");
-        assert!(text.contains("Showing"), "should show Showing");
+        assert!(
+            text.contains("Show"),
+            "should show Show (abbreviated at >=100, Item D)"
+        );
         assert!(text.contains("Sort:"), "should show Sort");
         assert!(text.contains("nav"), "should show nav hint");
         assert!(text.contains("tree"), "should show tree hint");
@@ -3033,14 +3080,14 @@ mod tests {
 
     #[test]
     fn test_footer_boundary_width_matrix() {
-        // Item C: Test all boundary widths (49/50, 79/80, 119/120)
+        // Locked matrix boundaries: 39/40, 49/50, 59/60, 79/80, 99/100, 119/120
         let overlay = PmOverlay::new(false, None);
         overlay.expand(0);
         overlay.expand(1);
         overlay.visible_rows.set(10);
         overlay.set_scroll(2);
 
-        let boundary_widths = [49, 50, 79, 80, 119, 120];
+        let boundary_widths = [39, 40, 49, 50, 59, 60, 79, 80, 99, 100, 119, 120];
 
         for &w in &boundary_widths {
             let area = Rect::new(0, 0, w, 1);
@@ -3059,20 +3106,38 @@ mod tests {
             // Check tier-specific expectations
             if w >= 120 {
                 assert!(
-                    text.contains("Showing") && text.contains("Sort:"),
-                    "width {}: should show all components, got: {text}",
+                    text.contains("Show") && text.contains("Sort:"),
+                    "width {}: should show all components (Show abbreviated), got: {text}",
+                    w
+                );
+            } else if w >= 100 {
+                assert!(
+                    text.contains("Show") && text.contains("Sort:"),
+                    "width {}: should have Show abbreviation, got: {text}",
                     w
                 );
             } else if w >= 80 {
                 assert!(
                     text.contains("Showing") && text.contains("Sort:"),
-                    "width {}: should show Row+Window+Sort, got: {text}",
+                    "width {}: should show Showing (full) at 80-99, got: {text}",
+                    w
+                );
+            } else if w >= 60 {
+                assert!(
+                    text.contains("Sort:") && text.contains("Show"),
+                    "width {}: should show Row+Show+Sort+minimal hints, got: {text}",
                     w
                 );
             } else if w >= 50 {
                 assert!(
-                    text.contains("Sort:") && !text.contains("Showing"),
-                    "width {}: should show Row+Sort but not Window, got: {text}",
+                    text.contains("Sort:") && !text.contains("Show") && !text.contains("Showing"),
+                    "width {}: should show Row+Sort+hints but not Window, got: {text}",
+                    w
+                );
+            } else if w >= 40 {
+                assert!(
+                    text.contains("Sort:") && !text.contains("Esc"),
+                    "width {}: should show Row+Sort only (no hints), got: {text}",
                     w
                 );
             } else {
@@ -3138,16 +3203,25 @@ mod tests {
         render_list_footer(&overlay, area, &mut buf);
         let text = buffer_line_text(&buf, area, 0);
 
-        // Snapshot: exact expected format at width 120
-        assert!(text.starts_with(" Row 3/5 |"), "should start with Row");
+        // Locked matrix: 120 = Row + Show (abbreviated) + Sort + right-aligned full hints
+        assert!(text.contains("Row 3/5"), "should contain Row");
         assert!(
-            text.contains("| Showing 1-5 of 5 |"),
-            "should contain Showing"
+            text.contains("Show"),
+            "should contain Show (Item D: abbreviated at >=100)"
         );
-        assert!(text.contains("| Sort: Updated"), "should contain Sort");
+        assert!(
+            !text.contains("Showing"),
+            "should NOT contain full Showing at >=100"
+        );
+        assert!(text.contains("Sort: Updated"), "should contain Sort");
         assert!(
             text.contains("nav") && text.contains("tree") && text.contains("detail"),
             "should contain full hint labels"
+        );
+        // Item A: hints should be right-aligned (after padding)
+        assert!(
+            text.contains("close"),
+            "should have close at end (right-aligned)"
         );
     }
 
@@ -3164,13 +3238,20 @@ mod tests {
         render_list_footer(&overlay, area, &mut buf);
         let text = buffer_line_text(&buf, area, 0);
 
-        // Snapshot: width 80 format (compact hints, no labels)
-        assert!(text.starts_with(" Row 2/3 |"), "should start with Row");
-        assert!(text.contains("| Showing"), "should contain Showing");
-        assert!(text.contains("| Sort:"), "should contain Sort");
+        // Locked matrix: 80 = Row + Showing (full) + Sort + compact hints
+        assert!(text.contains("Row 2/3"), "should contain Row");
+        assert!(
+            text.contains("Showing"),
+            "should contain Showing (full) at 80-99"
+        );
+        assert!(
+            !text.contains("Show 2-3/3"),
+            "should NOT have Show abbreviation at 80"
+        );
+        assert!(text.contains("Sort:"), "should contain Sort");
         assert!(
             !text.contains("nav") && !text.contains("tree"),
-            "should NOT contain hint labels at width 80"
+            "should NOT contain hint labels (compact hints only)"
         );
     }
 
@@ -3186,12 +3267,20 @@ mod tests {
         render_list_footer(&overlay, area, &mut buf);
         let text = buffer_line_text(&buf, area, 0);
 
-        // Snapshot: width 50 format (Row + Sort + minimal hints)
+        // Locked matrix: 50 = Row + Sort + minimal hints (Showing dropped)
         assert!(text.starts_with(" Row"), "should start with Row");
-        assert!(text.contains("| Sort:"), "should contain Sort");
         assert!(
-            !text.contains("Showing"),
-            "should NOT contain Showing at width 50"
+            text.contains("Sort:"),
+            "should contain Sort (Item C priority)"
+        );
+        // Item B: compact separator at <80
+        assert!(
+            text.contains("|Sort:"),
+            "should use compact separator at width 50"
+        );
+        assert!(
+            !text.contains("Showing") && !text.contains("Show"),
+            "should NOT contain Showing/Show at width 50"
         );
         // Minimal hints present
         assert!(
