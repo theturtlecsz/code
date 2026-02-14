@@ -1736,6 +1736,18 @@ fn check_service_status() -> bool {
 mod tests {
     use super::*;
 
+    // Item B (v6): Width-cap assertion helper
+    fn assert_footer_fits_width(text: &str, width: u16) {
+        let text_len = text.trim_end().len();
+        assert!(
+            text_len <= width as usize,
+            "Footer length {} exceeds width {}: {}",
+            text_len,
+            width,
+            text
+        );
+    }
+
     fn buffer_line_text(buf: &Buffer, area: Rect, y: u16) -> String {
         let mut row = String::new();
         for x in 0..area.width {
@@ -3385,5 +3397,120 @@ mod tests {
                 w
             );
         }
+    }
+
+    // --- Footer v6 hardening tests -------------------------------------------
+
+    #[test]
+    fn test_footer_width_cap_all_tiers() {
+        // Item B (v6): Validate rendered length <= width at all tiers
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1);
+        overlay.visible_rows.set(10);
+
+        for &w in &[30, 40, 50, 60, 80, 100, 120] {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+            assert_footer_fits_width(&text, w);
+        }
+    }
+
+    #[test]
+    fn test_footer_separator_placement_clean() {
+        // Item C (v6): No leading/trailing separators at any tier
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1);
+        overlay.visible_rows.set(10);
+
+        for &w in &[30, 40, 50, 60, 80, 100, 120] {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+            let trimmed = text.trim();
+
+            assert!(
+                !trimmed.starts_with('|'),
+                "width {}: no leading separator, got: {}",
+                w,
+                trimmed
+            );
+            assert!(
+                !trimmed.ends_with('|'),
+                "width {}: no trailing separator, got: {}",
+                w,
+                trimmed
+            );
+            assert!(
+                !text.contains("||") && !text.contains("| |"),
+                "width {}: no doubled separators, got: {}",
+                w,
+                text
+            );
+        }
+    }
+
+    #[test]
+    fn test_footer_unicode_ascii_dual_mode() {
+        // Item D (v6): Both unicode and ASCII modes tested
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 120, 1);
+        let mut buf = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        if USE_ASCII_HINTS {
+            assert!(text.contains("^v"), "ASCII: should have ^v");
+            assert!(text.contains("<>"), "ASCII: should have <>");
+        } else {
+            assert!(
+                text.contains('\u{2191}') || text.contains('\u{2193}'),
+                "Unicode: should have arrows"
+            );
+        }
+    }
+
+    #[test]
+    fn test_footer_right_align_padding_stability() {
+        // Item E (v6): Right-alignment stable with varying content lengths
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(5);
+
+        let area = Rect::new(0, 0, 120, 1);
+
+        // Short content
+        let mut buf1 = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf1);
+        let text1 = buffer_line_text(&buf1, area, 0);
+        assert!(
+            text1.trim_end().ends_with("close"),
+            "hints at end: {}",
+            text1
+        );
+        assert_footer_fits_width(&text1, 120);
+
+        // Longer content
+        overlay.expand(1);
+        overlay.expand(2);
+        overlay.set_selected(5);
+        overlay.visible_rows.set(15);
+
+        let mut buf2 = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf2);
+        let text2 = buffer_line_text(&buf2, area, 0);
+        assert!(
+            text2.trim_end().ends_with("close"),
+            "hints still at end: {}",
+            text2
+        );
+        assert_footer_fits_width(&text2, 120);
     }
 }
