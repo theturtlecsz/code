@@ -29,6 +29,10 @@ fn handle_list_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
 
     match key_event.code {
         KeyCode::Esc => {
+            // Save sort mode before closing overlay
+            if let Some(ref overlay) = chat.pm.overlay {
+                chat.pm.last_sort_mode = Some(overlay.sort_mode());
+            }
             chat.pm.overlay = None;
             chat.request_redraw();
             true
@@ -212,7 +216,7 @@ mod tests {
     #[test]
     fn test_sort_cycle_method_available() {
         // Verify cycle_sort_mode() is available and works as expected
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         assert_eq!(overlay.sort_mode(), SortMode::UpdatedDesc);
 
         overlay.cycle_sort_mode();

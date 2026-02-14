@@ -28,6 +28,8 @@ const DEGRADED_BANNER_TEXT: &str = "PM service unavailable -- read-only";
 #[derive(Default)]
 pub(super) struct PmState {
     pub(super) overlay: Option<PmOverlay>,
+    /// Persisted sort mode across overlay open/close within session
+    pub(super) last_sort_mode: Option<SortMode>,
 }
 
 // ---------------------------------------------------------------------------
@@ -283,7 +285,7 @@ fn demo_tree() -> Vec<TreeNode> {
 // ---------------------------------------------------------------------------
 
 impl PmOverlay {
-    pub(super) fn new(degraded: bool) -> Self {
+    pub(super) fn new(degraded: bool, initial_sort_mode: Option<SortMode>) -> Self {
         Self {
             scroll: Cell::new(0),
             max_scroll: Cell::new(0),
@@ -297,7 +299,7 @@ impl PmOverlay {
             detail_max_scroll: Cell::new(0),
             detail_visible_rows: Cell::new(0),
             detail_auto_scroll_pending: Cell::new(false),
-            sort_mode: Cell::new(SortMode::UpdatedDesc),
+            sort_mode: Cell::new(initial_sort_mode.unwrap_or(SortMode::UpdatedDesc)),
         }
     }
 
@@ -556,7 +558,8 @@ impl PmOverlay {
 impl ChatWidget<'_> {
     pub(crate) fn open_pm_overlay(&mut self) {
         let degraded = check_service_status();
-        self.pm.overlay = Some(PmOverlay::new(degraded));
+        let initial_sort = self.pm.last_sort_mode;
+        self.pm.overlay = Some(PmOverlay::new(degraded, initial_sort));
         self.request_redraw();
     }
 
@@ -1567,7 +1570,7 @@ mod tests {
 
     #[test]
     fn test_overlay_visible_count_collapsed() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         // All collapsed: only root (depth=0) nodes visible — single Project
         let count = overlay.visible_count();
         assert_eq!(
@@ -1578,7 +1581,7 @@ mod tests {
 
     #[test]
     fn test_overlay_expand_collapse() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         assert_eq!(overlay.visible_count(), 1);
 
         // Expand Project → Project + 2 Features = 3
@@ -1600,7 +1603,7 @@ mod tests {
 
     #[test]
     fn test_node_idx_of_visible_second_feature() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         // Collapsed: visible = [0] (single Project root)
         assert_eq!(overlay.node_idx_of_visible(0), Some(0));
         assert_eq!(overlay.visible_count(), 1);
@@ -1635,7 +1638,7 @@ mod tests {
         // Guards against the visible-index → node-index mapping bug:
         // When Project is expanded, visible row 2 is FEAT-002 (node 8),
         // NOT node 2 (SPEC-AUTH-001).
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
 
         // Expand Project → visible = [0, 1, 8]
         overlay.expand(0);
@@ -1663,7 +1666,7 @@ mod tests {
 
     #[test]
     fn test_detail_scroll_clamped() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         overlay.expand(0);
         overlay.set_selected(1);
         overlay.open_detail_for_visible(1);
@@ -1746,7 +1749,7 @@ mod tests {
 
     #[test]
     fn test_render_summary_bar_degraded_banner_text_matches_spec() {
-        let overlay = PmOverlay::new(true);
+        let overlay = PmOverlay::new(true, None);
         let area = Rect::new(0, 0, 120, 3);
         let mut buf = Buffer::empty(Rect::new(0, 0, 120, 5));
         render_summary_bar(&overlay, area, &mut buf);
@@ -1760,7 +1763,7 @@ mod tests {
 
     #[test]
     fn test_render_detail_degraded_banner_text_matches_spec() {
-        let overlay = PmOverlay::new(true);
+        let overlay = PmOverlay::new(true, None);
         assert!(overlay.open_detail_for_visible(0));
 
         let area = Rect::new(0, 0, 120, 18);
@@ -1792,7 +1795,7 @@ mod tests {
 
     #[test]
     fn test_needs_attention_wide_badge() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         let flat = expand_to_task_002(&overlay);
         overlay.set_selected(flat);
 
@@ -1807,7 +1810,7 @@ mod tests {
 
     #[test]
     fn test_needs_attention_narrow_indicator() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         let flat = expand_to_task_002(&overlay);
         overlay.set_selected(flat);
 
@@ -1822,7 +1825,7 @@ mod tests {
 
     #[test]
     fn test_needs_attention_medium_indicator() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         let flat = expand_to_task_002(&overlay);
         overlay.set_selected(flat);
 
@@ -1837,7 +1840,7 @@ mod tests {
 
     #[test]
     fn test_detail_auto_scroll_needs_attention() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         let flat = expand_to_task_002(&overlay);
         assert!(overlay.open_detail_for_visible(flat));
         assert!(
@@ -1863,7 +1866,7 @@ mod tests {
 
     #[test]
     fn test_detail_no_auto_scroll_normal_node() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         overlay.expand(0); // Project
         // visible: [0, 1, 8] — open detail for node 1 (FEAT-001, no needs_attention)
         assert!(overlay.open_detail_for_visible(1));
@@ -1934,7 +1937,7 @@ mod tests {
 
     #[test]
     fn test_summary_bar_active_run_count() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         let area = Rect::new(0, 0, 200, 3);
         let mut buf = Buffer::empty(Rect::new(0, 0, 200, 5));
         render_summary_bar(&overlay, area, &mut buf);
@@ -1953,7 +1956,7 @@ mod tests {
 
     #[test]
     fn test_running_wide_indicator() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         let flat = expand_to_task_005(&overlay);
         overlay.set_selected(flat);
 
@@ -1968,7 +1971,7 @@ mod tests {
 
     #[test]
     fn test_running_medium_indicator() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         let flat = expand_to_task_005(&overlay);
         overlay.set_selected(flat);
 
@@ -1983,7 +1986,7 @@ mod tests {
 
     #[test]
     fn test_running_narrow_indicator() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         let flat = expand_to_task_005(&overlay);
         overlay.set_selected(flat);
 
@@ -2067,7 +2070,7 @@ mod tests {
     #[test]
     fn test_empty_state_onboarding_renders_when_healthy_and_empty() {
         // PM-UX-D7/PM-UX-D24: healthy service + empty nodes → onboarding
-        let mut overlay = PmOverlay::new(false);
+        let mut overlay = PmOverlay::new(false, None);
         overlay.nodes.clear(); // Ensure empty
         assert!(!overlay.degraded);
         assert!(overlay.nodes.is_empty());
@@ -2095,7 +2098,7 @@ mod tests {
 
     #[test]
     fn test_empty_state_onboarding_shows_three_steps() {
-        let mut overlay = PmOverlay::new(false);
+        let mut overlay = PmOverlay::new(false, None);
         overlay.nodes.clear();
 
         let area = Rect::new(0, 0, 100, 25);
@@ -2174,7 +2177,7 @@ mod tests {
     #[test]
     fn test_non_empty_does_not_show_onboarding() {
         // Non-empty overlay should NOT trigger onboarding, even if healthy
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         assert!(!overlay.degraded);
         assert!(!overlay.nodes.is_empty(), "demo tree should have nodes");
 
@@ -2190,7 +2193,7 @@ mod tests {
     #[test]
     fn test_onboarding_only_references_valid_pm_commands() {
         // PM-UX-D13: onboarding must reference only real PM commands
-        let mut overlay = PmOverlay::new(false);
+        let mut overlay = PmOverlay::new(false, None);
         overlay.nodes.clear();
 
         let area = Rect::new(0, 0, 120, 30);
@@ -2233,7 +2236,7 @@ mod tests {
 
     #[test]
     fn test_sort_mode_default_is_updated_desc() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         assert_eq!(
             overlay.sort_mode(),
             SortMode::UpdatedDesc,
@@ -2243,7 +2246,7 @@ mod tests {
 
     #[test]
     fn test_sort_mode_cycle() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         assert_eq!(overlay.sort_mode(), SortMode::UpdatedDesc);
 
         overlay.cycle_sort_mode();
@@ -2270,7 +2273,7 @@ mod tests {
 
     #[test]
     fn test_sort_mode_affects_visible_ordering_updated_desc() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         overlay.expand(0); // Expand Project
         overlay.expand(1); // Expand FEAT-001
 
@@ -2317,7 +2320,7 @@ mod tests {
 
     #[test]
     fn test_sort_mode_affects_visible_ordering_id_asc() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         overlay.expand(0); // Expand Project
         overlay.expand(1); // Expand FEAT-001
 
@@ -2362,7 +2365,7 @@ mod tests {
 
     #[test]
     fn test_sort_mode_visible_in_title() {
-        let overlay = PmOverlay::new(false);
+        let overlay = PmOverlay::new(false, None);
         let area = Rect::new(0, 0, 120, 25);
         let mut buf = Buffer::empty(area);
 
@@ -2379,5 +2382,31 @@ mod tests {
 
         overlay.cycle_sort_mode();
         assert_eq!(overlay.sort_mode(), SortMode::IdAsc);
+    }
+
+    #[test]
+    fn test_sort_mode_persists_with_initial_value() {
+        // Verify that passing Some(mode) preserves that mode
+        let overlay = PmOverlay::new(false, Some(SortMode::IdAsc));
+        assert_eq!(
+            overlay.sort_mode(),
+            SortMode::IdAsc,
+            "initial sort mode should be preserved"
+        );
+
+        let overlay2 = PmOverlay::new(false, Some(SortMode::StatePriority));
+        assert_eq!(
+            overlay2.sort_mode(),
+            SortMode::StatePriority,
+            "different initial mode should be preserved"
+        );
+
+        // Verify None defaults to UpdatedDesc
+        let overlay3 = PmOverlay::new(false, None);
+        assert_eq!(
+            overlay3.sort_mode(),
+            SortMode::UpdatedDesc,
+            "None should default to UpdatedDesc"
+        );
     }
 }
