@@ -670,6 +670,10 @@ impl ChatWidget<'_> {
                 return;
             }
 
+            // Reserve 1 line for footer (position indicator)
+            let footer_height: u16 = 1;
+            let list_height = body.height.saturating_sub(summary_height + footer_height);
+
             let summary_area = Rect {
                 x: body.x,
                 y: body.y,
@@ -680,11 +684,18 @@ impl ChatWidget<'_> {
                 x: body.x,
                 y: body.y + summary_height,
                 width: body.width,
-                height: body.height - summary_height,
+                height: list_height,
+            };
+            let footer_area = Rect {
+                x: body.x,
+                y: body.y + summary_height + list_height,
+                width: body.width,
+                height: footer_height,
             };
 
             render_summary_bar(overlay, summary_area, buf);
             render_list(overlay, list_area, buf);
+            render_list_footer(overlay, footer_area, buf);
         }
     }
 }
@@ -1292,6 +1303,43 @@ fn render_list(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
         let line = render_row(node, node_idx, overlay, width, is_selected);
         buf.set_line(area.x, y, &line, area.width);
     }
+}
+
+// ---------------------------------------------------------------------------
+// List footer (position indicator)
+// ---------------------------------------------------------------------------
+
+fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
+    if area.height == 0 {
+        return;
+    }
+
+    let dim = Style::default().fg(colors::text_dim());
+    let bright = Style::default().fg(colors::text());
+
+    let visible_count = overlay.visible_count();
+    let current_row = if visible_count > 0 {
+        (overlay.selected() + 1).min(visible_count)
+    } else {
+        0
+    };
+
+    let footer_text = if visible_count > 0 {
+        format!(" Row {}/{} ", current_row, visible_count)
+    } else {
+        " No items ".to_string()
+    };
+
+    let text_len = footer_text.len();
+    let footer = RLine::from(vec![
+        Span::styled(footer_text, bright),
+        Span::styled(
+            " ".repeat(area.width.saturating_sub(text_len as u16) as usize),
+            dim,
+        ),
+    ]);
+
+    buf.set_line(area.x, area.y, &footer, area.width);
 }
 
 fn render_row(
@@ -2501,6 +2549,85 @@ mod tests {
             overlay.scroll(),
             initial_scroll,
             "scroll should survive multiple detail open/close"
+        );
+    }
+
+    // --- List footer position indicator tests -------------------------------
+
+    #[test]
+    fn test_list_footer_shows_position() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0); // Expand Project → visible count = 3
+
+        let area = Rect::new(0, 0, 40, 1);
+        let mut buf = Buffer::empty(area);
+
+        // Default selection is 0 → shows Row 1/3
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+        assert!(
+            text.contains("Row 1/3"),
+            "footer should show Row 1/3, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_list_footer_updates_with_selection() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1); // More nodes → visible count = 5
+
+        let area = Rect::new(0, 0, 40, 1);
+        let mut buf = Buffer::empty(area);
+
+        // Move to row 3 (0-indexed = 2)
+        overlay.set_selected(2);
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+        assert!(
+            text.contains("Row 3/5"),
+            "footer should show Row 3/5 after selection change, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_list_footer_updates_with_tree_expansion() {
+        let overlay = PmOverlay::new(false, None);
+        let area = Rect::new(0, 0, 40, 1);
+        let mut buf = Buffer::empty(area);
+
+        // Initially collapsed → 1 visible row
+        render_list_footer(&overlay, area, &mut buf);
+        let text1 = buffer_line_text(&buf, area, 0);
+        assert!(
+            text1.contains("Row 1/1"),
+            "collapsed should show Row 1/1, got: {text1}"
+        );
+
+        // Expand → 3 visible rows
+        overlay.expand(0);
+        let mut buf2 = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf2);
+        let text2 = buffer_line_text(&buf2, area, 0);
+        assert!(
+            text2.contains("Row 1/3"),
+            "expanded should show Row 1/3, got: {text2}"
+        );
+    }
+
+    #[test]
+    fn test_list_footer_shows_no_items_when_empty() {
+        let mut overlay = PmOverlay::new(false, None);
+        overlay.nodes.clear();
+
+        let area = Rect::new(0, 0, 40, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+        assert!(
+            text.contains("No items"),
+            "empty overlay should show 'No items', got: {text}"
         );
     }
 }
