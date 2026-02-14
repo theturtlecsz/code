@@ -338,7 +338,8 @@ impl PmOverlay {
     }
 
     pub(super) fn set_scroll(&self, val: u16) {
-        self.scroll.set(val.min(self.max_scroll.get()));
+        // Store raw value; clamping happens during render in render_list
+        self.scroll.set(val);
     }
 
     pub(super) fn visible_rows(&self) -> u16 {
@@ -1274,7 +1275,7 @@ fn render_list(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     overlay.max_scroll.set(max_scroll as u16);
 
     let scroll = (overlay.scroll.get() as usize).min(max_scroll);
-    overlay.scroll.set(scroll as u16);
+    // Don't write back clamped scroll - preserve user's scroll value across mode changes
 
     // Ensure selected is in view
     let sel = overlay.selected.get().min(total.saturating_sub(1));
@@ -2407,6 +2408,99 @@ mod tests {
             overlay3.sort_mode(),
             SortMode::UpdatedDesc,
             "None should default to UpdatedDesc"
+        );
+    }
+
+    // --- PM-UX-D20 list position preservation tests --------------------------
+
+    #[test]
+    fn test_list_scroll_preserved_after_detail_close() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0); // Expand Project
+        overlay.expand(1); // Expand FEAT-001
+        overlay.expand(2); // Expand SPEC-AUTH-001
+
+        // Set specific scroll position
+        overlay.set_scroll(3);
+        let initial_scroll = overlay.scroll();
+        assert_eq!(initial_scroll, 3);
+
+        // Open detail for a visible row
+        assert!(overlay.open_detail_for_visible(5));
+        assert!(overlay.is_detail_mode());
+
+        // Scroll in detail view
+        overlay.set_detail_scroll(10);
+
+        // Close detail and verify list scroll unchanged
+        overlay.close_detail();
+        assert!(!overlay.is_detail_mode());
+        assert_eq!(
+            overlay.scroll(),
+            initial_scroll,
+            "list scroll should be preserved after closing detail"
+        );
+    }
+
+    #[test]
+    fn test_list_selection_and_scroll_both_preserved() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0); // Expand Project
+        overlay.expand(1); // Expand FEAT-001
+
+        // Set specific selection and scroll
+        overlay.set_selected(4);
+        overlay.set_scroll(2);
+        let initial_sel = overlay.selected();
+        let initial_scroll = overlay.scroll();
+
+        // Open detail, do various actions
+        assert!(overlay.open_detail_for_visible(4));
+        overlay.set_detail_scroll(5);
+
+        // Close and verify both preserved
+        overlay.close_detail();
+        assert_eq!(
+            overlay.selected(),
+            initial_sel,
+            "selection should be preserved"
+        );
+        assert_eq!(
+            overlay.scroll(),
+            initial_scroll,
+            "scroll should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_multiple_detail_open_close_preserves_position() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1);
+
+        // Set initial position
+        overlay.set_selected(3);
+        overlay.set_scroll(1);
+        let initial_sel = overlay.selected();
+        let initial_scroll = overlay.scroll();
+
+        // Open detail, close, repeat multiple times
+        for _ in 0..3 {
+            assert!(overlay.open_detail_for_visible(3));
+            overlay.set_detail_scroll(7); // Change detail scroll
+            overlay.close_detail();
+        }
+
+        // Verify position still preserved after multiple cycles
+        assert_eq!(
+            overlay.selected(),
+            initial_sel,
+            "selection should survive multiple detail open/close"
+        );
+        assert_eq!(
+            overlay.scroll(),
+            initial_scroll,
+            "scroll should survive multiple detail open/close"
         );
     }
 }
