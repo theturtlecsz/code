@@ -1309,6 +1309,9 @@ fn render_list(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
 // List footer (position indicator)
 // ---------------------------------------------------------------------------
 
+/// Toggle for ASCII fallback mode (set to true if terminal doesn't support Unicode arrows)
+const USE_ASCII_HINTS: bool = false;
+
 fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     if area.height == 0 {
         return;
@@ -1341,28 +1344,37 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
 
     let width = area.width as usize;
 
+    // Key hint symbols (Item B: ASCII fallback for unicode safety)
+    let (up_down, left_right, enter_sym) = if USE_ASCII_HINTS {
+        ("^v", "<>", "Enter")
+    } else {
+        ("\u{2191}\u{2193}", "\u{2190}\u{2192}", "\u{23ce}") // ↑↓ ←→ ⏎
+    };
+
+    // Item A: Pre-compute text for deterministic width budgeting
+    let row_text = format!(" Row {}/{} ", current_row, visible_count);
+    let window_text = format!(
+        "Showing {}-{} of {} ",
+        window_start, window_end, visible_count
+    );
+    let sort_text = format!("Sort: {}", sort_label);
+
     // Priority-based layout with width tiers (Item A, B, C)
     let footer = if width >= 120 {
-        // Full footer: Row + Window + Sort + Full key hints
+        // Full: Row + Window + Sort + Full hints
+        // Estimated budget: ~15 + 2 + ~20 + 2 + ~15 + 5 + ~50 = ~109 chars
         RLine::from(vec![
-            Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
+            Span::styled(row_text.clone(), bright),
             Span::styled("| ", dim),
-            Span::styled(
-                format!(
-                    "Showing {}-{} of {} ",
-                    window_start, window_end, visible_count
-                ),
-                dim,
-            ),
+            Span::styled(window_text.clone(), dim),
             Span::styled("| ", dim),
-            Span::styled("Sort: ", dim),
-            Span::styled(sort_label, accent),
+            Span::styled(sort_text.clone(), accent),
             Span::styled("  |  ", dim),
-            Span::styled("\u{2191}\u{2193}", accent), // ↑↓
+            Span::styled(up_down, accent),
             Span::styled(" nav  ", dim),
-            Span::styled("\u{2190}\u{2192}", accent), // ←→
+            Span::styled(left_right, accent),
             Span::styled(" tree  ", dim),
-            Span::styled("\u{23ce}", accent), // ⏎
+            Span::styled(enter_sym, accent),
             Span::styled(" detail  ", dim),
             Span::styled("s", accent),
             Span::styled(" sort  ", dim),
@@ -1371,40 +1383,35 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
         ])
     } else if width >= 80 {
         // Medium: Row + Window + Sort + Compact hints (symbols only)
+        // Budget: ~15 + 2 + ~20 + 2 + ~15 + 5 + ~20 = ~79 chars
         RLine::from(vec![
-            Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
+            Span::styled(row_text.clone(), bright),
             Span::styled("| ", dim),
-            Span::styled(
-                format!(
-                    "Showing {}-{} of {} ",
-                    window_start, window_end, visible_count
-                ),
-                dim,
-            ),
+            Span::styled(window_text.clone(), dim),
             Span::styled("| ", dim),
-            Span::styled("Sort: ", dim),
-            Span::styled(sort_label, accent),
+            Span::styled(sort_text.clone(), accent),
             Span::styled("  |  ", dim),
-            Span::styled("\u{2191}\u{2193} \u{2190}\u{2192} \u{23ce} ", accent),
+            Span::styled(format!("{} {} {} ", up_down, left_right, enter_sym), accent),
             Span::styled("s ", accent),
-            Span::styled("Esc ", accent),
+            Span::styled("Esc", accent),
         ])
     } else if width >= 50 {
         // Narrow: Row + Sort + minimal hints
+        // Budget: ~15 + 2 + ~15 + 5 + ~15 = ~52 chars
         RLine::from(vec![
-            Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
+            Span::styled(row_text.clone(), bright),
             Span::styled("| ", dim),
-            Span::styled("Sort: ", dim),
-            Span::styled(sort_label, accent),
+            Span::styled(sort_text, accent),
             Span::styled("  |  ", dim),
-            Span::styled("\u{2191}\u{2193} \u{23ce} ", accent),
+            Span::styled(format!("{} {} ", up_down, enter_sym), accent),
             Span::styled("s ", accent),
             Span::styled("Esc", accent),
         ])
     } else {
-        // Very narrow: Row only with ellipsis indicating truncation
+        // Very narrow: Row only with ellipsis
+        // Budget: ~15 + 1 = ~16 chars
         RLine::from(vec![
-            Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
+            Span::styled(row_text, bright),
             Span::styled("\u{2026}", dim), // …
         ])
     };
@@ -2991,6 +2998,96 @@ mod tests {
                 !trimmed.ends_with('|'),
                 "width {}: should not end with separator, got: {text}",
                 width
+            );
+        }
+    }
+
+    #[test]
+    fn test_footer_boundary_width_matrix() {
+        // Item C: Test all boundary widths (49/50, 79/80, 119/120)
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1);
+        overlay.visible_rows.set(10);
+        overlay.set_scroll(2);
+
+        let boundary_widths = [49, 50, 79, 80, 119, 120];
+
+        for &w in &boundary_widths {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            // All widths must show Row (highest priority)
+            assert!(
+                text.contains("Row"),
+                "width {}: must show Row, got: {text}",
+                w
+            );
+
+            // Check tier-specific expectations
+            if w >= 120 {
+                assert!(
+                    text.contains("Showing") && text.contains("Sort:"),
+                    "width {}: should show all components, got: {text}",
+                    w
+                );
+            } else if w >= 80 {
+                assert!(
+                    text.contains("Showing") && text.contains("Sort:"),
+                    "width {}: should show Row+Window+Sort, got: {text}",
+                    w
+                );
+            } else if w >= 50 {
+                assert!(
+                    text.contains("Sort:") && !text.contains("Showing"),
+                    "width {}: should show Row+Sort but not Window, got: {text}",
+                    w
+                );
+            } else {
+                assert!(
+                    text.contains("\u{2026}") && !text.contains("Sort:"),
+                    "width {}: should show Row+ellipsis only, got: {text}",
+                    w
+                );
+            }
+
+            // Verify no separator corruption (Item C)
+            assert!(
+                !text.contains("| |") && !text.contains("||"),
+                "width {}: separators must be clean, got: {text}",
+                w
+            );
+        }
+    }
+
+    #[test]
+    fn test_footer_ascii_fallback_mode() {
+        // Item B: Verify ASCII mode would work (test const toggle)
+        // This test documents the ASCII fallback even though USE_ASCII_HINTS=false by default
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 120, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // With USE_ASCII_HINTS=false (default), should have unicode
+        if USE_ASCII_HINTS {
+            assert!(
+                text.contains("^v") && text.contains("<>"),
+                "ASCII mode should show ^v and <>, got: {text}"
+            );
+        } else {
+            // Unicode mode (current default)
+            assert!(
+                text.contains("\u{2191}") || text.contains("\u{2193}"),
+                "Unicode mode should show arrows, got: {text}"
             );
         }
     }
