@@ -3513,4 +3513,53 @@ mod tests {
         );
         assert_footer_fits_width(&text2, 120);
     }
+
+    // --- v7 regression and invariant tests ----------------------------------
+
+    #[test]
+    fn test_footer_clamped_selection_correctness() {
+        // Item D (v7): Selection clamped to visible_count
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0); // 3 visible
+        overlay.set_selected(999); // Beyond visible
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        assert!(
+            text.contains("Row 3/3"),
+            "should clamp to visible_count, got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn test_footer_empty_invariant_all_widths() {
+        // Item E (v7): Empty state consistent across widths
+        let mut overlay = PmOverlay::new(false, None);
+        overlay.nodes.clear();
+
+        for &w in &[30, 40, 50, 60, 80, 100, 120] {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            assert!(
+                text.contains("No items"),
+                "width {}: must show 'No items', got: {}",
+                w,
+                text
+            );
+            assert!(
+                !text.contains("Row") && !text.contains("Sort"),
+                "width {}: empty should not have Row/Sort, got: {}",
+                w,
+                text
+            );
+        }
+    }
 }
