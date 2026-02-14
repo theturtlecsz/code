@@ -1319,11 +1319,19 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     let accent = Style::default().fg(colors::function());
 
     let visible_count = overlay.visible_count();
-    let current_row = if visible_count > 0 {
-        (overlay.selected() + 1).min(visible_count)
-    } else {
-        0
-    };
+
+    // Empty state: always just "No items"
+    if visible_count == 0 {
+        let footer = RLine::from(vec![Span::styled(" No items ", bright)]);
+        buf.set_line(area.x, area.y, &footer, area.width);
+        return;
+    }
+
+    let current_row = (overlay.selected() + 1).min(visible_count);
+    let scroll = overlay.scroll() as usize;
+    let viewport_rows = overlay.visible_rows() as usize;
+    let window_start = (scroll + 1).min(visible_count); // 1-based
+    let window_end = (scroll + viewport_rows).min(visible_count);
 
     let sort_label = match overlay.sort_mode() {
         SortMode::UpdatedDesc => "Updated",
@@ -1331,13 +1339,11 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
         SortMode::IdAsc => "ID",
     };
 
-    let footer = if visible_count > 0 {
-        // Calculate visible window range
-        let scroll = overlay.scroll() as usize;
-        let viewport_rows = overlay.visible_rows() as usize;
-        let window_start = (scroll + 1).min(visible_count); // 1-based
-        let window_end = (scroll + viewport_rows).min(visible_count);
+    let width = area.width as usize;
 
+    // Priority-based layout with width tiers (Item A, B, C)
+    let footer = if width >= 120 {
+        // Full footer: Row + Window + Sort + Full key hints
         RLine::from(vec![
             Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
             Span::styled("| ", dim),
@@ -1363,8 +1369,44 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
             Span::styled("Esc", accent),
             Span::styled(" close ", dim),
         ])
+    } else if width >= 80 {
+        // Medium: Row + Window + Sort + Compact hints (symbols only)
+        RLine::from(vec![
+            Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
+            Span::styled("| ", dim),
+            Span::styled(
+                format!(
+                    "Showing {}-{} of {} ",
+                    window_start, window_end, visible_count
+                ),
+                dim,
+            ),
+            Span::styled("| ", dim),
+            Span::styled("Sort: ", dim),
+            Span::styled(sort_label, accent),
+            Span::styled("  |  ", dim),
+            Span::styled("\u{2191}\u{2193} \u{2190}\u{2192} \u{23ce} ", accent),
+            Span::styled("s ", accent),
+            Span::styled("Esc ", accent),
+        ])
+    } else if width >= 50 {
+        // Narrow: Row + Sort + minimal hints
+        RLine::from(vec![
+            Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
+            Span::styled("| ", dim),
+            Span::styled("Sort: ", dim),
+            Span::styled(sort_label, accent),
+            Span::styled("  |  ", dim),
+            Span::styled("\u{2191}\u{2193} \u{23ce} ", accent),
+            Span::styled("s ", accent),
+            Span::styled("Esc", accent),
+        ])
     } else {
-        RLine::from(vec![Span::styled(" No items ", bright)])
+        // Very narrow: Row only with ellipsis indicating truncation
+        RLine::from(vec![
+            Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
+            Span::styled("\u{2026}", dim), // …
+        ])
     };
 
     buf.set_line(area.x, area.y, &footer, area.width);
@@ -2824,5 +2866,132 @@ mod tests {
             text.contains("nav") && text.contains("detail"),
             "footer should show key hints, got: {text}"
         );
+    }
+
+    // --- Footer width tier tests (Item A, B, C) -----------------------------
+
+    #[test]
+    fn test_footer_full_width_shows_all_components() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 120, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // At width >= 120, should show everything
+        assert!(text.contains("Row"), "should show Row");
+        assert!(text.contains("Showing"), "should show Showing");
+        assert!(text.contains("Sort:"), "should show Sort");
+        assert!(text.contains("nav"), "should show nav hint");
+        assert!(text.contains("tree"), "should show tree hint");
+        assert!(text.contains("detail"), "should show detail hint");
+        assert!(text.contains("close"), "should show close hint");
+    }
+
+    #[test]
+    fn test_footer_medium_width_compact_hints() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // At width >= 80, should show Row + Window + Sort + compact hints
+        assert!(text.contains("Row"), "should show Row");
+        assert!(text.contains("Showing"), "should show Showing");
+        assert!(text.contains("Sort:"), "should show Sort");
+        // Compact hints: symbols present, but not full words
+        assert!(
+            !text.contains("detail"),
+            "should NOT show full 'detail' word at medium width"
+        );
+    }
+
+    #[test]
+    fn test_footer_narrow_width_priority_truncation() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 50, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // At width >= 50, should show Row + Sort + minimal hints
+        assert!(text.contains("Row"), "should show Row (highest priority)");
+        assert!(text.contains("Sort:"), "should show Sort");
+        // Window range dropped at narrow width
+        assert!(
+            !text.contains("Showing"),
+            "should NOT show Showing at narrow width"
+        );
+    }
+
+    #[test]
+    fn test_footer_very_narrow_width_with_ellipsis() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+
+        let area = Rect::new(0, 0, 30, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // At width < 50, should show only Row + ellipsis
+        assert!(text.contains("Row"), "should show Row (highest priority)");
+        assert!(
+            text.contains("\u{2026}"),
+            "should show ellipsis indicating truncation"
+        );
+        // Everything else dropped
+        assert!(
+            !text.contains("Showing") && !text.contains("Sort:"),
+            "should NOT show lower-priority items at very narrow width"
+        );
+    }
+
+    #[test]
+    fn test_footer_separators_clean_at_all_widths() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(10);
+
+        for width in [120, 80, 50, 30] {
+            let area = Rect::new(0, 0, width, 1);
+            let mut buf = Buffer::empty(area);
+
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            // Verify no doubled separators (e.g., "| |" or "||")
+            assert!(
+                !text.contains("| |"),
+                "width {}: should not have doubled separators '| |', got: {text}",
+                width
+            );
+            assert!(
+                !text.contains("||"),
+                "width {}: should not have missing spaces '||', got: {text}",
+                width
+            );
+            // Verify no trailing separators
+            let trimmed = text.trim_end();
+            assert!(
+                !trimmed.ends_with('|'),
+                "width {}: should not end with separator, got: {text}",
+                width
+            );
+        }
     }
 }
