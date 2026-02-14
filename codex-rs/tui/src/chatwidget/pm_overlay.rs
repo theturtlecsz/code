@@ -1332,8 +1332,22 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     };
 
     let footer = if visible_count > 0 {
+        // Calculate visible window range
+        let scroll = overlay.scroll() as usize;
+        let viewport_rows = overlay.visible_rows() as usize;
+        let window_start = (scroll + 1).min(visible_count); // 1-based
+        let window_end = (scroll + viewport_rows).min(visible_count);
+
         RLine::from(vec![
             Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
+            Span::styled("| ", dim),
+            Span::styled(
+                format!(
+                    "Showing {}-{} of {} ",
+                    window_start, window_end, visible_count
+                ),
+                dim,
+            ),
             Span::styled("| ", dim),
             Span::styled("Sort: ", dim),
             Span::styled(sort_label, accent),
@@ -2562,8 +2576,9 @@ mod tests {
     fn test_list_footer_shows_position() {
         let overlay = PmOverlay::new(false, None);
         overlay.expand(0); // Expand Project → visible count = 3
+        overlay.visible_rows.set(10); // Set viewport size
 
-        let area = Rect::new(0, 0, 60, 1);
+        let area = Rect::new(0, 0, 80, 1);
         let mut buf = Buffer::empty(area);
 
         // Default selection is 0 → shows Row 1/3
@@ -2572,6 +2587,11 @@ mod tests {
         assert!(
             text.contains("Row 1/3"),
             "footer should show Row 1/3, got: {text}"
+        );
+        // Should show window range
+        assert!(
+            text.contains("Showing 1-3 of 3"),
+            "footer should show window range, got: {text}"
         );
         // Should also show sort mode
         assert!(
@@ -2683,6 +2703,48 @@ mod tests {
         assert!(
             text3.contains("Sort: ID"),
             "footer should show Sort: ID after second cycle, got: {text3}"
+        );
+    }
+
+    #[test]
+    fn test_list_footer_window_range_with_scroll() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0); // Expand all
+        overlay.expand(1);
+        overlay.expand(2); // Many visible rows
+
+        overlay.visible_rows.set(5); // Viewport shows 5 rows
+        overlay.set_scroll(3); // Scrolled down by 3
+
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // Window start = scroll + 1 = 4, end = scroll + viewport = 8
+        assert!(
+            text.contains("Showing 4-"),
+            "footer should show window starting at 4, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_list_footer_window_range_all_visible() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0); // visible count = 3
+        overlay.visible_rows.set(20); // Viewport larger than content
+
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // All 3 rows visible → Showing 1-3 of 3
+        assert!(
+            text.contains("Showing 1-3 of 3"),
+            "footer should show all rows visible, got: {text}"
         );
     }
 }
