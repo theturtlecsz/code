@@ -12,7 +12,8 @@ env:
 
 jobs:
   quality:
-    runs-on: [self-hosted, Linux]
+    # Explicit self-hosted runner with turtle-runner label
+    runs-on: [self-hosted, Linux, turtle-runner]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
