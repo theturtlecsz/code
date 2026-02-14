@@ -3219,4 +3219,82 @@ mod tests {
             "should NOT contain Showing or Sort at width 30"
         );
     }
+
+    // --- Comprehensive snapshot matrix (Item E) ------------------------------
+
+    #[test]
+    fn test_footer_snapshot_matrix_all_widths() {
+        // Item E: Test all 7 target widths (30, 40, 50, 60, 80, 100, 120)
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1);
+        overlay.set_selected(2);
+        overlay.visible_rows.set(10);
+        overlay.set_scroll(1);
+
+        let test_widths = [30, 40, 50, 60, 80, 100, 120];
+
+        for &w in &test_widths {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            // All widths must show Row (highest priority)
+            assert!(
+                text.contains("Row"),
+                "width {}: must always show Row, got: {text}",
+                w
+            );
+
+            // Width-specific component expectations
+            match w {
+                120 | 100 => {
+                    assert!(
+                        text.contains("Sort:") && text.contains("Esc"),
+                        "width {}: should have Sort and hints, got: {text}",
+                        w
+                    );
+                }
+                80 | 60 => {
+                    assert!(
+                        text.contains("Sort:"),
+                        "width {}: should have Sort, got: {text}",
+                        w
+                    );
+                }
+                50 => {
+                    assert!(
+                        text.contains("Sort:"),
+                        "width {}: should preserve Sort (Item C), got: {text}",
+                        w
+                    );
+                }
+                40 => {
+                    // Item C: Preserve Sort at 40 before dropping hints
+                    assert!(
+                        text.contains("Sort:") || text.contains("\u{2026}"),
+                        "width {}: should show Sort or ellipsis, got: {text}",
+                        w
+                    );
+                }
+                30 => {
+                    assert!(
+                        text.contains("\u{2026}"),
+                        "width {}: must show ellipsis for truncation, got: {text}",
+                        w
+                    );
+                }
+                _ => {}
+            }
+
+            // No separator corruption at any width (Item C)
+            assert!(
+                !text.contains("||") && !text.contains("| |"),
+                "width {}: no doubled/malformed separators, got: {text}",
+                w
+            );
+        }
+    }
 }
