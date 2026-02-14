@@ -1638,6 +1638,35 @@ fn pad_or_trunc(s: &str, width: usize) -> String {
     }
 }
 
+/// Item B: Width-safe footer segment builder with deterministic clipping.
+/// Returns a vector of Spans that fit within the given width budget.
+/// If content exceeds width, truncates and adds ellipsis.
+#[allow(dead_code)] // Available for future footer refinements
+fn build_footer_segment(spans: Vec<(&str, Style)>, width_budget: usize) -> Vec<Span<'static>> {
+    let mut total_len = 0;
+    let mut result = Vec::new();
+
+    for (text, style) in spans {
+        let text_len = text.len();
+        if total_len + text_len <= width_budget {
+            result.push(Span::styled(text.to_string(), style));
+            total_len += text_len;
+        } else {
+            // Truncate and add ellipsis
+            let remaining = width_budget.saturating_sub(total_len);
+            if remaining > 1 {
+                let truncated = &text[..remaining.saturating_sub(1)];
+                result.push(Span::styled(format!("{}\u{2026}", truncated), style));
+            } else if remaining == 1 {
+                result.push(Span::styled("\u{2026}".to_string(), style));
+            }
+            break;
+        }
+    }
+
+    result
+}
+
 fn short_date(iso: &str) -> String {
     // Extract YYYY-MM-DD from ISO timestamp
     if iso.len() >= 10 {
@@ -3090,5 +3119,104 @@ mod tests {
                 "Unicode mode should show arrows, got: {text}"
             );
         }
+    }
+
+    // --- Footer snapshot tests (Item C) --------------------------------------
+
+    #[test]
+    fn test_footer_snapshot_width_120() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1);
+        overlay.set_selected(2);
+        overlay.visible_rows.set(10);
+        overlay.set_scroll(0);
+
+        let area = Rect::new(0, 0, 120, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // Snapshot: exact expected format at width 120
+        assert!(text.starts_with(" Row 3/5 |"), "should start with Row");
+        assert!(
+            text.contains("| Showing 1-5 of 5 |"),
+            "should contain Showing"
+        );
+        assert!(text.contains("| Sort: Updated"), "should contain Sort");
+        assert!(
+            text.contains("nav") && text.contains("tree") && text.contains("detail"),
+            "should contain full hint labels"
+        );
+    }
+
+    #[test]
+    fn test_footer_snapshot_width_80() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.set_selected(1);
+        overlay.visible_rows.set(5);
+
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // Snapshot: width 80 format (compact hints, no labels)
+        assert!(text.starts_with(" Row 2/3 |"), "should start with Row");
+        assert!(text.contains("| Showing"), "should contain Showing");
+        assert!(text.contains("| Sort:"), "should contain Sort");
+        assert!(
+            !text.contains("nav") && !text.contains("tree"),
+            "should NOT contain hint labels at width 80"
+        );
+    }
+
+    #[test]
+    fn test_footer_snapshot_width_50() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(5);
+
+        let area = Rect::new(0, 0, 50, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // Snapshot: width 50 format (Row + Sort + minimal hints)
+        assert!(text.starts_with(" Row"), "should start with Row");
+        assert!(text.contains("| Sort:"), "should contain Sort");
+        assert!(
+            !text.contains("Showing"),
+            "should NOT contain Showing at width 50"
+        );
+        // Minimal hints present
+        assert!(
+            text.contains("s") && text.contains("Esc"),
+            "should have s and Esc"
+        );
+    }
+
+    #[test]
+    fn test_footer_snapshot_width_30() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+
+        let area = Rect::new(0, 0, 30, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // Snapshot: width 30 format (Row + ellipsis only)
+        assert!(text.starts_with(" Row"), "should start with Row");
+        assert!(text.contains("\u{2026}"), "should contain ellipsis");
+        assert!(
+            !text.contains("Showing") && !text.contains("Sort:"),
+            "should NOT contain Showing or Sort at width 30"
+        );
     }
 }
