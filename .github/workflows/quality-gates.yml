@@ -12,8 +12,8 @@ env:
 
 jobs:
   quality:
-    # Explicit self-hosted runner with turtle-runner label
-    runs-on: [self-hosted, Linux, turtle-runner]
+    # Hybrid policy: GitHub-hosted for reliability (no runners registered yet)
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
