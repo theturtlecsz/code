@@ -1682,34 +1682,7 @@ fn pad_or_trunc(s: &str, width: usize) -> String {
     }
 }
 
-/// Item B: Width-safe footer segment builder with deterministic clipping.
-/// Returns a vector of Spans that fit within the given width budget.
-/// If content exceeds width, truncates and adds ellipsis.
-#[allow(dead_code)] // Available for future footer refinements
-fn build_footer_segment(spans: Vec<(&str, Style)>, width_budget: usize) -> Vec<Span<'static>> {
-    let mut total_len = 0;
-    let mut result = Vec::new();
-
-    for (text, style) in spans {
-        let text_len = text.len();
-        if total_len + text_len <= width_budget {
-            result.push(Span::styled(text.to_string(), style));
-            total_len += text_len;
-        } else {
-            // Truncate and add ellipsis
-            let remaining = width_budget.saturating_sub(total_len);
-            if remaining > 1 {
-                let truncated = &text[..remaining.saturating_sub(1)];
-                result.push(Span::styled(format!("{}\u{2026}", truncated), style));
-            } else if remaining == 1 {
-                result.push(Span::styled("\u{2026}".to_string(), style));
-            }
-            break;
-        }
-    }
-
-    result
-}
+// Item A: Removed stale build_footer_segment utility (was not integrated into active render path)
 
 fn short_date(iso: &str) -> String {
     // Extract YYYY-MM-DD from ISO timestamp
@@ -1735,6 +1708,18 @@ fn check_service_status() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Item B: Width-cap assertion helper
+    fn assert_footer_fits_width(text: &str, width: u16) {
+        let text_len = text.trim_end().len();
+        assert!(
+            text_len <= width as usize,
+            "Footer length {} exceeds width {}: {}",
+            text_len,
+            width,
+            text
+        );
+    }
 
     fn buffer_line_text(buf: &Buffer, area: Rect, y: u16) -> String {
         let mut row = String::new();
@@ -3385,5 +3370,148 @@ mod tests {
                 w
             );
         }
+    }
+
+    // --- Footer hardening tests (Items B, C, D, E) ---------------------------
+
+    #[test]
+    fn test_footer_width_cap_all_tiers() {
+        // Item B: Validate rendered length <= width at all tiers
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1);
+        overlay.visible_rows.set(10);
+
+        let test_widths = [30, 40, 50, 60, 80, 100, 120];
+
+        for &w in &test_widths {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            assert_footer_fits_width(&text, w);
+        }
+    }
+
+    #[test]
+    fn test_footer_separator_placement_clean() {
+        // Item C: No leading/trailing separators at any tier
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1);
+        overlay.visible_rows.set(10);
+
+        let test_widths = [30, 40, 50, 60, 80, 100, 120];
+
+        for &w in &test_widths {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+            let trimmed = text.trim();
+
+            // No leading separator
+            assert!(
+                !trimmed.starts_with('|'),
+                "width {}: footer should not start with separator, got: {}",
+                w,
+                trimmed
+            );
+
+            // No trailing separator
+            assert!(
+                !trimmed.ends_with('|'),
+                "width {}: footer should not end with separator, got: {}",
+                w,
+                trimmed
+            );
+
+            // No doubled separators
+            assert!(
+                !text.contains("||") && !text.contains("| |"),
+                "width {}: no doubled separators, got: {}",
+                w,
+                text
+            );
+        }
+    }
+
+    #[test]
+    fn test_footer_unicode_ascii_dual_mode() {
+        // Item D: Test both unicode and ASCII modes explicitly
+        // This test documents both paths even though USE_ASCII_HINTS is const
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 120, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // Current mode (USE_ASCII_HINTS = false): should have unicode
+        if USE_ASCII_HINTS {
+            assert!(text.contains("^v"), "ASCII mode: should have ^v");
+            assert!(text.contains("<>"), "ASCII mode: should have <>");
+            assert!(text.contains("Enter"), "ASCII mode: should have Enter");
+        } else {
+            // Unicode mode (default)
+            assert!(
+                text.contains('\u{2191}') || text.contains('\u{2193}'),
+                "Unicode mode: should have up/down arrows"
+            );
+            assert!(
+                text.contains('\u{2190}') || text.contains('\u{2192}'),
+                "Unicode mode: should have left/right arrows"
+            );
+        }
+    }
+
+    #[test]
+    fn test_footer_right_align_padding_stability() {
+        // Item E: Right-alignment stable with varying content lengths
+        let overlay = PmOverlay::new(false, None);
+
+        // Test with short values
+        overlay.expand(0);
+        overlay.set_selected(0);
+        overlay.visible_rows.set(5);
+
+        let area = Rect::new(0, 0, 120, 1);
+        let mut buf1 = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf1);
+        let text1 = buffer_line_text(&buf1, area, 0);
+
+        // Verify hints are at the end (right-aligned)
+        assert!(
+            text1.ends_with("close ") || text1.trim_end().ends_with("close"),
+            "hints should be at end (right-aligned): {}",
+            text1
+        );
+
+        // Test with longer values (more visible rows)
+        overlay.expand(1);
+        overlay.expand(2);
+        overlay.set_selected(5);
+        overlay.visible_rows.set(15);
+
+        let mut buf2 = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf2);
+        let text2 = buffer_line_text(&buf2, area, 0);
+
+        // Hints should still be right-aligned despite longer context
+        assert!(
+            text2.ends_with("close ") || text2.trim_end().ends_with("close"),
+            "hints should remain right-aligned with longer context: {}",
+            text2
+        );
+
+        // Verify width cap still holds
+        assert_footer_fits_width(&text1, 120);
+        assert_footer_fits_width(&text2, 120);
     }
 }
