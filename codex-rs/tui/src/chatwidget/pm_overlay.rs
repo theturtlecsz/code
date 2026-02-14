@@ -616,6 +616,8 @@ impl ChatWidget<'_> {
                 Span::styled(" expand/collapse  ", dim),
                 Span::styled("Enter", accent),
                 Span::styled(" detail  ", dim),
+                Span::styled("s", accent),
+                Span::styled(" sort  ", dim),
                 Span::styled("Esc", bright),
                 Span::styled(" close  ", dim),
                 Span::styled("Sort: ", dim),
