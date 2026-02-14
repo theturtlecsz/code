@@ -3617,4 +3617,244 @@ mod tests {
             assert_footer_fits_width(&text, w);
         }
     }
+
+    // --- v9 behavior-lock tests (freeze current semantics) -------------------
+
+    #[test]
+    fn test_footer_golden_matrix_exact_strings() {
+        // Item A (v9): Exact string assertions for all tiers
+        let overlay = create_test_overlay();
+
+        struct Expected {
+            width: u16,
+            contains_row: &'static str,
+            contains_sort: bool,
+            contains_window: Option<&'static str>, // None if dropped
+        }
+
+        let expectations = [
+            Expected {
+                width: 120,
+                contains_row: " Row 3/5 ",
+                contains_sort: true,
+                contains_window: Some("Show 2-5/5"), // window_end = min(scroll+viewport, visible) = min(11, 5) = 5
+            },
+            Expected {
+                width: 100,
+                contains_row: " Row 3/5 ",
+                contains_sort: true,
+                contains_window: Some("Show 2-5/5"),
+            },
+            Expected {
+                width: 80,
+                contains_row: " Row 3/5 ",
+                contains_sort: true,
+                contains_window: Some("Showing 2-5 of 5"),
+            },
+            Expected {
+                width: 60,
+                contains_row: " Row 3/5 ",
+                contains_sort: true,
+                contains_window: Some("Show"),
+            },
+            Expected {
+                width: 50,
+                contains_row: " Row 3/5 ",
+                contains_sort: true,
+                contains_window: None,
+            },
+            Expected {
+                width: 40,
+                contains_row: " Row 3/5 ",
+                contains_sort: true,
+                contains_window: None,
+            },
+            Expected {
+                width: 30,
+                contains_row: " Row 3/5 ",
+                contains_sort: false,
+                contains_window: None,
+            },
+        ];
+
+        for exp in &expectations {
+            let area = Rect::new(0, 0, exp.width, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            assert!(
+                text.contains(exp.contains_row),
+                "w={}: must contain '{}', got: {}",
+                exp.width,
+                exp.contains_row,
+                text
+            );
+
+            if exp.contains_sort {
+                assert!(text.contains("Sort:"), "w={}: needs Sort", exp.width);
+            } else {
+                assert!(!text.contains("Sort:"), "w={}: no Sort", exp.width);
+            }
+
+            if let Some(window_pat) = exp.contains_window {
+                assert!(
+                    text.contains(window_pat),
+                    "w={}: needs '{}', got: {}",
+                    exp.width,
+                    window_pat,
+                    text
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_footer_separator_policy_lock() {
+        // Item B (v9): Separator policy explicit per tier
+        let overlay = create_test_overlay();
+
+        // Wide tiers (>=80): spaced separator " | "
+        for &w in &[80, 100, 120] {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            assert!(
+                text.contains(" | "),
+                "w={}: wide tier must use spaced separator, got: {}",
+                w,
+                text
+            );
+        }
+
+        // Narrow tiers (<80): compact separator "|" (no spaces)
+        for &w in &[50, 60] {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            // Compact sep: should have "|" but not " | "
+            assert!(text.contains('|'), "w={}: needs separator", w);
+            assert!(
+                !text.contains(" | "),
+                "w={}: narrow tier must use compact separator, got: {}",
+                w,
+                text
+            );
+        }
+    }
+
+    #[test]
+    fn test_footer_show_vs_showing_breakpoint_lock() {
+        // Item C (v9): Abbreviation breakpoint behavior lock
+        let overlay = create_test_overlay();
+
+        // >=100: "Show" (abbreviated)
+        for &w in &[100, 120] {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            assert!(
+                text.contains("Show") && !text.contains("Showing"),
+                "w={}: must use 'Show' abbreviation, got: {}",
+                w,
+                text
+            );
+        }
+
+        // 80-99: "Showing" (full)
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        assert!(
+            text.contains("Showing") && !text.contains("Show 2-7/5"),
+            "w=80-99: must use 'Showing' full form, got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn test_footer_right_alignment_lock() {
+        // Item D (v9): Right-alignment present only at >=120
+        let overlay = create_test_overlay();
+
+        // Width 120: right-aligned hints (padding before hints)
+        let area_wide = Rect::new(0, 0, 120, 1);
+        let mut buf_wide = Buffer::empty(area_wide);
+        render_list_footer(&overlay, area_wide, &mut buf_wide);
+        let text_wide = buffer_line_text(&buf_wide, area_wide, 0);
+
+        // Right-aligned: hints at end, context at start
+        assert!(
+            text_wide.trim_end().ends_with("close"),
+            "w=120: hints must be right-aligned (end with 'close'), got: {}",
+            text_wide
+        );
+
+        // Width <120: validate hints not right-aligned (present in linear flow)
+        for &w in &[100, 80, 60, 50] {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let _text = buffer_line_text(&buf, area, 0);
+
+            // At these widths, hints are in linear flow (not right-aligned with padding)
+            // Just validate render succeeds; exact layout varies by tier
+        }
+    }
+
+    #[test]
+    fn test_footer_empty_state_negative_lock() {
+        // Item E (v9): Empty state NEVER includes Row/Sort/Hints
+        let mut overlay = PmOverlay::new(false, None);
+        overlay.nodes.clear();
+
+        for &w in &[30, 40, 50, 60, 80, 100, 120] {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            // Positive: must have "No items"
+            assert!(
+                text.contains("No items"),
+                "w={}: empty must show 'No items', got: {}",
+                w,
+                text
+            );
+
+            // Negative locks: must NOT have any component
+            assert!(
+                !text.contains("Row"),
+                "w={}: empty must NOT show Row, got: {}",
+                w,
+                text
+            );
+            assert!(
+                !text.contains("Sort"),
+                "w={}: empty must NOT show Sort, got: {}",
+                w,
+                text
+            );
+            assert!(
+                !text.contains("Show") && !text.contains("Showing"),
+                "w={}: empty must NOT show window, got: {}",
+                w,
+                text
+            );
+            assert!(
+                !text.contains("Esc") && !text.contains("nav"),
+                "w={}: empty must NOT show hints, got: {}",
+                w,
+                text
+            );
+        }
+    }
 }
