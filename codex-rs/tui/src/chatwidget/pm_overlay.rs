@@ -1351,7 +1351,17 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
             Span::styled("| ", dim),
             Span::styled("Sort: ", dim),
             Span::styled(sort_label, accent),
-            Span::styled(" ", dim),
+            Span::styled("  |  ", dim),
+            Span::styled("\u{2191}\u{2193}", accent), // ↑↓
+            Span::styled(" nav  ", dim),
+            Span::styled("\u{2190}\u{2192}", accent), // ←→
+            Span::styled(" tree  ", dim),
+            Span::styled("\u{23ce}", accent), // ⏎
+            Span::styled(" detail  ", dim),
+            Span::styled("s", accent),
+            Span::styled(" sort  ", dim),
+            Span::styled("Esc", accent),
+            Span::styled(" close ", dim),
         ])
     } else {
         RLine::from(vec![Span::styled(" No items ", bright)])
@@ -2745,6 +2755,74 @@ mod tests {
         assert!(
             text.contains("Showing 1-3 of 3"),
             "footer should show all rows visible, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_list_footer_shows_key_hints() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 120, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // Verify key hints are shown
+        assert!(
+            text.contains("nav"),
+            "footer should show navigation hint, got: {text}"
+        );
+        assert!(
+            text.contains("tree"),
+            "footer should show tree expand/collapse hint, got: {text}"
+        );
+        assert!(
+            text.contains("detail"),
+            "footer should show detail hint, got: {text}"
+        );
+        assert!(
+            text.contains("sort"),
+            "footer should show sort hint, got: {text}"
+        );
+        assert!(
+            text.contains("close"),
+            "footer should show close hint, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_list_footer_preserves_context_with_hints() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.set_selected(2);
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 120, 1);
+        let mut buf = Buffer::empty(area);
+
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        // Verify all original context still present alongside hints
+        assert!(
+            text.contains("Row 3/3"),
+            "footer should still show row position, got: {text}"
+        );
+        assert!(
+            text.contains("Showing"),
+            "footer should still show window range, got: {text}"
+        );
+        assert!(
+            text.contains("Sort:"),
+            "footer should still show sort mode, got: {text}"
+        );
+        // And hints are also there
+        assert!(
+            text.contains("nav") && text.contains("detail"),
+            "footer should show key hints, got: {text}"
         );
     }
 }
