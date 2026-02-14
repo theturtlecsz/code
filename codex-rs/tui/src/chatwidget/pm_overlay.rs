@@ -1316,6 +1316,7 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
 
     let dim = Style::default().fg(colors::text_dim());
     let bright = Style::default().fg(colors::text());
+    let accent = Style::default().fg(colors::function());
 
     let visible_count = overlay.visible_count();
     let current_row = if visible_count > 0 {
@@ -1324,20 +1325,23 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
         0
     };
 
-    let footer_text = if visible_count > 0 {
-        format!(" Row {}/{} ", current_row, visible_count)
-    } else {
-        " No items ".to_string()
+    let sort_label = match overlay.sort_mode() {
+        SortMode::UpdatedDesc => "Updated",
+        SortMode::StatePriority => "State",
+        SortMode::IdAsc => "ID",
     };
 
-    let text_len = footer_text.len();
-    let footer = RLine::from(vec![
-        Span::styled(footer_text, bright),
-        Span::styled(
-            " ".repeat(area.width.saturating_sub(text_len as u16) as usize),
-            dim,
-        ),
-    ]);
+    let footer = if visible_count > 0 {
+        RLine::from(vec![
+            Span::styled(format!(" Row {}/{} ", current_row, visible_count), bright),
+            Span::styled("| ", dim),
+            Span::styled("Sort: ", dim),
+            Span::styled(sort_label, accent),
+            Span::styled(" ", dim),
+        ])
+    } else {
+        RLine::from(vec![Span::styled(" No items ", bright)])
+    };
 
     buf.set_line(area.x, area.y, &footer, area.width);
 }
@@ -2559,7 +2563,7 @@ mod tests {
         let overlay = PmOverlay::new(false, None);
         overlay.expand(0); // Expand Project → visible count = 3
 
-        let area = Rect::new(0, 0, 40, 1);
+        let area = Rect::new(0, 0, 60, 1);
         let mut buf = Buffer::empty(area);
 
         // Default selection is 0 → shows Row 1/3
@@ -2568,6 +2572,15 @@ mod tests {
         assert!(
             text.contains("Row 1/3"),
             "footer should show Row 1/3, got: {text}"
+        );
+        // Should also show sort mode
+        assert!(
+            text.contains("Sort:"),
+            "footer should show sort mode, got: {text}"
+        );
+        assert!(
+            text.contains("Updated"),
+            "footer should show default sort mode Updated, got: {text}"
         );
     }
 
@@ -2628,6 +2641,48 @@ mod tests {
         assert!(
             text.contains("No items"),
             "empty overlay should show 'No items', got: {text}"
+        );
+        // Empty footer should NOT show sort mode
+        assert!(
+            !text.contains("Sort:"),
+            "empty footer should not show sort mode, got: {text}"
+        );
+    }
+
+    #[test]
+    fn test_list_footer_updates_with_sort_mode_cycle() {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+
+        let area = Rect::new(0, 0, 60, 1);
+        let mut buf = Buffer::empty(area);
+
+        // Default mode: Updated
+        render_list_footer(&overlay, area, &mut buf);
+        let text1 = buffer_line_text(&buf, area, 0);
+        assert!(
+            text1.contains("Sort: Updated"),
+            "footer should show Sort: Updated, got: {text1}"
+        );
+
+        // Cycle to StatePriority
+        overlay.cycle_sort_mode();
+        let mut buf2 = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf2);
+        let text2 = buffer_line_text(&buf2, area, 0);
+        assert!(
+            text2.contains("Sort: State"),
+            "footer should show Sort: State after cycle, got: {text2}"
+        );
+
+        // Cycle to IdAsc
+        overlay.cycle_sort_mode();
+        let mut buf3 = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf3);
+        let text3 = buffer_line_text(&buf3, area, 0);
+        assert!(
+            text3.contains("Sort: ID"),
+            "footer should show Sort: ID after second cycle, got: {text3}"
         );
     }
 }
