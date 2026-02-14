@@ -1748,6 +1748,17 @@ mod tests {
         );
     }
 
+    // Item C (v8): Deterministic fixture for overlay setup
+    fn create_test_overlay() -> PmOverlay {
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0);
+        overlay.expand(1);
+        overlay.set_selected(2);
+        overlay.visible_rows.set(10);
+        overlay.set_scroll(1);
+        overlay
+    }
+
     fn buffer_line_text(buf: &Buffer, area: Rect, y: u16) -> String {
         let mut row = String::new();
         for x in 0..area.width {
@@ -3512,5 +3523,98 @@ mod tests {
             text2
         );
         assert_footer_fits_width(&text2, 120);
+    }
+
+    // --- v7 regression and invariant tests ----------------------------------
+
+    #[test]
+    fn test_footer_clamped_selection_correctness() {
+        // Item D (v7): Selection clamped to visible_count
+        let overlay = PmOverlay::new(false, None);
+        overlay.expand(0); // 3 visible
+        overlay.set_selected(999); // Beyond visible
+        overlay.visible_rows.set(10);
+
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = Buffer::empty(area);
+        render_list_footer(&overlay, area, &mut buf);
+        let text = buffer_line_text(&buf, area, 0);
+
+        assert!(
+            text.contains("Row 3/3"),
+            "should clamp to visible_count, got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn test_footer_empty_invariant_all_widths() {
+        // Item E (v7): Empty state consistent across widths
+        let mut overlay = PmOverlay::new(false, None);
+        overlay.nodes.clear();
+
+        for &w in &[30, 40, 50, 60, 80, 100, 120] {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            assert!(
+                text.contains("No items"),
+                "width {}: must show 'No items', got: {}",
+                w,
+                text
+            );
+            assert!(
+                !text.contains("Row") && !text.contains("Sort"),
+                "width {}: empty should not have Row/Sort, got: {}",
+                w,
+                text
+            );
+        }
+    }
+
+    // --- v8 CI efficiency improvements ---------------------------------------
+
+    #[test]
+    fn test_footer_table_driven_all_tiers() {
+        // Item B (v8): Table-driven test validates all tiers efficiently
+        let overlay = create_test_overlay();
+
+        let tier_specs = [
+            (120, true, true, true, true), // (width, has_row, has_window, has_sort, has_hints)
+            (100, true, true, true, true),
+            (80, true, true, true, true),
+            (60, true, true, true, true),
+            (50, true, false, true, true),   // Window dropped
+            (40, true, false, true, false),  // Hints dropped
+            (30, true, false, false, false), // Sort dropped
+        ];
+
+        for &(w, has_row, has_window, has_sort, has_hints) in &tier_specs {
+            let area = Rect::new(0, 0, w, 1);
+            let mut buf = Buffer::empty(area);
+            render_list_footer(&overlay, area, &mut buf);
+            let text = buffer_line_text(&buf, area, 0);
+
+            if has_row {
+                assert!(text.contains("Row"), "w={}: needs Row", w);
+            }
+            if has_window {
+                assert!(
+                    text.contains("Show") || text.contains("Showing"),
+                    "w={}: needs window",
+                    w
+                );
+            }
+            if has_sort {
+                assert!(text.contains("Sort:"), "w={}: needs Sort", w);
+            }
+            if has_hints {
+                assert!(text.contains("Esc"), "w={}: needs hints", w);
+            }
+
+            assert_footer_fits_width(&text, w);
+        }
     }
 }
