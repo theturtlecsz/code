@@ -15,6 +15,8 @@ lazy_static! {
     static ref CUSTOM_THEME_COLORS: RwLock<Option<codex_core::config_types::ThemeColors>> =
         RwLock::new(None);
     static ref CUSTOM_THEME_IS_DARK: RwLock<Option<bool>> = RwLock::new(None);
+    /// PM-004 Batch C: High-contrast mode flag for accessibility
+    static ref HIGH_CONTRAST_MODE: RwLock<bool> = RwLock::new(false);
 }
 
 /// Represents a complete theme with all colors resolved
@@ -838,4 +840,19 @@ fn get_predefined_theme(name: ThemeName) -> Theme {
             get_predefined_theme(ThemeName::DarkCarbonNight)
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// PM-004 Batch C: High-contrast accessibility mode
+// ---------------------------------------------------------------------------
+
+/// Toggle high-contrast mode for accessibility
+pub(crate) fn toggle_high_contrast() {
+    let mut mode = HIGH_CONTRAST_MODE.write().unwrap();
+    *mode = !*mode;
+}
+
+/// Check if high-contrast mode is active
+pub(crate) fn is_high_contrast() -> bool {
+    *HIGH_CONTRAST_MODE.read().unwrap()
 }

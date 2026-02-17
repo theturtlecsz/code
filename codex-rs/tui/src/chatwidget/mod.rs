@@ -3262,6 +3262,13 @@ impl ChatWidget<'_> {
     }
 
     pub(crate) fn handle_key_event(&mut self, key_event: KeyEvent) {
+        // PM-004 Batch C: F11 toggles high-contrast mode globally
+        if matches!(key_event.code, crossterm::event::KeyCode::F(11)) {
+            crate::theme::toggle_high_contrast();
+            self.request_redraw();
+            return;
+        }
+
         if terminal_handlers::handle_terminal_key(self, key_event) {
             return;
         }

@@ -30,6 +30,14 @@ pub(super) struct PmState {
     pub(super) overlay: Option<PmOverlay>,
     /// Persisted sort mode across overlay open/close within session
     pub(super) last_sort_mode: Option<SortMode>,
+    /// PM-UX-D10: Write-mode confirmation modal
+    pub(super) write_confirmation: Option<PmWriteConfirmation>,
+}
+
+/// PM-UX-D10: Write confirmation modal state
+pub(super) struct PmWriteConfirmation {
+    pub(super) node_id: String,
+    pub(super) kind: codex_core::pm::bot::BotKind,
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +61,12 @@ pub(super) struct PmOverlay {
     detail_auto_scroll_pending: Cell<bool>,
     /// Current sort mode for list view
     sort_mode: Cell<SortMode>,
+    /// PM-004 Batch B: Run configuration
+    run_config: Cell<RunConfig>,
+    /// PM-004 Batch C: Filter text (lowercase for case-insensitive matching)
+    filter_text: std::cell::RefCell<Option<String>>,
+    /// PM-UX-D18: Filter input mode (Some = editing, None = not editing)
+    filter_input: std::cell::RefCell<Option<String>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -70,6 +84,119 @@ pub(super) enum SortMode {
     UpdatedDesc,   // Most recently updated first
     StatePriority, // By state priority (InProgress, NeedsReview, etc.)
     IdAsc,         // Alphabetically by ID
+}
+
+/// PM-004 Batch A: Actions available in detail view
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(super) enum PmAction {
+    Promote,
+    Hold,
+    Complete,
+    RunResearch,
+    RunReview,
+}
+
+impl PmAction {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Promote => "promote",
+            Self::Hold => "hold",
+            Self::Complete => "complete",
+            Self::RunResearch => "run research",
+            Self::RunReview => "run review",
+        }
+    }
+
+    fn validate(&self, overlay: &PmOverlay, node: &TreeNode) -> Result<(), String> {
+        if overlay.degraded {
+            return Err("Actions disabled - PM service unavailable".into());
+        }
+
+        match self {
+            Self::Promote => {
+                if !node.state.contains("Needs") {
+                    return Err("Can only promote from NeedsResearch/NeedsReview states".into());
+                }
+            }
+            Self::Hold => {
+                if node.state == "OnHold" {
+                    return Err("Item is already on hold".into());
+                }
+            }
+            Self::Complete => {
+                if node.state != "InProgress" && !node.state.contains("NeedsReview") {
+                    return Err("Can only complete from InProgress or NeedsReview states".into());
+                }
+            }
+            Self::RunResearch | Self::RunReview => {
+                // Enabled for all work items
+            }
+        }
+        Ok(())
+    }
+}
+
+/// PM-004 Batch B: Run configuration presets
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(super) enum Preset {
+    Quick,
+    Standard,
+    Deep,
+    Exhaustive,
+}
+
+impl Preset {
+    #[allow(dead_code)] // Used for future cycle hotkey (Tab/Shift+Tab)
+    fn next(&self) -> Self {
+        match self {
+            Self::Quick => Self::Standard,
+            Self::Standard => Self::Deep,
+            Self::Deep => Self::Exhaustive,
+            Self::Exhaustive => Self::Quick,
+        }
+    }
+}
+
+/// PM-004 Batch B: Scope flags (bit set)
+#[derive(Clone, Copy)]
+pub(super) struct ScopeSet(u8);
+
+impl ScopeSet {
+    pub(super) const CORRECTNESS: u8 = 1 << 0;
+    pub(super) const SECURITY: u8 = 1 << 1;
+    pub(super) const PERFORMANCE: u8 = 1 << 2;
+    pub(super) const STYLE: u8 = 1 << 3;
+    pub(super) const ARCHITECTURE: u8 = 1 << 4;
+
+    fn default() -> Self {
+        Self(Self::CORRECTNESS | Self::SECURITY)
+    }
+
+    fn toggle(&mut self, scope: u8) {
+        self.0 ^= scope;
+    }
+
+    fn has(&self, scope: u8) -> bool {
+        self.0 & scope != 0
+    }
+}
+
+/// PM-004 Batch B: Run configuration
+#[derive(Clone, Copy)]
+pub(super) struct RunConfig {
+    preset: Preset,
+    scopes: ScopeSet,
+    write_mode: bool,
+}
+
+impl Default for RunConfig {
+    fn default() -> Self {
+        Self {
+            preset: Preset::Standard,
+            scopes: ScopeSet::default(),
+            write_mode: false, // OFF by default (safety)
+        }
+    }
 }
 
 #[allow(dead_code)] // Fields used across rendering + future detail view
@@ -300,6 +427,9 @@ impl PmOverlay {
             detail_visible_rows: Cell::new(0),
             detail_auto_scroll_pending: Cell::new(false),
             sort_mode: Cell::new(initial_sort_mode.unwrap_or(SortMode::UpdatedDesc)),
+            run_config: Cell::new(RunConfig::default()),
+            filter_text: std::cell::RefCell::new(None),
+            filter_input: std::cell::RefCell::new(None),
         }
     }
 
@@ -320,6 +450,9 @@ impl PmOverlay {
             detail_visible_rows: Cell::new(0),
             detail_auto_scroll_pending: Cell::new(false),
             sort_mode: Cell::new(SortMode::UpdatedDesc),
+            run_config: Cell::new(RunConfig::default()),
+            filter_text: std::cell::RefCell::new(None),
+            filter_input: std::cell::RefCell::new(None),
         }
     }
 
@@ -378,6 +511,154 @@ impl PmOverlay {
     /// The node currently shown in detail view, if any.
     fn detail_node(&self) -> Option<&TreeNode> {
         self.detail_node_idx.get().map(|i| &self.nodes[i])
+    }
+
+    /// PM-004 Batch A: Get the ID of the currently selected node in detail view.
+    pub(super) fn get_selected_node_id(&self) -> Option<String> {
+        self.detail_node_idx
+            .get()
+            .map(|idx| self.nodes[idx].id.clone())
+    }
+
+    /// PM-UX-D22: Get active run ID for current node (if any)
+    pub(super) fn get_active_run_id(&self) -> Option<String> {
+        self.detail_node_idx.get().and_then(|idx| {
+            let node = &self.nodes[idx];
+            // Only return run ID if status indicates an active run
+            if node.latest_run_status == "running" && !node.latest_run.is_empty() {
+                Some(node.latest_run.clone())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// PM-004 Batch A: Check if an action can be executed on the current node.
+    pub(super) fn can_execute_action(&self, action: PmAction) -> bool {
+        if self.degraded {
+            return false;
+        }
+        if let Some(idx) = self.detail_node_idx.get() {
+            if let Some(node) = self.nodes.get(idx) {
+                return action.validate(self, node).is_ok();
+            }
+        }
+        false
+    }
+
+    /// PM-004 Batch B: Get current run configuration
+    pub(super) fn run_config(&self) -> RunConfig {
+        self.run_config.get()
+    }
+
+    /// PM-004 Batch B: Cycle to next preset
+    #[allow(dead_code)] // Available for Tab/Shift+Tab hotkey if desired
+    pub(super) fn cycle_preset(&self) {
+        let mut config = self.run_config.get();
+        config.preset = config.preset.next();
+        self.run_config.set(config);
+    }
+
+    /// PM-004 Batch B: Toggle a scope flag
+    pub(super) fn toggle_scope(&self, scope: u8) {
+        let mut config = self.run_config.get();
+        config.scopes.toggle(scope);
+        self.run_config.set(config);
+    }
+
+    /// PM-004 Batch B: Toggle write mode
+    pub(super) fn toggle_write_mode(&self) {
+        let mut config = self.run_config.get();
+        config.write_mode = !config.write_mode;
+        self.run_config.set(config);
+    }
+
+    /// PM-004 Batch C: Set filter text (empty clears filter)
+    pub(super) fn set_filter(&self, text: String) {
+        if text.is_empty() {
+            *self.filter_text.borrow_mut() = None;
+        } else {
+            *self.filter_text.borrow_mut() = Some(text.to_lowercase());
+        }
+    }
+
+    /// PM-004 Batch C: Clear filter
+    pub(super) fn clear_filter(&self) {
+        *self.filter_text.borrow_mut() = None;
+    }
+
+    /// PM-004 Batch C: Check if filter is active
+    #[allow(dead_code)] // Available for filter status display in footer
+    pub(super) fn has_filter(&self) -> bool {
+        self.filter_text.borrow().is_some()
+    }
+
+    /// PM-UX-D18: Enter filter input mode
+    pub(super) fn enter_filter_input(&self) {
+        *self.filter_input.borrow_mut() = Some(String::new());
+    }
+
+    /// PM-UX-D18: Check if in filter input mode
+    pub(super) fn is_filter_input_mode(&self) -> bool {
+        self.filter_input.borrow().is_some()
+    }
+
+    /// PM-UX-D18: Add character to filter input
+    pub(super) fn filter_input_push(&self, c: char) {
+        if let Some(ref mut input) = *self.filter_input.borrow_mut() {
+            input.push(c);
+        }
+    }
+
+    /// PM-UX-D18: Remove character from filter input
+    pub(super) fn filter_input_pop(&self) {
+        if let Some(ref mut input) = *self.filter_input.borrow_mut() {
+            input.pop();
+        }
+    }
+
+    /// PM-UX-D18: Apply filter input (Enter pressed)
+    pub(super) fn apply_filter_input(&self) {
+        if let Some(input) = self.filter_input.borrow_mut().take() {
+            if input.is_empty() {
+                self.clear_filter();
+            } else {
+                self.set_filter(input);
+            }
+        }
+    }
+
+    /// PM-UX-D18: Cancel filter input (Esc pressed)
+    pub(super) fn cancel_filter_input(&self) {
+        *self.filter_input.borrow_mut() = None;
+    }
+
+    /// PM-UX-D18: Get current filter input text
+    pub(super) fn filter_input_text(&self) -> String {
+        self.filter_input.borrow().clone().unwrap_or_default()
+    }
+
+    /// PM-004 Batch C: Check if a node matches the current filter
+    fn node_matches_filter(&self, idx: usize, filter: &str) -> bool {
+        let node = &self.nodes[idx];
+        node.id.to_lowercase().contains(filter) || node.title.to_lowercase().contains(filter)
+    }
+
+    /// PM-004 Batch C: Check if node or any descendant matches filter
+    fn has_matching_descendant(&self, idx: usize, filter: &str) -> bool {
+        // Base case: node itself matches
+        if self.node_matches_filter(idx, filter) {
+            return true;
+        }
+
+        // Recursive case: any child matches
+        for &child_idx in &self.nodes[idx].children {
+            if self.has_matching_descendant(child_idx, filter) {
+                return true;
+            }
+        }
+
+        false
     }
 
     pub(super) fn detail_scroll(&self) -> u16 {
@@ -492,6 +773,9 @@ impl PmOverlay {
     }
 
     fn collect_visible(&self, start: usize, exp: &HashSet<usize>, out: &mut Vec<usize>) {
+        // PM-004 Batch C: Check if filter is active
+        let filter = self.filter_text.borrow().clone();
+
         // Collect root nodes (depth 0) and sort them
         let mut roots: Vec<usize> = self
             .nodes
@@ -504,6 +788,12 @@ impl PmOverlay {
 
         // Walk sorted roots
         for &root_idx in &roots {
+            // PM-004 Batch C: Skip roots without matching descendants when filtering
+            if let Some(ref filter_str) = filter {
+                if !self.has_matching_descendant(root_idx, filter_str) {
+                    continue;
+                }
+            }
             self.collect_subtree(root_idx, exp, out);
         }
     }
@@ -697,6 +987,218 @@ impl ChatWidget<'_> {
             render_list(overlay, list_area, buf);
             render_list_footer(overlay, footer_area, buf);
         }
+
+        // PM-UX-D10: Render write confirmation modal if active
+        if let Some(ref confirmation) = self.pm.write_confirmation {
+            render_write_confirmation_modal(confirmation, overlay_area, buf);
+        }
+    }
+
+    /// PM-004 Batch A: Execute a PM action (state transition or run launch)
+    pub(super) fn execute_pm_action_internal(&mut self, action: PmAction) {
+        use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+        use codex_core::pm::bot::BotKind;
+        use ratatui::text::Line;
+
+        let Some(ref overlay) = self.pm.overlay else {
+            return;
+        };
+
+        let Some(node_id) = overlay.get_selected_node_id() else {
+            self.history_push(PlainHistoryCell::new(
+                vec![Line::from("No work item selected")],
+                HistoryCellType::Error,
+            ));
+            return;
+        };
+
+        // Validate
+        if !overlay.can_execute_action(action) {
+            self.history_push(PlainHistoryCell::new(
+                vec![Line::from(format!(
+                    "Cannot {}: validation failed or service unavailable",
+                    action.name()
+                ))],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+
+        // Execute based on action type
+        match action {
+            PmAction::Promote | PmAction::Hold | PmAction::Complete => {
+                self.execute_state_transition(action, &node_id);
+            }
+            PmAction::RunResearch => {
+                self.execute_pm_run(&node_id, BotKind::Research);
+            }
+            PmAction::RunReview => {
+                self.execute_pm_run(&node_id, BotKind::Review);
+            }
+        }
+    }
+
+    fn execute_state_transition(&mut self, action: PmAction, node_id: &str) {
+        use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+        use ratatui::text::Line;
+
+        // Stub RPC for now (protocol doesn't support state transitions yet)
+        let method = match action {
+            PmAction::Promote => "state.promote",
+            PmAction::Hold => "state.hold",
+            PmAction::Complete => "state.complete",
+            _ => unreachable!(),
+        };
+
+        // Log to chat history (stub implementation)
+        self.history_push(PlainHistoryCell::new(
+            vec![Line::from(format!(
+                "State transition '{}' requested for {} (stub - not yet implemented in pm-service)",
+                method, node_id
+            ))],
+            HistoryCellType::Notice,
+        ));
+    }
+
+    fn execute_pm_run(&mut self, node_id: &str, kind: codex_core::pm::bot::BotKind) {
+        // PM-UX-D10: Check write mode and show confirmation if enabled
+        let config = self
+            .pm
+            .overlay
+            .as_ref()
+            .map(|o| o.run_config())
+            .unwrap_or_default();
+
+        if config.write_mode {
+            // Show confirmation modal
+            self.pm.write_confirmation = Some(PmWriteConfirmation {
+                node_id: node_id.to_string(),
+                kind,
+            });
+            self.request_redraw();
+            return;
+        }
+
+        // Execute immediately if write mode is OFF
+        self.execute_pm_run_confirmed(node_id, kind);
+    }
+
+    pub(super) fn execute_pm_run_confirmed(
+        &mut self,
+        node_id: &str,
+        kind: codex_core::pm::bot::BotKind,
+    ) {
+        use super::spec_kit::commands::pm::send_rpc;
+        use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+        use ratatui::text::Line;
+
+        // PM-004 Batch B: Use run config
+        let config = self
+            .pm
+            .overlay
+            .as_ref()
+            .map(|o| o.run_config())
+            .unwrap_or_default();
+        let write_mode_str = if config.write_mode {
+            "worktree"
+        } else {
+            "none"
+        };
+
+        let params = serde_json::json!({
+            "workspace_path": self.config.cwd.to_string_lossy(),
+            "work_item_id": node_id,
+            "kind": kind,
+            "capture_mode": "prompts_only",
+            "write_mode": write_mode_str,
+        });
+
+        match send_rpc("bot.run", params) {
+            Ok(_) => {
+                self.history_push(PlainHistoryCell::new(
+                    vec![Line::from(format!(
+                        "Started {:?} run for {}",
+                        kind, node_id
+                    ))],
+                    HistoryCellType::Notice,
+                ));
+            }
+            Err(e) => {
+                self.history_push(PlainHistoryCell::new(
+                    vec![Line::from(format!("Failed to start run: {}", e))],
+                    HistoryCellType::Error,
+                ));
+            }
+        }
+    }
+
+    /// PM-004 Batch B: Set PM preset (helper for keyboard handlers)
+    pub(super) fn set_pm_preset(&mut self, preset: Preset) {
+        if let Some(ref overlay) = self.pm.overlay {
+            let mut config = overlay.run_config();
+            config.preset = preset;
+            overlay.run_config.set(config);
+            self.request_redraw();
+        }
+    }
+
+    /// PM-UX-D22: Cancel active run
+    pub(super) fn execute_pm_cancel(&mut self) {
+        use super::spec_kit::commands::pm::send_rpc;
+        use crate::history_cell::{HistoryCellType, PlainHistoryCell};
+        use ratatui::text::Line;
+
+        let Some(ref overlay) = self.pm.overlay else {
+            return;
+        };
+
+        // Check degraded mode
+        if overlay.degraded {
+            self.history_push(PlainHistoryCell::new(
+                vec![Line::from("Cannot cancel run - PM service unavailable")],
+                HistoryCellType::Error,
+            ));
+            return;
+        }
+
+        // Get node ID and run ID
+        let Some(node_id) = overlay.get_selected_node_id() else {
+            self.history_push(PlainHistoryCell::new(
+                vec![Line::from("No work item selected")],
+                HistoryCellType::Error,
+            ));
+            return;
+        };
+
+        let Some(run_id) = overlay.get_active_run_id() else {
+            self.history_push(PlainHistoryCell::new(
+                vec![Line::from("No active run to cancel")],
+                HistoryCellType::Error,
+            ));
+            return;
+        };
+
+        // Send cancel RPC
+        let params = serde_json::json!({
+            "workspace_path": self.config.cwd.to_string_lossy(),
+            "work_item_id": node_id,
+            "run_id": run_id,
+        });
+
+        match send_rpc("bot.cancel", params) {
+            Ok(_) => {
+                self.history_push(PlainHistoryCell::new(
+                    vec![Line::from(format!("Cancelled run {}", run_id))],
+                    HistoryCellType::Notice,
+                ));
+            }
+            Err(e) => {
+                self.history_push(PlainHistoryCell::new(
+                    vec![Line::from(format!("Failed to cancel run: {}", e))],
+                    HistoryCellType::Error,
+                ));
+            }
+        }
     }
 }
 
@@ -705,7 +1207,8 @@ impl ChatWidget<'_> {
 // ---------------------------------------------------------------------------
 
 /// Build all detail-view lines for `node`.  The caller handles scrolling.
-fn detail_content_lines(node: &TreeNode, width: usize) -> Vec<RLine<'static>> {
+/// PM-004 Batch A: added overlay parameter for degraded mode check
+fn detail_content_lines(node: &TreeNode, overlay: &PmOverlay, width: usize) -> Vec<RLine<'static>> {
     let dim = Style::default().fg(colors::text_dim());
     let bright = Style::default().fg(colors::text());
     let label_style = Style::default().fg(colors::info());
@@ -757,20 +1260,29 @@ fn detail_content_lines(node: &TreeNode, width: usize) -> Vec<RLine<'static>> {
     }
     lines.push(RLine::from(Span::styled("", dim)));
 
-    // ── State Controls (disabled) ─────────────────────────────
+    // ── State Controls ────────────────────────────────────────
     lines.push(RLine::from(Span::styled(
         format!("\u{2500}\u{2500} State Controls {sep}"),
         dim,
     )));
+    // PM-004 Batch A: Show enabled/disabled based on degraded mode
+    let accent = Style::default().fg(colors::function());
+    let (button_style, status_text) = if overlay.degraded {
+        (dim, "  (disabled \u{2014} PM service unavailable)")
+    } else {
+        (accent, "")
+    };
     lines.push(RLine::from(vec![
-        Span::styled("  [F5] Promote   ", dim),
-        Span::styled("[F6] Hold   ", dim),
-        Span::styled("[F7] Complete", dim),
+        Span::styled("  [F5] Promote   ", button_style),
+        Span::styled("[F6] Hold   ", button_style),
+        Span::styled("[F7] Complete", button_style),
     ]));
-    lines.push(RLine::from(Span::styled(
-        "  (disabled \u{2014} read-only view)",
-        dim,
-    )));
+    if !status_text.is_empty() {
+        lines.push(RLine::from(Span::styled(status_text, dim)));
+    } else {
+        // Keep same line count as before for test stability
+        lines.push(RLine::from(Span::styled("", dim)));
+    }
     lines.push(RLine::from(Span::styled("", dim)));
 
     // ── Run History ───────────────────────────────────────────
@@ -903,7 +1415,7 @@ fn render_detail(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     let state_text = if node.state.is_empty() {
         "(container)".to_string()
     } else {
-        node.state.clone()
+        state_with_prefix(&node.state)
     };
     let updated_label = format!("  Updated: {}  ", short_date(&node.updated_at));
     let run_label = if node.latest_run.is_empty() {
@@ -939,13 +1451,13 @@ fn render_detail(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
         overlay.detail_max_scroll.set(0);
         // Still render config if space
         if remaining >= config_height {
-            render_pinned_config(area.x, area.y + fixed_top_height, area.width, buf);
+            render_pinned_config(overlay, area.x, area.y + fixed_top_height, area.width, buf);
         }
         return;
     }
 
     // --- Scrollable middle ------------------------------------------------
-    let content_lines = detail_content_lines(node, width);
+    let content_lines = detail_content_lines(node, overlay, width);
     let total = content_lines.len();
 
     overlay.detail_visible_rows.set(scroll_area_height);
@@ -987,42 +1499,190 @@ fn render_detail(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
         &RLine::from(Span::styled(sep, Style::default().fg(colors::border()))),
         area.width,
     );
-    render_pinned_config(area.x, config_y + 1, area.width, buf);
+    render_pinned_config(overlay, area.x, config_y + 1, area.width, buf);
 }
 
-fn render_pinned_config(x: u16, y: u16, width: u16, buf: &mut Buffer) {
+/// PM-004 Batch B: Render interactive run config footer
+fn render_pinned_config(overlay: &PmOverlay, x: u16, y: u16, width: u16, buf: &mut Buffer) {
     let dim = Style::default().fg(colors::text_dim());
     let label_style = Style::default().fg(colors::info());
+    let accent = Style::default().fg(colors::function());
+    let accent_bold = Style::default()
+        .fg(colors::function())
+        .add_modifier(ratatui::style::Modifier::BOLD);
 
-    // Line 1: Presets
+    let config = overlay.run_config();
+
+    // Line 1: Presets with current selection highlighted
     let presets = RLine::from(vec![
         Span::styled("  Preset: ", label_style),
-        Span::styled("quick  ", dim),
-        Span::styled("[standard]  ", Style::default().fg(colors::text())),
-        Span::styled("deep  ", dim),
-        Span::styled("exhaustive", dim),
-        Span::styled("  (read-only)", dim),
+        if matches!(config.preset, Preset::Quick) {
+            Span::styled("[1:quick] ", accent_bold)
+        } else {
+            Span::styled("1:quick ", dim)
+        },
+        if matches!(config.preset, Preset::Standard) {
+            Span::styled("[2:standard] ", accent_bold)
+        } else {
+            Span::styled("2:standard ", dim)
+        },
+        if matches!(config.preset, Preset::Deep) {
+            Span::styled("[3:deep] ", accent_bold)
+        } else {
+            Span::styled("3:deep ", dim)
+        },
+        if matches!(config.preset, Preset::Exhaustive) {
+            Span::styled("4:exhaustive", accent_bold)
+        } else {
+            Span::styled("4:exhaustive", dim)
+        },
     ]);
     buf.set_line(x, y, &presets, width);
 
-    // Line 2: Scopes
+    // Line 2: Scopes with checkboxes
+    let scope_style = |enabled| if enabled { accent } else { dim };
+    let checkbox = |enabled| if enabled { "[x]" } else { "[ ]" };
     let scopes = RLine::from(vec![
         Span::styled("  Scopes: ", label_style),
         Span::styled(
-            "[x] correctness  [x] security  [x] performance  [x] style  [x] architecture",
-            dim,
+            checkbox(config.scopes.has(ScopeSet::CORRECTNESS)),
+            scope_style(config.scopes.has(ScopeSet::CORRECTNESS)),
         ),
+        Span::raw(" c:correctness  "),
+        Span::styled(
+            checkbox(config.scopes.has(ScopeSet::SECURITY)),
+            scope_style(config.scopes.has(ScopeSet::SECURITY)),
+        ),
+        Span::raw(" s:security  "),
+        Span::styled(
+            checkbox(config.scopes.has(ScopeSet::PERFORMANCE)),
+            scope_style(config.scopes.has(ScopeSet::PERFORMANCE)),
+        ),
+        Span::raw(" p:performance  "),
+        Span::styled(
+            checkbox(config.scopes.has(ScopeSet::STYLE)),
+            scope_style(config.scopes.has(ScopeSet::STYLE)),
+        ),
+        Span::raw(" t:style  "),
+        Span::styled(
+            checkbox(config.scopes.has(ScopeSet::ARCHITECTURE)),
+            scope_style(config.scopes.has(ScopeSet::ARCHITECTURE)),
+        ),
+        Span::raw(" a:architecture"),
     ]);
     buf.set_line(x, y + 1, &scopes, width);
 
-    // Line 3: Actions (disabled)
+    // Line 3: Write mode + Actions
+    let warning_style = Style::default()
+        .fg(colors::warning())
+        .add_modifier(ratatui::style::Modifier::BOLD);
     let actions = RLine::from(vec![
-        Span::styled("  Actions: ", label_style),
-        Span::styled("[F8] Run Research  ", dim),
-        Span::styled("[F9] Run Review  ", dim),
-        Span::styled("(disabled)", dim),
+        Span::styled("  Write: ", label_style),
+        if config.write_mode {
+            Span::styled("[w:ON] ", warning_style)
+        } else {
+            Span::styled("w:off ", dim)
+        },
+        if config.write_mode {
+            Span::styled(
+                "(will modify files) ",
+                Style::default().fg(colors::warning()),
+            )
+        } else {
+            Span::raw("")
+        },
+        Span::styled(
+            "  [F8] Run Research  ",
+            if overlay.degraded { dim } else { accent },
+        ),
+        Span::styled(
+            "[F9] Run Review",
+            if overlay.degraded { dim } else { accent },
+        ),
+        if overlay.degraded {
+            Span::styled("  (disabled)", dim)
+        } else {
+            Span::raw("")
+        },
     ]);
     buf.set_line(x, y + 2, &actions, width);
+}
+
+// ---------------------------------------------------------------------------
+// PM-UX-D10: Write confirmation modal
+// ---------------------------------------------------------------------------
+
+/// Render the write-mode confirmation modal overlay
+fn render_write_confirmation_modal(
+    _confirmation: &PmWriteConfirmation,
+    area: Rect,
+    buf: &mut Buffer,
+) {
+    let warning = Style::default()
+        .fg(colors::warning())
+        .add_modifier(ratatui::style::Modifier::BOLD);
+    let dim = Style::default().fg(colors::text_dim());
+    let accent = Style::default().fg(colors::function());
+
+    // Center modal (40 cols x 7 rows)
+    let modal_width = 50u16;
+    let modal_height = 7u16;
+    let modal_x = area.x + (area.width.saturating_sub(modal_width)) / 2;
+    let modal_y = area.y + (area.height.saturating_sub(modal_height)) / 2;
+
+    let modal_area = Rect {
+        x: modal_x,
+        y: modal_y,
+        width: modal_width,
+        height: modal_height,
+    };
+
+    // Clear modal area
+    Clear.render(modal_area, buf);
+
+    // Modal border
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(colors::warning()))
+        .style(Style::default().bg(colors::background()));
+    block.render(modal_area, buf);
+
+    let inner = modal_area.inner(Margin::new(2, 1));
+
+    // Line 1: Warning title
+    buf.set_line(
+        inner.x,
+        inner.y,
+        &RLine::from(Span::styled("⚠ Write Mode Enabled", warning)),
+        inner.width,
+    );
+
+    // Line 2: Empty
+    // Line 3: Message
+    buf.set_line(
+        inner.x,
+        inner.y + 2,
+        &RLine::from(Span::styled(
+            "This run will MODIFY FILES in the worktree.",
+            dim,
+        )),
+        inner.width,
+    );
+
+    // Line 4: Prompt
+    buf.set_line(
+        inner.x,
+        inner.y + 4,
+        &RLine::from(vec![
+            Span::styled("Continue? ", dim),
+            Span::styled("[Y]", accent),
+            Span::styled("es / ", dim),
+            Span::styled("[N]", accent),
+            Span::styled("o / ", dim),
+            Span::styled("[Esc]", accent),
+        ]),
+        inner.width,
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1321,6 +1981,19 @@ fn render_list_footer(overlay: &PmOverlay, area: Rect, buf: &mut Buffer) {
     let bright = Style::default().fg(colors::text());
     let accent = Style::default().fg(colors::function());
 
+    // PM-UX-D18: Show filter input prompt if in input mode
+    if overlay.is_filter_input_mode() {
+        let input_text = overlay.filter_input_text();
+        let footer = RLine::from(vec![
+            Span::styled(" Filter: ", accent),
+            Span::styled(&input_text, bright),
+            Span::styled("_", bright),
+            Span::styled(" [Enter=Apply, Esc=Cancel]", dim),
+        ]);
+        buf.set_line(area.x, area.y, &footer, area.width);
+        return;
+    }
+
     let visible_count = overlay.visible_count();
 
     // Empty state: always just "No items"
@@ -1508,7 +2181,10 @@ fn render_row(
             Span::styled(" ", base),
             Span::styled(pad_or_trunc(&node.title, title_w), base),
             Span::styled(" ", base),
-            Span::styled(pad_or_trunc(&node.state, state_w), state_style),
+            Span::styled(
+                pad_or_trunc(&state_with_prefix(&node.state), state_w),
+                state_style,
+            ),
             Span::styled(" ", base),
             Span::styled(pad_or_trunc(&human_ago(&node.updated_at), updated_w), base),
             Span::styled(" ", base),
@@ -1637,6 +2313,26 @@ fn render_row(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// PM-004 Batch C: Add text prefix for high-contrast mode (non-color cue)
+fn state_with_prefix(state: &str) -> String {
+    if !crate::theme::is_high_contrast() {
+        return state.to_string();
+    }
+
+    // Add text prefixes for accessibility
+    let prefix = match state {
+        "InProgress" => "[IP] ",
+        "NeedsReview" | "NeedsResearch" => "[NR] ",
+        "Completed" | "completed" => "[✓] ",
+        "OnHold" => "[H] ",
+        "Blocked" => "[!] ",
+        "Failed" | "failed" => "[✗] ",
+        _ => "",
+    };
+
+    format!("{}{}", prefix, state)
+}
 
 fn state_color(state: &str) -> ratatui::style::Color {
     // Holding states (e.g. "NeedsReview (-> InProgress)") get amber
@@ -2110,8 +2806,9 @@ mod tests {
 
     #[test]
     fn test_detail_content_needs_attention_conflict() {
+        let overlay = PmOverlay::new(false, None);
         let node = &demo_tree()[4]; // TASK-002
-        let lines = detail_content_lines(node, 100);
+        let lines = detail_content_lines(node, &overlay, 100);
         let text: String = lines
             .iter()
             .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
@@ -2223,8 +2920,9 @@ mod tests {
 
     #[test]
     fn test_detail_content_running_status() {
+        let overlay = PmOverlay::new(false, None);
         let node = &demo_tree()[10]; // TASK-005, running
-        let lines = detail_content_lines(node, 100);
+        let lines = detail_content_lines(node, &overlay, 100);
         let text: String = lines
             .iter()
             .flat_map(|l| l.spans.iter().map(|s| s.content.to_string()))
