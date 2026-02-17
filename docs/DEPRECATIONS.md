@@ -99,6 +99,18 @@ Single canonical list of deprecated/superseded documentation and their replaceme
 | `docs/SYNC-029-tui2-parity/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Planned: SPEC-DOGFOOD-002 / SPEC-PK-001 / SPEC-PM-001) | SYNC feature removed; archived in `tree-pack-20260205-legacy-prds-sync.zip` per hard rule. | 2026-02-05 |
 | `docs/SYNC-030-requirements-policy/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Planned: SPEC-DOGFOOD-002 / SPEC-PK-001 / SPEC-PM-001) | SYNC feature removed; archived in `tree-pack-20260205-legacy-prds-sync.zip` per hard rule. | 2026-02-05 |
 | `docs/SYNC-031-otel-minimal/PRD.md` | Deprecated | `codex-rs/SPEC.md` (Planned: SPEC-DOGFOOD-002 / SPEC-PK-001 / SPEC-PM-001) | SYNC feature removed; archived in `tree-pack-20260205-legacy-prds-sync.zip` per hard rule. | 2026-02-05 |
+| `docs/PROGRAM.md` (v1.0.0-v1.0.5 memvid-first plan) | Superseded | `docs/PROGRAM.md` v2.0.0 + `codex-rs/SPEC.md` V7 | Prior active plan conflicted with VISION v1.1.0 and ADR-005..ADR-012 30/60/90 contract. | 2026-02-17 |
+| `codex-rs/SPEC.md` (V6 Docs Contract) | Superseded | `codex-rs/SPEC.md` V7 Contract Realignment | V6 invariants tracked older memvid migration program and were no longer governing. | 2026-02-17 |
+| `docs/SPEC-KIT-971-memvid-capsule-foundation/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `docs/SPEC-PM-005-gatekeeper-class2-boundary/spec.md` | Historical Q1 memvid stream no longer in active roadmap after epoch contract shift. | 2026-02-17 |
+| `docs/SPEC-KIT-972-hybrid-retrieval-eval/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `docs/SPEC-PM-006-packet-persistence/spec.md` | Historical Q1 memvid stream no longer in active roadmap after epoch contract shift. | 2026-02-17 |
+| `docs/SPEC-KIT-973-time-travel-ui/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `docs/SPEC-PM-007-recap-enforcement/spec.md` | Historical Q1 memvid stream no longer in active roadmap after epoch contract shift. | 2026-02-17 |
+| `docs/SPEC-KIT-974-capsule-export-import-encryption/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `docs/SPEC-PM-008-unattended-stacking/spec.md` | Historical Q1 memvid stream no longer in active roadmap after epoch contract shift. | 2026-02-17 |
+| `docs/SPEC-KIT-975-replayable-audits/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `docs/SPEC-PM-009-proposal-ranking-top3/spec.md` | Historical Q1 memvid stream no longer in active roadmap after epoch contract shift. | 2026-02-17 |
+| `docs/SPEC-KIT-976-logic-mesh-graph/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `docs/SPEC-PM-010-reverse-sync/spec.md` | Historical Q1 memvid stream no longer in active roadmap after epoch contract shift. | 2026-02-17 |
+| `docs/SPEC-KIT-977-model-policy-v2/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `docs/SPEC-PM-011-hysteresis-engine/spec.md` | Historical Q1 memvid stream no longer in active roadmap after epoch contract shift. | 2026-02-17 |
+| `docs/SPEC-KIT-978-local-reflex-sglang/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `docs/SPEC-PM-012-self-correction/spec.md` | Historical Q1 memvid stream no longer in active roadmap after epoch contract shift. | 2026-02-17 |
+| `docs/SPEC-KIT-979-local-memory-sunset/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `docs/SPEC-PM-013-template-feedback/spec.md` | Historical Q1 memvid stream no longer in active roadmap after epoch contract shift. | 2026-02-17 |
+| `docs/SPEC-KIT-980-multimodal-ingestion/spec.md` | Superseded | `docs/PROGRAM.md` v2.0.0 + `codex-rs/SPEC.md` V7 | Historical Q1 memvid stretch item; not part of current 30/60/90 contract. | 2026-02-17 |
 
 ## Planned: Capsule-backed tracking
 

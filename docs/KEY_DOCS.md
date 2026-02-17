@@ -12,7 +12,7 @@ This repo has a small set of canonical documents. If you’re unsure what to rea
 | [`docs/CONTRIBUTING.md`](CONTRIBUTING.md)                   | Contributing       | Development workflow, fork management, rebase strategy             |
 | [`docs/STAGE0-REFERENCE.md`](STAGE0-REFERENCE.md)           | Reference          | Stage 0 engine: integration, DCC, scoring, configuration           |
 | [`docs/DECISIONS.md`](DECISIONS.md)                         | Decisions          | Locked decisions register (D1-D134)                                |
-| [`docs/PROGRAM.md`](PROGRAM.md)                             | Program            | Active specs, dependency DAG, sequencing gates (2026-Q1)           |
+| [`docs/PROGRAM.md`](PROGRAM.md)                             | Program            | Active 30/60/90 roadmap, dependency DAG, phase gates (Epoch 1)     |
 | [`docs/SPEC-KIT.md`](SPEC-KIT.md)                           | Spec-Kit Reference | Commands, execution model, quality gates, multi-agent architecture |
 | [`memory/constitution.md`](../memory/constitution.md)       | Charter            | Guardrails, principles, governance rules (ACE-compatible bullets)  |
 | [`docs/VISION.md`](VISION.md)                               | Vision             | Product identity — Planner (terminal TUI) for Spec‑Kit workflows   |

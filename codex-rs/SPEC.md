@@ -1,7 +1,7 @@
 # SPEC.md - Codex-RS / Spec-Kit Task Tracking
 
-**Version:** V6 Docs Contract
-**Last Updated:** 2026-02-07
+**Version:** V7 Contract Realignment  
+**Last Updated:** 2026-02-17
 
 ***
 
@@ -9,90 +9,49 @@
 
 When resolving conflicts or ambiguity, documents take precedence in this order:
 
-1. **SPEC.md** (this file) - Task tracking, invariants, current state
-2. **docs/PROGRAM.md** - Active program DAG and phase gates
-3. **docs/DECISIONS.md** - Locked decisions D1-D134
-4. **HANDOFF.md** - Session continuation context
-5. **Individual SPEC-* directories*\* - Feature specifications
+1. **`codex-rs/SPEC.md`** (this file) - canonical task tracking and active execution status
+2. **`docs/PROGRAM.md`** - active 30/60/90 program DAG and phase gates
+3. **`docs/VISION.md` + `docs/adr/ADR-005..ADR-012`** - governing product contract
+4. **`memory/constitution.md`** - guardrails and operating principles
+5. **Individual `docs/SPEC-*` packets** - implementation details for each deliverable
 
 ***
 
-## Invariants
+## Contract Invariants
 
-These invariants MUST NOT be violated:
+These invariants are active for the current epoch and must not be violated.
 
-### Architecture Boundary
+### Product Contract
 
-* **Stage0 core has no Memvid dependency** - All Memvid concepts isolated in adapter
-* **LocalMemoryClient trait is the interface** - MemvidMemoryAdapter is the implementation
-* **Adapter boundary enforced** - Stage0 -> LocalMemoryClient -> MemvidMemoryAdapter -> CapsuleHandle
+- Packet contract is authoritative: `.speckit/packet.yaml` is execution source-of-truth.
+- Sacred anchors (`intent_summary`, `success_criteria`) are immutable except via explicit epoch amendment.
+- Recap is mandatory before merge/execution shifts: intent, plan, gates, rollback.
 
-### System of Record
+### Threading + Merge Safety
 
-* **Memvid capsule is the system-of-record** - local-memory is fallback only (until SPEC-KIT-979 parity gates pass)
-* **Stage0 pipeline honors `memory_backend`** - Do not hard-require local-memory when memvid selected
-* **Fallback is conditional** - Only activate if enabled AND memvid fails AND local-memory healthy
+- One primary merge train per project.
+- Research/review threads never merge directly.
+- Unattended mode performs no merges.
 
-### URI and Storage
+### Change Governance
 
-* **Logical mv2:// URIs are immutable** - Once returned, never change
-* **Physical IDs are never treated as stable keys** - Only logical URIs are stable
-* **URI stability** - Graph/event references use logical URIs only (never raw frame IDs)
-* **Single-writer capsule model** - Cross-process lock + writer queue enforced
+- Class 2 changes may be adopted only at milestone boundaries.
+- Class E bypass is allowed only with emergency trigger + snapshot + rollback + immediate notification.
+- No silent drift from packet contract.
 
-### Checkpoints and Branches
+### Autonomy Quality
 
-* **Stage boundary commits create checkpoints** - Automatic on stage transitions
-* **Manual commits also create checkpoints** - User-triggered via CLI/TUI
-* **Run isolation via branches** - Every run writes to `run/<RUN_ID>` branch
-* **Merge at Unlock** - Merges run branch into main using defined merge semantics
+- Proposal inbox is ranked and bounded (top-3 default; top-10 discoverable).
+- Hysteresis blocks plan churn unless dominance margin and confidence gates are met.
+- Self-correction retries build failures before human escalation.
+- Template feedback promotions require evidence and explicit approval.
 
-### Merge Policy
+### Constitution Guardrails
 
-* **Merge modes are `curated` or `full` only** - Never squash, ff, or rebase
-* **Curated**: Selective artifact inclusion with review
-* **Full**: Complete artifact preservation
-
-### Hybrid Retrieval
-
-* **Hybrid = lex + vec** - Required for retrieval (not optional)
-* **Score fusion via RRF or linear combination**
-
-### Reflex Mode
-
-* **Reflex is a routing mode** - `Implementer(mode=reflex)` not a new Stage0 role
-* **No new role name** - Routing chooses backend based on policy + health + bakeoff thresholds
-* **Stage context** - Reflex only applies to Implement stage
-
-### Replay Determinism
-
-* **Offline replay is exact for retrieval + events** - Timeline deterministic
-* **LLM I/O depends on capture mode** - Controlled by PolicySnapshot settings
-* **Capture modes** - `none | prompts_only | full_io`
-
-### Explainability Artifacts (D127-D134)
-
-* **ACE Frames + Maieutic Specs are canonical** - Consensus artifacts deprecated (D127)
-* **Maieutic step is mandatory pre-execution** - Fast path allowed, no skip (D130)
-* **Capture mode controls persistence** - `capture=none` runs in-memory only (D131)
-* **Ship requires persisted artifacts** - `capture=none` cannot ship (D132)
-
-### Multi-Surface Parity (D113/D133)
-
-* **Tier 1 commands have full parity across TUI/CLI/headless** - Artifacts, gating semantics, and exit codes must match
-* **Visualization is tiered** - UI/visualization may be TUI-first, but CLI must provide automation-critical coverage
-
-### Headless Behavior (D133)
-
-* **Headless requires maieutic input** - `--maieutic <path>` or `--maieutic-answers <json>`
-* **Headless never prompts** - Hard assertion; no interactive codepath in headless
-* **Exit codes for blocking states** - NEEDS\_INPUT, NEEDS\_APPROVAL, BLOCKED\_SHIP
-
-### Schema Versioning (D134)
-
-* **ACE Frame schema is generated** - Via schemars from Rust structs
-* **Schema version embedded** - Every ACE Frame includes `schema_version` field
-* **Breaking changes = new version** - Never mutate released schema
+- `tui` is primary; `tui2` is scaffold/reference only.
+- Avoid second-system effects and parallel rewrites.
+- Keep docs, tasks, and validation evidence synchronized.
+- Maintain one active `In Progress` row per thread.
 
 ***
 
@@ -101,136 +60,80 @@ These invariants MUST NOT be violated:
 ### In Progress
 
 | Spec | Status | Owner | Next Action |
-| ---- | ------ | ----- | ----------- |
-| -    | -      | -     | -           |
+| --- | --- | --- | --- |
+| SPEC-PM-005 | In Progress | Architecture Lead | Implement shared gate classifier + boundary block tests |
 
 ### Planned
 
-| Spec             | Description                                                                                                                                                                                                                                      |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SPEC-DOGFOOD-002 | Canonical gold run: prove `/speckit.auto` happy path + complete evidence chain on Linux; add a scheduled CI run once stable.                                                                                                                     |
-| SPEC-PK-001      | Product knowledge (codex-product) dogfood + measurement: validate determinism (snapshot/evidence pack) and quantify Tier2 reduction/curation quality.                                                                                            |
-| SPEC-PM-001      | Project management deep dive: capsule-backed feature + task tracking (SoR) with filesystem projections (including `SPEC.md`), maieutic PRD sessions, and status surfaces (CLI/TUI/headless). PRD: `docs/SPEC-PM-001-project-management/PRD.md`.  |
-| SPEC-PM-002      | Bot runner interface contract: commands + headless exit codes + artifacts for manual `NeedsResearch` / `NeedsReview` runs. PRD: `docs/SPEC-PM-002-bot-runner/PRD.md`. Spec: `docs/SPEC-PM-002-bot-runner/spec.md`.                               |
-| SPEC-PM-003      | Bot system design: runner/service/tooling implementation for `NeedsResearch` / `NeedsReview` automation (queueing, permissions, worktrees, projections). PRD: `docs/SPEC-PM-003-bot-system/PRD.md`. Spec: `docs/SPEC-PM-003-bot-system/spec.md`. |
-| SPEC-PM-004      | TUI PM UX/UI: interaction design for list view, detail view, run config, navigation, degraded mode, status indicators. Spec: `docs/SPEC-PM-004-tui-ux/spec.md`.                                                                                  |
-| DOC-DRIFT-001    | Docs drift control: maintain `docs/DEPRECATIONS.md`, deprecate/update legacy PRDs/roadmaps that conflict with current product vision, and keep doc maps pointing at canonical trackers.                                                          |
+| Spec | Description |
+| --- | --- |
+| SPEC-PM-006 | Packet persistence: durable `.speckit/packet.yaml` + sacred anchor protections + restart restore |
+| SPEC-PM-007 | Recap enforcement: hard "Explain before Act" gate across TUI/CLI/headless |
+| SPEC-PM-008 | Unattended stacking + Morning Brief with strict no-merge semantics |
+| SPEC-PM-009 | Proposal ranking and pruning (top-3 default, dedupe, archive policy) |
+| SPEC-PM-010 | Reverse sync: code/packet drift detection with explicit patch proposals |
+| SPEC-PM-011 | Hysteresis engine: stability bias for plan replacement |
+| SPEC-PM-012 | Self-correction: bounded build/test retry before escalation |
+| SPEC-PM-013 | Template feedback: promote successful patterns into shared templates |
+
+### Deferred / Historical (Not Active)
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| Memvid-first 2026-Q1 program stream | Historical | Superseded by `docs/PROGRAM.md` v2.0.0 active contract |
+| SPEC-PM-001 | Deferred | PRD/design material exists; execution split into PM-005..PM-013 backlog |
+| SPEC-PM-002 | Deferred | Bot runner contract remains reference input; not current 30/60/90 critical path |
+| SPEC-PM-003 | Deferred | Bot system design remains reference input; not current 30/60/90 critical path |
+| SPEC-PM-004 | Deferred | TUI PM UX design remains reference input; not current 30/60/90 critical path |
 
 ### Completed (Recent)
 
-| Spec                | Completion Date | Key Deliverables                                                                                       |
-| ------------------- | --------------- | ------------------------------------------------------------------------------------------------------ |
-| MAINT-930           | 2026-02-01      | D133 enforcement: prompt guard, needs-approval gates (LOCK E2), TUI/headless artifact parity (LOCK E3) |
-| SPEC-KIT-983        | 2026-02-01      | Stage→agent defaults modal + root-only persistence with user-visible errors                            |
-| MAINT-17            | 2026-02-01      | Fix codex-cli hermetic speckit tests to set \[speckit.stage\_agents] under GPT defaults                |
-| MAINT-16            | 2026-01-31      | Headless ACE init + runtime-safe fetch + git repo-root parity (D113/D133)                              |
-| SPEC-KIT-982        | 2026-01-31      | ACE + maieutic injection into per-agent prompts via unified builder (D113/D133 parity)                 |
-| SPEC-KIT-981        | 2026-01-31      | Config-driven stage→agent mapping with GPT-5.2 defaults, TUI/headless parity                           |
-| MAINT-14            | 2026-01-31      | Fix ${ARTIFACTS}/${PREVIOUS\_OUTPUTS} placeholder leakage, NEXT\_FOCUS\_ROADMAP refresh                |
-| SPEC-KIT-905        | 2026-01-30      | CLI stage parity: ID rename, docstring fixes, table-driven test, D113/D133 alignment                   |
-| SPEC-KIT-900        | 2026-01-29      | Headless CLI execution parity, real agent spawning via AGENT\_MANAGER, exit codes (D113/D133)          |
-| SPEC-KIT-980        | 2026-01-28      | PDF/DOCX ingest with feature gates, text extraction, searchable capsule persistence                    |
-| SPEC-KIT-974        | 2026-01-27      | Export/import, encryption, safe export, risk auto-export, GC enhancements                              |
-| SPEC-KIT-979        | 2026-01-21      | Local-memory sunset phases, CLI flags, nightly parity workflow, import CLI, diagnostics                |
-| SPEC-KIT-976        | 2026-01-19      | Logic Mesh graph foundation: Card/Edge schemas, CLI commands, 6 tests passing                          |
-| SPEC-KIT-973        | 2026-01-19      | Time-travel TUI commands (timeline, asof, diff), label lookup, 3 tests passing                         |
-| SPEC-KIT-978        | 2026-01-18      | Circuit breaker types, BreakerState/BreakerStateChangedPayload, EventType integration                  |
-| SPEC-KIT-975        | 2026-01-18      | Replay timeline determinism, offline retrieval exactness, 5 replay tests passing                       |
-| SPEC-KIT-971        | 2026-01-17      | Branch isolation, time-travel URI, checkpoints, merge at unlock, CLI complete                          |
-| SPEC-KIT-977        | 2026-01-17      | PolicySnapshot capture, dual storage, CLI/TUI commands, drift detection                                |
-| SPEC-KIT-978 (core) | 2026-01-16      | JSON schema enforcement, bakeoff CLI, reflex routing decisions                                         |
-| SPEC-KIT-972        | 2026-01-12      | Hybrid retrieval, A/B harness, HybridBackend                                                           |
+| Spec | Completion Date | Key Deliverables |
+| --- | --- | --- |
+| MAINT-930 | 2026-02-01 | Headless gating/parity hardening |
+| SPEC-KIT-983 | 2026-02-01 | Stage-to-agent defaults modal and persistence |
+| SPEC-KIT-982 | 2026-01-31 | ACE + maieutic prompt injection pipeline |
+| SPEC-KIT-981 | 2026-01-31 | Config-driven stage-agent mapping defaults |
 
 ### Blocked
 
-| Spec   | Blocker | Unblocks |
-| ------ | ------- | -------- |
-| (none) | -       | -        |
-
-### Unblocked (Recent)
-
-| Spec         | Resolution                                                     | Date       |
-| ------------ | -------------------------------------------------------------- | ---------- |
-| SPEC-KIT-900 | Implemented via AGENT\_MANAGER + tokio block\_in\_place (D133) | 2026-01-29 |
+| Spec | Blocker | Unblocks |
+| --- | --- | --- |
+| (none) | - | - |
 
 ***
 
-## Gating Chain
+## Program Gates
 
-```
-971 (Capsule) + 977 (PolicySnapshot) + 978 (Reflex)
-                    |
-                    v
-              975 (Event Schema)
-                    |
-        +-----------+-----------+
-        v                       v
-  973 (Time-Travel)      976 (Logic Mesh)
-                    |
-                    v
-              979 (local-memory sunset)
-```
-
-***
-
-## Replay Truth Table
-
-| Scenario                                   | Expected Behavior        | Determinism                 |
-| ------------------------------------------ | ------------------------ | --------------------------- |
-| Same capsule, same query, same branch      | Identical results        | Deterministic               |
-| Same capsule, same query, different branch | Branch-specific results  | Deterministic within branch |
-| Exported capsule, imported elsewhere       | Identical to source      | Deterministic               |
-| Offline replay (no network)                | Uses cached embeddings   | Deterministic if captured   |
-| Cross-version replay                       | Warn if version mismatch | Best-effort                 |
-
-***
-
-## Phase Gates
-
-| Phase | Gate Criteria                                    | Status |
-| ----- | ------------------------------------------------ | ------ |
-| 1->2  | 971 URI contract + checkpoint tests              | PASSED |
-| 2->3  | 972 eval harness operational                     | PASSED |
-| 3->4  | 977 PolicySnapshot stored in capsule             | PASSED |
-| 4->5  | 978 Reflex bakeoff complete + 975 event baseline | PASSED |
-| 5->6  | 973/976 advanced features                        | PASSED |
-
-***
-
-## Policy Source Files
-
-These files are REQUIRED and enforced by doc\_lint:
-
-| File                   | Purpose                                      | Status    |
-| ---------------------- | -------------------------------------------- | --------- |
-| `docs/MODEL-POLICY.md` | Human-readable policy rationale ("why")      | Required  |
-| `model_policy.toml`    | Machine-authoritative policy config ("what") | Required  |
-| `PolicySnapshot.json`  | Compiled artifact stored in capsule          | Generated |
+| Phase | Gate Criteria | Status |
+| --- | --- | --- |
+| Trust Foundation | Packet durability + recap gate + class boundary enforcement active | In Progress |
+| Autonomous Lab | Unattended stacking + ranked proposals + reverse sync operational | Planned |
+| Learning Loop | Hysteresis + self-correction + template feedback operational | Planned |
 
 ***
 
 ## Quick Reference
 
-### Build & Test
+### Validation Commands
 
 ```bash
-~/code/build-fast.sh              # Fast build
-cargo test -p codex-tui --lib         # TUI tests (667 passing)
-cargo test -p codex-stage0 --lib      # Stage0 tests (269 passing)
-python3 scripts/doc_lint.py           # Doc contract lint
-python3 scripts/golden_path_test.py   # E2E validation (10/10)
+cd /home/thetu/code
+python3 scripts/doc_lint.py
+cd codex-rs
+cargo test -p codex-core
+cargo test -p codex-tui --lib
 ```
 
-### Key Paths
+### Canonical Paths
 
-```
-codex-rs/tui/src/memvid_adapter/  # Memvid implementation
-codex-rs/stage0/src/              # Stage0 core (no Memvid dep)
-codex-rs/stage0/src/policy.rs     # PolicySnapshot
-codex-rs/stage0/src/hybrid.rs     # HybridBackend
-docs/SPEC-KIT-*/                  # Feature specifications
+```text
+docs/PROGRAM.md
+docs/VISION.md
+docs/adr/ADR-005-consultant-ux-and-packet.md
+memory/constitution.md
 ```
 
 ***
 
-*Maintained by automated tooling and session handoffs.*
+Maintained as the canonical execution tracker for the active epoch.

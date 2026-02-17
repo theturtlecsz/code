@@ -1,68 +1,63 @@
-# Active Program (v1.0.0)
+# Active Program (v2.0.0)
 
-**Scope**: 2026-Q1 Memvid-First Workbench + Model Policy v2
-**Last Updated**: 2026-01-29
+**Scope**: Epoch 1 - Consultant-First Packet-Driven Autonomy  
+**Last Updated**: 2026-02-17  
 **Status**: ACTIVE
 
 ***
 
-## Table of Contents
+## Program Contract Inputs
 
-* [Scope](#scope)
-* [Active Specs](#active-specs)
-  * [Foundation + Parallel Starts (Days 0-14)](#foundation--parallel-starts-days-0-14)
-  * [Core Substrate (Days 14-30)](#core-substrate-days-14-30)
-  * [Product UX (Days 30-60)](#product-ux-days-30-60)
-  * [Higher-Level Intelligence (Days 45-75)](#higher-level-intelligence-days-45-75)
-  * [Migration + Stretch (Days 60-90)](#migration--stretch-days-60-90)
-* [Dependency DAG](#dependency-dag)
-* [Sequencing + Gates](#sequencing--gates)
-* [Definition of Done](#definition-of-done)
-* [Archive Rule](#archive-rule)
-* [Change History](#change-history)
+- `docs/VISION.md` (Version 1.1.0, Epoch 1)
+- ADR set: `docs/adr/ADR-005-*.md` through `docs/adr/ADR-012-*.md`
+- `memory/constitution.md` guardrails (`tui` primary, no second-system rewrite)
+- `codex-rs/SPEC.md` canonical execution tracker
 
-## Scope
-
-This document pins the **only** work considered "ACTIVE" for the 2026-Q1 program. If implementing something not referenced here (or in `SPEC.md`), stop and reconcile before coding.
+If implementation behavior conflicts with these inputs, treat as migration gap/regression and do not silently rewrite the contract.
 
 ***
 
-## Active Specs
+## 30/60/90 Outcomes (Executable)
 
-### Foundation + Parallel Starts (Days 0-14)
+| Window | Outcome | SPEC Mapping | Status |
+| --- | --- | --- | --- |
+| Days 1-30 | Gatekeeper (Class 2 boundary + Class E bypass) | [SPEC-PM-005](./SPEC-PM-005-gatekeeper-class2-boundary/spec.md) | In Progress |
+| Days 1-30 | Packet persistence (`.speckit/packet.yaml`) | [SPEC-PM-006](./SPEC-PM-006-packet-persistence/spec.md) | Planned |
+| Days 1-30 | Recap enforcement (Explain before Act) | [SPEC-PM-007](./SPEC-PM-007-recap-enforcement/spec.md) | Planned |
+| Days 31-60 | Unattended stacking + Morning Brief | [SPEC-PM-008](./SPEC-PM-008-unattended-stacking/spec.md) | Planned |
+| Days 31-60 | Proposal ranking (Top 3 signal) | [SPEC-PM-009](./SPEC-PM-009-proposal-ranking-top3/spec.md) | Planned |
+| Days 31-60 | Reverse Sync (code intent drift) | [SPEC-PM-010](./SPEC-PM-010-reverse-sync/spec.md) | Planned |
+| Days 61-90 | Hysteresis engine | [SPEC-PM-011](./SPEC-PM-011-hysteresis-engine/spec.md) | Planned |
+| Days 61-90 | Self-correction (retry before escalate) | [SPEC-PM-012](./SPEC-PM-012-self-correction/spec.md) | Planned |
+| Days 61-90 | Template feedback loop | [SPEC-PM-013](./SPEC-PM-013-template-feedback/spec.md) | Planned |
 
-| Spec                                                             | Description                                   | Status    |
-| ---------------------------------------------------------------- | --------------------------------------------- | --------- |
-| [SPEC-KIT-971](./SPEC-KIT-971-memvid-capsule-foundation/spec.md) | Memvid Capsule Foundation                     | Completed |
-| [SPEC-KIT-977](./SPEC-KIT-977-model-policy-v2/spec.md)           | Model Policy v2 (Governance + PolicySnapshot) | Completed |
-| [SPEC-KIT-978](./SPEC-KIT-978-local-reflex-sglang/spec.md)       | Local Reflex (SGLang + Reflex Model Stack)    | Completed |
+***
 
-### Core Substrate (Days 14-30)
+## Active Specs by Phase
 
-| Spec                                                         | Description                                        | Status    |
-| ------------------------------------------------------------ | -------------------------------------------------- | --------- |
-| [SPEC-KIT-972](./SPEC-KIT-972-hybrid-retrieval-eval/spec.md) | Hybrid Retrieval + Evaluation Harness              | Completed |
-| [SPEC-KIT-975](./SPEC-KIT-975-replayable-audits/spec.md)     | Replayable Audits v1 (Event Track + Replay Engine) | Completed |
+### Trust Foundation (Days 1-30)
 
-### Product UX (Days 30-60)
+| Spec | Description | Depends On |
+| --- | --- | --- |
+| [SPEC-PM-006](./SPEC-PM-006-packet-persistence/spec.md) | Durable packet contract + restart restore | - |
+| [SPEC-PM-007](./SPEC-PM-007-recap-enforcement/spec.md) | Hard recap requirement for action shifts | PM-006 |
+| [SPEC-PM-005](./SPEC-PM-005-gatekeeper-class2-boundary/spec.md) | Class 2 boundary gating + Class E override | PM-006, PM-007 |
 
-| Spec                                                                    | Description                              | Status    |
-| ----------------------------------------------------------------------- | ---------------------------------------- | --------- |
-| [SPEC-KIT-973](./SPEC-KIT-973-time-travel-ui/spec.md)                   | Time-Travel UI + Branching               | Completed |
-| [SPEC-KIT-974](./SPEC-KIT-974-capsule-export-import-encryption/spec.md) | Export/Import + Encryption + Safe Export | Completed |
+### Autonomous Lab (Days 31-60)
 
-### Higher-Level Intelligence (Days 45-75)
+| Spec | Description | Depends On |
+| --- | --- | --- |
+| [SPEC-PM-008](./SPEC-PM-008-unattended-stacking/spec.md) | Unattended progress with no merge | PM-005, PM-007 |
+| [SPEC-PM-009](./SPEC-PM-009-proposal-ranking-top3/spec.md) | Ranked, bounded proposal inbox | PM-006 |
+| [SPEC-PM-010](./SPEC-PM-010-reverse-sync/spec.md) | Code/packet drift detection and patch proposals | PM-006, PM-005 |
 
-| Spec                                                    | Description                                              | Status    |
-| ------------------------------------------------------- | -------------------------------------------------------- | --------- |
-| [SPEC-KIT-976](./SPEC-KIT-976-logic-mesh-graph/spec.md) | Logic Mesh / Graph v1 (Cards + Edges + Librarian Rebase) | Completed |
+### Learning Loop (Days 61-90)
 
-### Migration + Stretch (Days 60-90)
-
-| Spec                                                        | Description                                                | Status    |
-| ----------------------------------------------------------- | ---------------------------------------------------------- | --------- |
-| [SPEC-KIT-979](./SPEC-KIT-979-local-memory-sunset/spec.md)  | Local-Memory Sunset (Parity gates → remove daemon)         | Completed |
-| [SPEC-KIT-980](./SPEC-KIT-980-multimodal-ingestion/spec.md) | Multi-Modal Ingestion (PDF/DOCX first; CLIP/Whisper gated) | Completed |
+| Spec | Description | Depends On |
+| --- | --- | --- |
+| [SPEC-PM-011](./SPEC-PM-011-hysteresis-engine/spec.md) | Stability bias in plan replacement | PM-009 |
+| [SPEC-PM-012](./SPEC-PM-012-self-correction/spec.md) | Build/test retries before escalation | PM-005, PM-008 |
+| [SPEC-PM-013](./SPEC-PM-013-template-feedback/spec.md) | Promote successful patterns to templates | PM-010, PM-011, PM-012 |
 
 ***
 
@@ -70,75 +65,58 @@ This document pins the **only** work considered "ACTIVE" for the 2026-Q1 program
 
 ```mermaid
 graph TD
-  S971[971 Capsule + URIs + checkpoints] --> S972[972 Hybrid retrieval + eval]
-  S971 --> S975[975 Event track + replay]
-  S971 --> S973[973 Time-travel + branching]
-  S971 --> S974[974 Export/import + encryption]
-  S972 --> S976[976 Logic mesh graph v1]
-  S975 --> S976
-  S977[977 Policy v2] --> S975
-  S977 --> S973
-  S978[978 Reflex SGLang] --> S975
-  S978 --> S973
-  S972 --> S980[980 Multimodal ingestion]
-  S971 --> S980
-  S972 --> S979[979 Sunset local-memory]
-  S974 --> S979
+  PM006[PM-006 Packet Persistence] --> PM007[PM-007 Recap Enforcement]
+  PM006 --> PM005[PM-005 Gatekeeper]
+  PM007 --> PM005
+  PM005 --> PM008[PM-008 Unattended Stacking]
+  PM007 --> PM008
+  PM006 --> PM009[PM-009 Proposal Ranking]
+  PM006 --> PM010[PM-010 Reverse Sync]
+  PM005 --> PM010
+  PM009 --> PM011[PM-011 Hysteresis]
+  PM005 --> PM012[PM-012 Self-Correction]
+  PM008 --> PM012
+  PM010 --> PM013[PM-013 Template Feedback]
+  PM011 --> PM013
+  PM012 --> PM013
 ```
 
 ***
 
 ## Sequencing + Gates
 
-**Do not violate these gates.**
-
-| Phase |  Days | Specs Allowed to Start    | "Don't Start Until" Gates                                   |
-| ----: | ----: | ------------------------- | ----------------------------------------------------------- |
-|     1 |  0-14 | 971, 977, 978             | —                                                           |
-|     2 | 14-30 | 972, 975 (baseline)       | 971 URI contract + checkpoint listing tests passing         |
-|     3 | 30-60 | 973, 974, 975 (full), 976 | 972 eval harness baseline + 975 event schema v1 merged      |
-|     4 | 60-90 | 979, 980                  | 972 parity gates + export/import verification gates passing |
+| Phase | Days | Start Gate | Exit Gate |
+| --- | --- | --- | --- |
+| P0 Trust Foundation | 1-30 | Packet schema ratified | Gatekeeper + recap checks block invalid flows in Tier-1 surfaces |
+| P1 Autonomous Lab | 31-60 | P0 exit gate passed | Unattended no-merge behavior + top-3 inbox + reverse-sync reports operational |
+| P2 Learning Loop | 61-90 | P1 exit gate passed | Hysteresis, self-correction, and template feedback producing audited outcomes |
 
 ***
 
-## Definition of Done
+## Migration Notes (From Program v1.0.0)
 
-The program is complete when:
-
-1. **Memvid is the system-of-record** (workspace capsule) for artifacts/evidence
-2. **Every run is reproducible enough to audit**:
-   * Retrieval + event timeline replay is deterministic offline
-   * Model I/O replay depends on capture mode (defaults: summary+hash)
-   * Exports are encrypted + safe by default
-3. **Local-memory daemon is removed** only after parity gates are met
-4. **Tier 1 multi-surface parity is enforced** (D113/D133):
-   * Core automation semantics are available and consistent across TUI/CLI/headless (artifacts, gating, exit codes)
-   * Visualization may be TUI-first with CLI fallbacks
+- The previous 2026-Q1 memvid-first active plan is no longer this program's execution contract.
+- Historical memvid specs remain historical artifacts; they are not active unless re-added to `codex-rs/SPEC.md` planned/in-progress tables.
+- This migration is additive to running code: no parallel rewrite track is introduced.
 
 ***
 
-## Archive Rule
+## Definition of Done (Program)
 
-Everything not listed in [Active Specs](#active-specs) is either:
-
-* Supporting reference, or
-* **ARCHIVE** (historical specs, prior experiments, old ops docs)
-
-When in doubt: treat as ARCHIVE until `SPEC.md` or this file says otherwise.
+- All nine roadmap deliverables have passing acceptance criteria in their SPEC packets.
+- Tier-1 parity holds for gate/packet/recap behavior (TUI/CLI/headless).
+- Unattended mode makes progress without merges.
+- Learning loop reduces thrash and escalations with auditable evidence.
 
 ***
 
 ## Change History
 
-| Version | Date       | Changes                                                              |
-| ------- | ---------- | -------------------------------------------------------------------- |
-| v1.0.5  | 2026-01-29 | Document Tier 1 multi-surface parity as program DoD (D113/D133)      |
-| v1.0.4  | 2026-01-28 | SPEC-KIT-980 Completed (PDF/DOCX ingest, extraction, searchable)     |
-| v1.0.3  | 2026-01-28 | SPEC-KIT-980 Phase 1 started (feature gates + ingest CLI)            |
-| v1.0.2  | 2026-01-28 | SPEC-KIT-974 status updated to Completed                             |
-| v1.0.1  | 2026-01-23 | DOC-001: Reconcile status markers with SPEC.md (9 specs → Completed) |
-| v1.0.0  | 2026-01-22 | Initial canonical version (migrated from PROGRAM\_2026Q1\_ACTIVE.md) |
+| Version | Date | Changes |
+| --- | --- | --- |
+| v2.0.0 | 2026-02-17 | Replaced v1 memvid-first active plan with 30/60/90 contract aligned to VISION + ADR-005..012; added executable PM-005..PM-013 spec mapping. |
+| v1.0.5 | 2026-01-29 | Last memvid-era update (historical). |
 
 ***
 
-**Navigation**: [INDEX.md](INDEX.md) | [SPEC.md](../SPEC.md) | [KEY\_DOCS.md](KEY_DOCS.md)
+**Navigation**: [KEY_DOCS.md](KEY_DOCS.md) | [codex-rs/SPEC.md](../codex-rs/SPEC.md) | [VISION.md](VISION.md)
