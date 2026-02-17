@@ -47,6 +47,13 @@ jobs:
         working-directory: codex-rs
         run: cargo build -p codex-cli --bin code
 
+      - name: tui2 quarantine check
+        run: bash scripts/check-tui2-quarantine.sh
+
+      - name: Build tui2 (scaffold)
+        working-directory: codex-rs
+        run: cargo build -p codex-tui2
+
       - name: Docs link check
         run: python3 scripts/check_doc_links.py
 
