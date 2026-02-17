@@ -35,6 +35,7 @@ CLAUDE.md
 CLAUDE_*.md
 .claude/
 .codex/
+.gemini/
 _intel_snapshot/
 .obsidian/
 notebooklm_context/

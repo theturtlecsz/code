@@ -11,10 +11,82 @@ pub(super) fn handle_pm_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> b
         return false;
     };
 
+    // PM-UX-D10: Handle write confirmation modal first
+    if chat.pm.write_confirmation.is_some() {
+        return handle_write_confirmation_key(chat, key_event);
+    }
+
+    // PM-UX-D18: Handle filter input mode
+    if overlay.is_filter_input_mode() {
+        return handle_filter_input_key(chat, key_event);
+    }
+
     if overlay.is_detail_mode() {
         handle_detail_key(chat, key_event)
     } else {
         handle_list_key(chat, key_event)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PM-UX-D18: Filter input mode keys
+// ---------------------------------------------------------------------------
+
+fn handle_filter_input_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
+    let Some(ref overlay) = chat.pm.overlay else {
+        return false;
+    };
+
+    match key_event.code {
+        KeyCode::Enter => {
+            // Apply filter
+            overlay.apply_filter_input();
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Esc => {
+            // Cancel filter input
+            overlay.cancel_filter_input();
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Backspace => {
+            // Remove character
+            overlay.filter_input_pop();
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char(c) => {
+            // Add character
+            overlay.filter_input_push(c);
+            chat.request_redraw();
+            true
+        }
+        _ => true, // Consume all other keys while in input mode
+    }
+}
+
+// ---------------------------------------------------------------------------
+// PM-UX-D10: Write confirmation modal keys
+// ---------------------------------------------------------------------------
+
+fn handle_write_confirmation_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
+    match key_event.code {
+        KeyCode::Char('y') | KeyCode::Char('Y') => {
+            // User confirmed - execute the run
+            if let Some(confirmation) = chat.pm.write_confirmation.take() {
+                chat.execute_pm_run_confirmed(&confirmation.node_id, confirmation.kind);
+            }
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            // User cancelled - close modal
+            chat.pm.write_confirmation = None;
+            chat.request_redraw();
+            true
+        }
+        _ => true, // Consume all keys while modal is active
     }
 }
 
@@ -139,6 +211,54 @@ fn handle_list_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
             chat.request_redraw();
             true
         }
+        // PM-004 Batch B: Run config controls (available in list view)
+        KeyCode::Char('1') => {
+            chat.set_pm_preset(super::pm_overlay::Preset::Quick);
+            true
+        }
+        KeyCode::Char('2') => {
+            chat.set_pm_preset(super::pm_overlay::Preset::Standard);
+            true
+        }
+        KeyCode::Char('3') => {
+            chat.set_pm_preset(super::pm_overlay::Preset::Deep);
+            true
+        }
+        KeyCode::Char('4') => {
+            chat.set_pm_preset(super::pm_overlay::Preset::Exhaustive);
+            true
+        }
+        KeyCode::Char('c') | KeyCode::Char('C') => {
+            overlay.toggle_scope(super::pm_overlay::ScopeSet::CORRECTNESS);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('p') | KeyCode::Char('P') => {
+            overlay.toggle_scope(super::pm_overlay::ScopeSet::PERFORMANCE);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('t') | KeyCode::Char('T') => {
+            overlay.toggle_scope(super::pm_overlay::ScopeSet::STYLE);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('a') | KeyCode::Char('A') => {
+            overlay.toggle_scope(super::pm_overlay::ScopeSet::ARCHITECTURE);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('w') | KeyCode::Char('W') => {
+            overlay.toggle_write_mode();
+            chat.request_redraw();
+            true
+        }
+        // PM-UX-D18: Enter filter input mode
+        KeyCode::Char('/') => {
+            overlay.enter_filter_input();
+            chat.request_redraw();
+            true
+        }
         _ => false,
     }
 }
@@ -153,6 +273,32 @@ fn handle_detail_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
     };
 
     match key_event.code {
+        // PM-004 Batch A: F-key actions
+        KeyCode::F(5) => {
+            execute_pm_action(chat, super::pm_overlay::PmAction::Promote);
+            true
+        }
+        KeyCode::F(6) => {
+            execute_pm_action(chat, super::pm_overlay::PmAction::Hold);
+            true
+        }
+        KeyCode::F(7) => {
+            execute_pm_action(chat, super::pm_overlay::PmAction::Complete);
+            true
+        }
+        KeyCode::F(8) => {
+            execute_pm_action(chat, super::pm_overlay::PmAction::RunResearch);
+            true
+        }
+        KeyCode::F(9) => {
+            execute_pm_action(chat, super::pm_overlay::PmAction::RunReview);
+            true
+        }
+        KeyCode::F(10) => {
+            // PM-UX-D22: Cancel active run
+            chat.execute_pm_cancel();
+            true
+        }
         KeyCode::Esc => {
             // Return to list — do NOT close overlay. Selection/scroll preserved.
             overlay.close_detail();
@@ -199,10 +345,66 @@ fn handle_detail_key(chat: &mut ChatWidget<'_>, key_event: KeyEvent) -> bool {
         }
         // Left/Right ignored in detail mode per PM-UX-D12
         KeyCode::Left | KeyCode::Right => true,
-        // s key ignored in detail mode (sort only applies to list view)
-        KeyCode::Char('s') | KeyCode::Char('S') => true,
+        // PM-004 Batch B: Run config controls (available in detail view)
+        KeyCode::Char('1') => {
+            chat.set_pm_preset(super::pm_overlay::Preset::Quick);
+            true
+        }
+        KeyCode::Char('2') => {
+            chat.set_pm_preset(super::pm_overlay::Preset::Standard);
+            true
+        }
+        KeyCode::Char('3') => {
+            chat.set_pm_preset(super::pm_overlay::Preset::Deep);
+            true
+        }
+        KeyCode::Char('4') => {
+            chat.set_pm_preset(super::pm_overlay::Preset::Exhaustive);
+            true
+        }
+        KeyCode::Char('c') | KeyCode::Char('C') => {
+            overlay.toggle_scope(super::pm_overlay::ScopeSet::CORRECTNESS);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('s') | KeyCode::Char('S') => {
+            // In detail mode, 's' toggles Security scope (not sort)
+            overlay.toggle_scope(super::pm_overlay::ScopeSet::SECURITY);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('p') | KeyCode::Char('P') => {
+            overlay.toggle_scope(super::pm_overlay::ScopeSet::PERFORMANCE);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('t') | KeyCode::Char('T') => {
+            overlay.toggle_scope(super::pm_overlay::ScopeSet::STYLE);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('a') | KeyCode::Char('A') => {
+            overlay.toggle_scope(super::pm_overlay::ScopeSet::ARCHITECTURE);
+            chat.request_redraw();
+            true
+        }
+        KeyCode::Char('w') | KeyCode::Char('W') => {
+            overlay.toggle_write_mode();
+            chat.request_redraw();
+            true
+        }
         _ => false,
     }
+}
+
+// ---------------------------------------------------------------------------
+// PM-004 Batch A: Action execution
+// ---------------------------------------------------------------------------
+
+/// Execute a PM action (state transition or run launch).
+/// Delegates to ChatWidget for RPC integration.
+fn execute_pm_action(chat: &mut ChatWidget, action: super::pm_overlay::PmAction) {
+    chat.execute_pm_action_internal(action);
 }
 
 // ---------------------------------------------------------------------------
