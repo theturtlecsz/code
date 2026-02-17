@@ -62,6 +62,7 @@ CANONICAL_DOCS_ROOT = {
     "docs/SPEC-KIT.md": "Spec-kit reference (CLI, architecture, quality gates)",
     "docs/VISION.md": "Product identity and vision",
     "docs/PRODUCT-KNOWLEDGE-SYSTEM-DESIGN.md": "ADR-003 product knowledge layer design",
+    "docs/SPEC-TUI2-STUBS.md": "tui2 stub inventory and cherry-pick workflow (ADR-002)",
 }
 
 # Migration docs (temporary, must have expiry header)

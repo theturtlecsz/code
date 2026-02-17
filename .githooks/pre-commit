@@ -72,6 +72,22 @@ if [[ -f "scripts/validate-config-isolation.sh" ]]; then
     fi
 fi
 
+# === SPEC-P0-TUI2-QUARANTINE: tui2 quarantine check ===
+# Run when tui2 source files are staged to prevent spec-kit drift
+TUI2_CHANGES=$(git diff --cached --name-only | grep "^codex-rs/tui2/" || true)
+if [ -n "$TUI2_CHANGES" ]; then
+    echo ""
+    echo "tui2 changes detected, running quarantine check..."
+    if [[ -f "scripts/check-tui2-quarantine.sh" ]]; then
+        if ! bash scripts/check-tui2-quarantine.sh; then
+            echo ""
+            echo "tui2 quarantine check failed"
+            echo "Fix violations before committing, or skip with: git commit --no-verify"
+            exit 1
+        fi
+    fi
+fi
+
 # === Clippy gate: run only when Rust/Cargo files are staged ===
 # Pattern: .rs files, Cargo.toml, Cargo.lock, rust-toolchain* under codex-rs/
 RUST_CHANGES=$(git diff --cached --name-only | grep -E "^codex-rs/.*\.rs$|^codex-rs/.*Cargo\.toml$|^codex-rs/.*Cargo\.lock$|^codex-rs/rust-toolchain" || true)
