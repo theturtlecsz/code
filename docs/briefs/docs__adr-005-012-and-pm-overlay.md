@@ -12,7 +12,7 @@ Commit 8 architecture decision records (ADR-005 through ADR-012) covering consul
 
 * 8 new ADRs in `docs/adr/`
 * PM-004 session brief
-* Project overview doc (`docs/project.md`)
+* Project vision & operating contract (merged into `docs/VISION.md`)
 * TUI PM overlay improvements (handlers, overlay rendering, theme)
 * `.gitignore`: add `.gemini/` directory
 
