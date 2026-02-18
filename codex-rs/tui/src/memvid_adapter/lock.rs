@@ -282,7 +282,7 @@ impl CapsuleLock {
     /// Release the lock (called automatically on drop).
     fn release(&mut self) {
         // Unlock the file
-        let _ = self.file.unlock();
+        let _ = FileExt::unlock(&self.file);
 
         // Remove the lock file
         let _ = std::fs::remove_file(&self.path);

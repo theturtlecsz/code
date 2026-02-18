@@ -1,7 +1,7 @@
 # SPEC.md - Codex-RS / Spec-Kit Task Tracking
 
 **Version:** V7 Contract Realignment\
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-18
 
 ***
 
@@ -62,20 +62,19 @@ These invariants are active for the current epoch and must not be violated.
 | Spec        | Status      | Owner             | Next Action                                             |
 | ----------- | ----------- | ----------------- | ------------------------------------------------------- |
 | SPEC-PM-005 | In Progress | Architecture Lead | Implement shared gate classifier + boundary block tests |
+| SPEC-PM-006 | In Progress | Architecture Lead | Packet schema, atomic I/O, sacred anchor guard          |
 
 ### Planned
 
-| Spec                    | Description                                                                                      |
-| ----------------------- | ------------------------------------------------------------------------------------------------ |
-| SPEC-P0-TUI2-QUARANTINE | tui2 quarantine: default-members exclusion, scaffold docs, CI guardrail (P0 maintenance)         |
-| SPEC-PM-006             | Packet persistence: durable `.speckit/packet.yaml` + sacred anchor protections + restart restore |
-| SPEC-PM-007             | Recap enforcement: hard "Explain before Act" gate across TUI/CLI/headless                        |
-| SPEC-PM-008             | Unattended stacking + Morning Brief with strict no-merge semantics                               |
-| SPEC-PM-009             | Proposal ranking and pruning (top-3 default, dedupe, archive policy)                             |
-| SPEC-PM-010             | Reverse sync: code/packet drift detection with explicit patch proposals                          |
-| SPEC-PM-011             | Hysteresis engine: stability bias for plan replacement                                           |
-| SPEC-PM-012             | Self-correction: bounded build/test retry before escalation                                      |
-| SPEC-PM-013             | Template feedback: promote successful patterns into shared templates                             |
+| Spec        | Description                                                               |
+| ----------- | ------------------------------------------------------------------------- |
+| SPEC-PM-007 | Recap enforcement: hard "Explain before Act" gate across TUI/CLI/headless |
+| SPEC-PM-008 | Unattended stacking + Morning Brief with strict no-merge semantics        |
+| SPEC-PM-009 | Proposal ranking and pruning (top-3 default, dedupe, archive policy)      |
+| SPEC-PM-010 | Reverse sync: code/packet drift detection with explicit patch proposals   |
+| SPEC-PM-011 | Hysteresis engine: stability bias for plan replacement                    |
+| SPEC-PM-012 | Self-correction: bounded build/test retry before escalation               |
+| SPEC-PM-013 | Template feedback: promote successful patterns into shared templates      |
 
 ### Deferred / Historical (Not Active)
 
@@ -89,12 +88,13 @@ These invariants are active for the current epoch and must not be violated.
 
 ### Completed (Recent)
 
-| Spec         | Completion Date | Key Deliverables                              |
-| ------------ | --------------- | --------------------------------------------- |
-| MAINT-930    | 2026-02-01      | Headless gating/parity hardening              |
-| SPEC-KIT-983 | 2026-02-01      | Stage-to-agent defaults modal and persistence |
-| SPEC-KIT-982 | 2026-01-31      | ACE + maieutic prompt injection pipeline      |
-| SPEC-KIT-981 | 2026-01-31      | Config-driven stage-agent mapping defaults    |
+| Spec                    | Completion Date | Key Deliverables                                   |
+| ----------------------- | --------------- | -------------------------------------------------- |
+| SPEC-P0-TUI2-QUARANTINE | 2026-02-17      | default-members exclusion, scaffold docs, CI guard |
+| MAINT-930               | 2026-02-01      | Headless gating/parity hardening                   |
+| SPEC-KIT-983            | 2026-02-01      | Stage-to-agent defaults modal and persistence      |
+| SPEC-KIT-982            | 2026-01-31      | ACE + maieutic prompt injection pipeline           |
+| SPEC-KIT-981            | 2026-01-31      | Config-driven stage-agent mapping defaults         |
 
 ### Blocked
 
@@ -106,11 +106,11 @@ These invariants are active for the current epoch and must not be violated.
 
 ## Program Gates
 
-| Phase            | Gate Criteria                                                      | Status      |
-| ---------------- | ------------------------------------------------------------------ | ----------- |
-| Trust Foundation | Packet durability + recap gate + class boundary enforcement active | In Progress |
-| Autonomous Lab   | Unattended stacking + ranked proposals + reverse sync operational  | Planned     |
-| Learning Loop    | Hysteresis + self-correction + template feedback operational       | Planned     |
+| Phase            | Gate Criteria                                                      | Exit Gate   | Status      |
+| ---------------- | ------------------------------------------------------------------ | ----------- | ----------- |
+| Trust Foundation | Packet durability + recap gate + class boundary enforcement active | DOGFOOD-002 | In Progress |
+| Autonomous Lab   | Unattended stacking + ranked proposals + reverse sync operational  | -           | Planned     |
+| Learning Loop    | Hysteresis + self-correction + template feedback operational       | -           | Planned     |
 
 ***
 
