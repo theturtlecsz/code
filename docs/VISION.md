@@ -2,7 +2,7 @@
 
 Planner is a terminal TUI focused on **Spec-Kit workflows**.
 
-This document captures product identity at a glance. For governance and scope, treat `memory/constitution.md` (charter) and `product-requirements.md` (requirements) as authoritative; `SPEC.md` is the canonical work tracker. If runtime behavior conflicts with this doc, treat it as a migration gap or code regression candidate (don't "fix docs to match" without explicitly calling out the divergence).
+This document captures product identity at a glance. Conflict resolution follows `codex-rs/SPEC.md` precedence: (1) `codex-rs/SPEC.md`, (2) `docs/PROGRAM.md`, (3) `docs/VISION.md` + `docs/adr/ADR-005..ADR-012`, (4) `memory/constitution.md`, (5) individual `docs/SPEC-*` packets. If runtime behavior conflicts with this doc, treat it as a migration gap or code regression candidate (don't "fix docs to match" without explicitly calling out the divergence).
 
 ## Product Surface Area (from code)
 
@@ -22,6 +22,14 @@ This document captures product identity at a glance. For governance and scope, t
 
 * Build and run locally via `./build-fast.sh run`
 * Use `/speckit.project` (optional) to scaffold a new project, then `/speckit.new` + `/speckit.auto` for end-to-end runs
+
+## Bot Runtime Pointers (Avoid Architecture Drift)
+
+Bot system intent is defined in locked runtime/design docs and should not be re-inferred from this vision summary:
+
+* `docs/adr/ADR-004-pm-bot-service-runtime.md`: accepted runtime contract (lightweight service-first PM bot lifecycle + systemd resume + CLI parity/fallback).
+* `docs/SPEC-PM-002-bot-runner/spec.md`: Tier-1 interaction contract for manual `NeedsResearch` / `NeedsReview` bot runs (CLI/TUI/headless semantics, safety, outputs, exit behavior).
+* `docs/SPEC-PM-003-bot-system/spec.md`: internal runner/service/tooling design and SoR boundaries (capsule authority, permissions, queueing, worktree isolation).
 
 ***
 
@@ -131,6 +139,13 @@ The system outputs a **Recap**:
 3. **Gates** (Safety checks).
 4. **Rollback** (Undo path).
 
+### Proposal Inbox & Notification Contracts (ADR-010/011)
+
+* **Inbox categories:** Architecture/Refactors and Spec/Template Improvements.
+* **Ranking factors:** sacred-intent alignment, expected score gain, security impact, implementation cost, and evidence quality.
+* **Pruning/bounds:** dedupe duplicates, archive stale entries after 7 days, and keep a bounded ranked inbox (top-3 focus with top-10 discoverable per category).
+* **Interrupt policy:** immediate notifications only for milestone-ready major decisions that meet posture thresholds, or critical security issues; everything else goes to daily recap.
+
 ### Scoring & Confidence
 
 Math, not vibes.
@@ -177,6 +192,7 @@ New proposals must exceed current score by a **Dominance Margin** (default 15%) 
 
 * [ ] **Hysteresis Engine:** Implement Stability Bias in decision scoring.
 * [ ] **Self-Correction:** Agent auto-retries failed builds N times with new context before escalating.
+* [ ] **Template Feedback:** Promote successful patterns into shared templates only with evidence and explicit approval.
 
 ***
 
