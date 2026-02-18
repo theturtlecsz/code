@@ -222,7 +222,7 @@ where
     file.set_len(0)?;
     file.write_all(json.as_bytes())?;
     file.flush()?;
-    file.unlock()?;
+    FileExt::unlock(&file)?;
     Ok(())
 }
 

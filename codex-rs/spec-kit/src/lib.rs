@@ -35,6 +35,8 @@ pub mod executor; // SPEC-KIT-921: Shared executor for CLI/TUI parity
 #[cfg(feature = "dev-faults")]
 pub mod faults; // P6-SYNC Phase 3: Fault injection for testing error handling
 pub mod gate_policy; // PR1: Gate Policy domain types and contracts
+pub mod gatekeeper; // PM-005: Change classifier (Class 0/1/2/E)
+pub mod packet; // PM-006: Packet persistence schema
 pub mod retry; // SPEC-945C: Retry logic (backoff, error classification)
 pub mod router; // PR1: Router trait and WorkerSpec
 pub mod timing; // SPEC-940: Performance timing infrastructure
