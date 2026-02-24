@@ -245,14 +245,26 @@ impl DeviceCodeTokenStorage {
         }
 
         let content = serde_json::to_string_pretty(store)?;
-        fs::write(&self.file_path, content)?;
 
-        // Set file permissions to user-only (Unix)
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            let permissions = fs::Permissions::from_mode(0o600);
-            fs::set_permissions(&self.file_path, permissions)?;
+            use std::io::Write;
+            use tempfile::NamedTempFile;
+
+            // Use the file's parent directory, or current directory if no parent is specified.
+            // This ensures we can create the temporary file for an atomic rename.
+            let parent = self.file_path.parent().unwrap_or_else(|| Path::new("."));
+
+            // Create temporary file in the same directory to ensure atomic rename.
+            // NamedTempFile creates the file with 0600 permissions by default on Unix.
+            let mut tmp = NamedTempFile::new_in(parent)?;
+            tmp.write_all(content.as_bytes())?;
+            tmp.persist(&self.file_path).map_err(|e| e.error)?;
+        }
+
+        #[cfg(not(unix))]
+        {
+            fs::write(&self.file_path, content)?;
         }
 
         Ok(())
@@ -726,5 +738,20 @@ mod tests {
 
         let (_dir2, storage_with_keyring, _keyring) = test_storage_with_keyring();
         assert!(storage_with_keyring.has_keyring());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_dir, storage) = test_storage();
+        storage
+            .store_token(DeviceCodeProvider::OpenAI, make_token_response())
+            .unwrap();
+
+        let path = storage.path();
+        let metadata = std::fs::metadata(path).unwrap();
+        let mode = metadata.permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
     }
 }
