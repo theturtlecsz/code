@@ -39,6 +39,9 @@ const MAX_TOOL_NAME_LENGTH: usize = 64;
 /// Timeout for the `tools/list` request.
 const DEFAULT_STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Timeout for an individual tool call.
+const DEFAULT_TOOL_CALL_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Map that holds a startup error for every MCP server that could **not** be
 /// spawned successfully.
 pub type ClientStartErrors = HashMap<String, anyhow::Error>;
@@ -92,6 +95,9 @@ pub struct McpConnectionManager {
 
     /// Fully qualified tool name -> tool instance.
     tools: HashMap<String, ToolInfo>,
+
+    /// Per-server tool call timeout.
+    tool_timeouts: HashMap<String, Duration>,
 }
 
 impl McpConnectionManager {
@@ -119,6 +125,7 @@ impl McpConnectionManager {
         // Keep a lookup of per-server startup timeouts so we can also apply it to
         // the initial `tools/list` step below.
         let mut per_server_timeout: HashMap<String, Duration> = HashMap::new();
+        let mut tool_timeouts: HashMap<String, Duration> = HashMap::new();
 
         for (server_name, cfg) in mcp_servers {
             // Validate server name before spawning
@@ -131,11 +138,17 @@ impl McpConnectionManager {
                 continue;
             }
 
-            let timeout = cfg
+            let startup_timeout = cfg
                 .effective_startup_timeout_ms()
                 .map(Duration::from_millis)
                 .unwrap_or(DEFAULT_STARTUP_TIMEOUT);
-            per_server_timeout.insert(server_name.clone(), timeout);
+            per_server_timeout.insert(server_name.clone(), startup_timeout);
+
+            let tool_timeout = cfg
+                .effective_tool_timeout_ms()
+                .map(Duration::from_millis)
+                .unwrap_or(DEFAULT_TOOL_CALL_TIMEOUT);
+            tool_timeouts.insert(server_name.clone(), tool_timeout);
 
             join_set.spawn(async move {
                 let McpServerConfig {
@@ -171,7 +184,7 @@ impl McpConnectionManager {
                             protocol_version: mcp_types::MCP_SCHEMA_VERSION.to_owned(),
                         };
                         let initialize_notification_params = None;
-                        let timeout = Some(timeout);
+                        let timeout = Some(startup_timeout);
                         match client
                             .initialize(params, initialize_notification_params, timeout)
                             .await
@@ -215,7 +228,14 @@ impl McpConnectionManager {
 
         let tools = qualify_tools(all_tools);
 
-        Ok((Self { clients, tools }, errors))
+        Ok((
+            Self {
+                clients,
+                tools,
+                tool_timeouts,
+            },
+            errors,
+        ))
     }
 
     /// Returns a single map that contains **all** tools. Each key is the
@@ -241,6 +261,8 @@ impl McpConnectionManager {
             .ok_or_else(|| anyhow!("unknown MCP server '{server}'"))?
             .clone();
 
+        let timeout = timeout.or_else(|| self.tool_timeouts.get(server).copied());
+
         client
             .call_tool(tool.to_string(), arguments, timeout)
             .await
@@ -251,6 +273,13 @@ impl McpConnectionManager {
         self.tools
             .get(tool_name)
             .map(|tool| (tool.server_name.clone(), tool.tool_name.clone()))
+    }
+
+    pub fn get_tool_timeout(&self, server: &str) -> Duration {
+        self.tool_timeouts
+            .get(server)
+            .copied()
+            .unwrap_or(DEFAULT_TOOL_CALL_TIMEOUT)
     }
 }
 
@@ -408,6 +437,33 @@ mod tests {
         assert_eq!(
             keys[1],
             "my_server__yet_another_e1c3987bd9c50b826cbe1687966f79f0c602d19ca"
+        );
+    }
+
+    #[test]
+    fn test_get_tool_timeout_default() {
+        let manager = McpConnectionManager::default();
+        assert_eq!(
+            manager.get_tool_timeout("unknown_server"),
+            DEFAULT_TOOL_CALL_TIMEOUT
+        );
+    }
+
+    #[test]
+    fn test_get_tool_timeout_custom() {
+        let mut tool_timeouts = HashMap::new();
+        let custom_timeout = Duration::from_secs(30);
+        tool_timeouts.insert("custom_server".to_string(), custom_timeout);
+
+        let manager = McpConnectionManager {
+            tool_timeouts,
+            ..Default::default()
+        };
+
+        assert_eq!(manager.get_tool_timeout("custom_server"), custom_timeout);
+        assert_eq!(
+            manager.get_tool_timeout("other_server"),
+            DEFAULT_TOOL_CALL_TIMEOUT
         );
     }
 }
