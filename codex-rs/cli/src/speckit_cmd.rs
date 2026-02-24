@@ -6415,9 +6415,7 @@ fn run_reflex_bakeoff(args: ReflexBakeoffArgs) -> anyhow::Result<()> {
         }
 
         // Comparison summary
-        if stats.reflex.is_some() && stats.cloud.is_some() {
-            let reflex = stats.reflex.as_ref().unwrap();
-            let cloud = stats.cloud.as_ref().unwrap();
+        if let (Some(reflex), Some(cloud)) = (&stats.reflex, &stats.cloud) {
             println!();
             println!("  COMPARISON:");
             let latency_ratio = if cloud.p95_latency_ms > 0 {
@@ -8971,8 +8969,7 @@ fn output_projectnew_success(
 
         println!();
         println!("Next steps:");
-        if bootstrap.is_some() {
-            let b = bootstrap.unwrap();
+        if let Some(b) = bootstrap {
             println!("  cd {}", project_dir.display());
             println!(
                 "  code speckit run --spec {} --from plan --to plan --execute",
