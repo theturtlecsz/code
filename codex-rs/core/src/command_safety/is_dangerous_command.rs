@@ -72,11 +72,32 @@ fn is_dangerous_to_call_with_exec(command: &[String]) -> bool {
     match cmd0 {
         // Git destructive operations
         Some(cmd) if cmd.ends_with("git") || cmd.ends_with("/git") => {
-            matches!(command.get(1).map(String::as_str), Some("reset" | "rm"))
+            // Heuristic: Check if any argument is a destructive git subcommand.
+            // This might trigger false positives (e.g. `git commit -m "reset"`),
+            // but ensures we catch `git --no-pager reset`.
+            command
+                .iter()
+                .skip(1)
+                .any(|arg| matches!(arg.as_str(), "reset" | "rm" | "clean"))
         }
 
-        // rm with force flags
-        Some("rm") => matches!(command.get(1).map(String::as_str), Some("-f" | "-rf")),
+        // rm with force or recursive flags
+        Some("rm") => {
+            command.iter().skip(1).any(|arg| {
+                if arg.starts_with("--") {
+                    matches!(arg.as_str(), "--recursive" | "--force")
+                } else if arg.starts_with("-") {
+                    // Check for combined flags like -rf, -vfr
+                    arg.chars().any(|c| matches!(c, 'r' | 'R' | 'f'))
+                } else {
+                    false
+                }
+            })
+        }
+
+        // Destructive disk operations
+        Some("dd") | Some("mkfs") => true,
+        Some(cmd) if cmd.starts_with("mkfs.") => true,
 
         // For `sudo <cmd>`, check the inner command
         Some("sudo") => is_dangerous_to_call_with_exec(&command[1..]),
@@ -148,6 +169,16 @@ mod tests {
     }
 
     #[test]
+    fn git_with_flags_reset_is_dangerous() {
+        assert!(command_might_be_dangerous(&vec_str(&[
+            "git",
+            "--no-pager",
+            "reset",
+            "--hard"
+        ])));
+    }
+
+    #[test]
     fn rm_rf_is_dangerous() {
         assert!(command_might_be_dangerous(&vec_str(&["rm", "-rf", "/"])));
     }
@@ -155,5 +186,34 @@ mod tests {
     #[test]
     fn rm_f_is_dangerous() {
         assert!(command_might_be_dangerous(&vec_str(&["rm", "-f", "/"])));
+    }
+
+    #[test]
+    fn rm_v_rf_is_dangerous() {
+        assert!(command_might_be_dangerous(&vec_str(&[
+            "rm", "-v", "-rf", "/"
+        ])));
+    }
+
+    #[test]
+    fn rm_combined_flags_is_dangerous() {
+        assert!(command_might_be_dangerous(&vec_str(&["rm", "-vfr", "/"])));
+    }
+
+    #[test]
+    fn dd_is_dangerous() {
+        assert!(command_might_be_dangerous(&vec_str(&[
+            "dd",
+            "if=/dev/zero",
+            "of=/dev/sda"
+        ])));
+    }
+
+    #[test]
+    fn mkfs_is_dangerous() {
+        assert!(command_might_be_dangerous(&vec_str(&[
+            "mkfs.ext4",
+            "/dev/sda1"
+        ])));
     }
 }
