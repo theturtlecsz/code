@@ -1872,7 +1872,7 @@ impl ChatWidget<'_> {
         }
 
         let mut completions: Vec<(String, ValidateRunCompletion)> = Vec::new();
-        for (spec_id, lifecycle) in self.validate_lifecycles.clone() {
+        for (spec_id, lifecycle) in &self.validate_lifecycles {
             if let Some(info) = lifecycle.active()
                 && info.mode == ValidateMode::Manual
                 && let Some(completion) =
