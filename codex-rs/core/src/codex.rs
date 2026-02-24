@@ -5540,7 +5540,7 @@ async fn handle_function_call(
         _ => {
             match sess.mcp_connection_manager.parse_tool_name(&name) {
                 Some((server, tool_name)) => {
-                    let timeout = Some(sess.mcp_connection_manager.get_tool_timeout(server));
+                    let timeout = Some(sess.mcp_connection_manager.get_tool_timeout(&server));
                     handle_mcp_tool_call(sess, &ctx, server, tool_name, arguments, timeout).await
                 }
                 None => {
