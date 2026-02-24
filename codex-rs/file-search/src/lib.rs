@@ -371,11 +371,16 @@ impl BestMatchesList {
 
             if self.binary_heap.len() < self.max_count {
                 self.binary_heap.push(Reverse((score, line.to_string())));
-            } else if let Some(min_element) = self.binary_heap.peek()
+            } else if let Some(mut min_element) = self.binary_heap.peek_mut()
                 && score > min_element.0.0
             {
-                self.binary_heap.pop();
-                self.binary_heap.push(Reverse((score, line.to_string())));
+                // Optimization: reuse the String buffer from the evicted element
+                // instead of allocating a new String for every replacement.
+                // Also avoids one heap sift operation compared to pop() + push().
+                let entry = &mut min_element.0;
+                entry.0 = score;
+                entry.1.clear();
+                entry.1.push_str(line);
             }
         }
     }
