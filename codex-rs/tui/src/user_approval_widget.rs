@@ -92,7 +92,9 @@ impl UserApprovalWidget<'_> {
                 let cmd = strip_bash_lc_and_escape(command);
                 // Present a single-line summary without cwd: "codex wants to run: <cmd>"
                 let mut cmd_span: Span = cmd.clone().into();
-                cmd_span.style = cmd_span.style.add_modifier(Modifier::DIM);
+                cmd_span.style = Style::default()
+                    .fg(crate::colors::text_bright())
+                    .add_modifier(Modifier::BOLD);
                 let mut contents: Vec<Line> = vec![
                     Line::from(""), // extra spacing above the prompt
                     Line::from(vec![
@@ -130,7 +132,9 @@ impl UserApprovalWidget<'_> {
             }
             ApprovalRequest::TerminalCommand { command, .. } => {
                 let mut cmd_span: Span = format!("$ {command}").into();
-                cmd_span.style = cmd_span.style.add_modifier(Modifier::DIM);
+                cmd_span.style = Style::default()
+                    .fg(crate::colors::text_bright())
+                    .add_modifier(Modifier::BOLD);
                 let contents = vec![
                     Line::from(""),
                     Line::from(vec![
@@ -418,7 +422,7 @@ fn build_exec_select_options(command: &[String]) -> Vec<SelectOption> {
     let mut options = Vec::new();
 
     options.push(SelectOption {
-        label: "Yes".to_string(),
+        label: "Yes, run this command".to_string(),
         description: "Approve and run the command".to_string(),
         hotkey: KeyCode::Char('y'),
         action: SelectAction::ApproveOnce,
@@ -457,8 +461,8 @@ fn build_exec_select_options(command: &[String]) -> Vec<SelectOption> {
     }
 
     options.push(SelectOption {
-        label: "No, provide feedback".to_string(),
-        description: "Do not run the command; provide feedback".to_string(),
+        label: "Cancel (skip command)".to_string(),
+        description: "Do not run the command".to_string(),
         hotkey: KeyCode::Char('n'),
         action: SelectAction::Abort,
     });
@@ -469,14 +473,14 @@ fn build_exec_select_options(command: &[String]) -> Vec<SelectOption> {
 fn build_patch_select_options() -> Vec<SelectOption> {
     vec![
         SelectOption {
-            label: "Yes".to_string(),
+            label: "Yes, apply changes".to_string(),
             description: "Approve and apply the changes".to_string(),
             hotkey: KeyCode::Char('y'),
             action: SelectAction::ApproveOnce,
         },
         SelectOption {
-            label: "No, provide feedback".to_string(),
-            description: "Do not apply the changes; provide feedback".to_string(),
+            label: "Cancel (skip changes)".to_string(),
+            description: "Do not apply the changes".to_string(),
             hotkey: KeyCode::Char('n'),
             action: SelectAction::Abort,
         },
@@ -486,13 +490,13 @@ fn build_patch_select_options() -> Vec<SelectOption> {
 fn build_terminal_select_options() -> Vec<SelectOption> {
     vec![
         SelectOption {
-            label: "Yes".to_string(),
+            label: "Yes, run command".to_string(),
             description: "Approve and run the command".to_string(),
             hotkey: KeyCode::Char('y'),
             action: SelectAction::ApproveOnce,
         },
         SelectOption {
-            label: "No".to_string(),
+            label: "Cancel".to_string(),
             description: "Dismiss without running the command".to_string(),
             hotkey: KeyCode::Char('n'),
             action: SelectAction::Abort,
