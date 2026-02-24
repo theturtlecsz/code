@@ -1711,3 +1711,93 @@ pub struct ListAgentsParams {
     pub batch_id: Option<String>,
     pub recent_only: Option<bool>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_json_plain() {
+        let input = r#"{"key": "value"}"#;
+        assert_eq!(extract_json_from_mixed_output(input, "test"), input);
+    }
+
+    #[test]
+    fn test_extract_json_markdown() {
+        let input = r#"Some text
+```json
+{"key": "value"}
+```
+More text"#;
+        assert_eq!(
+            extract_json_from_mixed_output(input, "test"),
+            r#"{"key": "value"}"#
+        );
+    }
+
+    #[test]
+    fn test_extract_json_markdown_no_newline() {
+        let input = r#"```json{"key": "value"}```"#;
+        assert_eq!(
+            extract_json_from_mixed_output(input, "test"),
+            r#"{"key": "value"}"#
+        );
+    }
+
+    #[test]
+    fn test_extract_json_codex_headers() {
+        // Must be > 100 chars to trigger extraction
+        let json = r#"{"key": "value", "padding": "this is a very long string to ensure that the json content is longer than 100 characters so that the extraction logic kicks in"}"#;
+        let input = format!(
+            "OpenAI Codex v2.5\n[2024-01-01 12:00:00] User instructions: do something\n] codex\n{}",
+            json
+        );
+        // Note: the extract logic looks for `] codex` or `] codex\n`
+        assert_eq!(extract_json_from_mixed_output(&input, "test"), json);
+    }
+
+    #[test]
+    fn test_extract_json_codex_headers_with_newline() {
+        // Must be > 100 chars to trigger extraction
+        let json = r#"{"key": "value", "padding": "this is a very long string to ensure that the json content is longer than 100 characters so that the extraction logic kicks in"}"#;
+        let input = format!(
+            "OpenAI Codex v2.5\nUser instructions: do something\n] codex\n{}",
+            json
+        );
+        assert_eq!(extract_json_from_mixed_output(&input, "test"), json);
+    }
+
+    #[test]
+    fn test_extract_json_codex_headers_with_footer() {
+        // Must be > 100 chars to trigger extraction
+        let json = r#"{"key": "value", "padding": "this is a very long string to ensure that the json content is longer than 100 characters so that the extraction logic kicks in"}"#;
+        let input = format!(
+            "OpenAI Codex v2.5\nUser instructions: do something\n] codex\n{}\n[2024-01-01 12:00:05] tokens used: 100",
+            json
+        );
+        assert_eq!(extract_json_from_mixed_output(&input, "test"), json);
+    }
+
+    #[test]
+    fn test_extract_json_markdown_empty() {
+        let input = r#"```json
+
+```"#;
+        // Empty content should not be extracted, returns original
+        assert_eq!(extract_json_from_mixed_output(input, "test"), input);
+    }
+
+    #[test]
+    fn test_extract_json_markdown_unclosed() {
+        let input = r#"```json
+{"key": "value"}"#;
+        // Unclosed fence should not be extracted, returns original
+        assert_eq!(extract_json_from_mixed_output(input, "test"), input);
+    }
+
+    #[test]
+    fn test_extract_json_no_json() {
+        let input = "Just some text";
+        assert_eq!(extract_json_from_mixed_output(input, "test"), input);
+    }
+}
