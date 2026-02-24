@@ -614,8 +614,6 @@ pub enum InputItem {
     },
 }
 
-// TODO(mbolin): Need test to ensure these constants match the enum variants.
-
 pub const APPLY_PATCH_APPROVAL_METHOD: &str = "applyPatchApproval";
 pub const EXEC_COMMAND_APPROVAL_METHOD: &str = "execCommandApproval";
 
@@ -775,6 +773,40 @@ mod tests {
             ConversationId::from_string("67e55044-10b1-426f-9247-bb680e5fe0c8")?,
             id,
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_constants_match_server_request_variants() -> Result<()> {
+        let request = ServerRequest::ApplyPatchApproval {
+            request_id: RequestId::Integer(1),
+            params: ApplyPatchApprovalParams {
+                conversation_id: ConversationId::default(),
+                call_id: "call-1".to_string(),
+                file_changes: HashMap::new(),
+                reason: None,
+                grant_root: None,
+            },
+        };
+        let value = serde_json::to_value(&request)?;
+        assert_eq!(
+            APPLY_PATCH_APPROVAL_METHOD,
+            value["method"].as_str().unwrap()
+        );
+
+        let request = ServerRequest::ExecCommandApproval {
+            request_id: RequestId::Integer(2),
+            params: ExecCommandApprovalParams {
+                conversation_id: ConversationId::default(),
+                call_id: "call-2".to_string(),
+                command: vec!["ls".to_string()],
+                cwd: PathBuf::from("."),
+                reason: None,
+            },
+        };
+        let value = serde_json::to_value(&request)?;
+        assert_eq!(EXEC_COMMAND_APPROVAL_METHOD, value["method"].as_str().unwrap());
+
         Ok(())
     }
 }
