@@ -80,3 +80,50 @@ fn detect_terminal() -> String {
 
     sanitize_header_value(detected)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_header_value_valid() {
+        let input = "valid-header_value.123/456";
+        assert_eq!(sanitize_header_value(input.to_string()), input);
+    }
+
+    #[test]
+    fn test_sanitize_header_value_invalid() {
+        let input = "invalid header value@#$";
+        let expected = "invalid_header_value___";
+        assert_eq!(sanitize_header_value(input.to_string()), expected);
+    }
+
+    #[test]
+    fn test_sanitize_header_value_empty() {
+        let input = "";
+        assert_eq!(sanitize_header_value(input.to_string()), "");
+    }
+
+    #[test]
+    fn test_sanitize_header_value_mixed() {
+        let input = "Term/1.0 (My OS)";
+        let expected = "Term/1.0__My_OS_";
+        assert_eq!(sanitize_header_value(input.to_string()), expected);
+    }
+
+    #[test]
+    fn test_is_valid_header_value_char() {
+        assert!(is_valid_header_value_char('a'));
+        assert!(is_valid_header_value_char('Z'));
+        assert!(is_valid_header_value_char('0'));
+        assert!(is_valid_header_value_char('-'));
+        assert!(is_valid_header_value_char('_'));
+        assert!(is_valid_header_value_char('.'));
+        assert!(is_valid_header_value_char('/'));
+
+        assert!(!is_valid_header_value_char(' '));
+        assert!(!is_valid_header_value_char('@'));
+        assert!(!is_valid_header_value_char(':'));
+        assert!(!is_valid_header_value_char('\n'));
+    }
+}
