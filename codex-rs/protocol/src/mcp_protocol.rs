@@ -805,7 +805,10 @@ mod tests {
             },
         };
         let value = serde_json::to_value(&request)?;
-        assert_eq!(EXEC_COMMAND_APPROVAL_METHOD, value["method"].as_str().unwrap());
+        assert_eq!(
+            EXEC_COMMAND_APPROVAL_METHOD,
+            value["method"].as_str().unwrap()
+        );
 
         Ok(())
     }
